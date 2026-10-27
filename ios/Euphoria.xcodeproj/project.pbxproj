@@ -1,0 +1,248 @@
+// !$*UTF8*$!
+{
+    archiveVersion = 1;
+    classes = {
+    };
+    objectVersion = 56;
+    objects = {
+
+/* Begin PBXBuildFile section */
+        000000000000000000000014 /* EuphoriaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000000E /* EuphoriaApp.swift */; };
+        000000000000000000000015 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000000F /* ContentView.swift */; };
+        000000000000000000000016 /* OpenBotEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000010 /* OpenBotEndpoint.swift */; };
+        000000000000000000000017 /* OpenBotEndpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000011 /* OpenBotEndpointTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+        000000000000000000000021 /* PBXContainerItemProxy */ = {
+            isa = PBXContainerItemProxy;
+            containerPortal = 000000000000000000000001 /* Project object */;
+            proxyType = 1;
+            remoteGlobalIDString = 000000000000000000000006;
+            remoteInfo = Euphoria;
+        };
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+        00000000000000000000000E /* EuphoriaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EuphoriaApp.swift; sourceTree = "<group>"; };
+        00000000000000000000000F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+        000000000000000000000010 /* OpenBotEndpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenBotEndpoint.swift; sourceTree = "<group>"; };
+        000000000000000000000011 /* OpenBotEndpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenBotEndpointTests.swift; sourceTree = "<group>"; };
+        000000000000000000000012 /* Euphoria.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Euphoria.app; sourceTree = BUILT_PRODUCTS_DIR; };
+        000000000000000000000013 /* EuphoriaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EuphoriaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+        000000000000000000000009 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        00000000000000000000000C /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+        000000000000000000000002 = {
+            isa = PBXGroup;
+            children = (
+                000000000000000000000003 /* EuphoriaApp */,
+                000000000000000000000004 /* EuphoriaTests */,
+                000000000000000000000005 /* Products */,
+            );
+            sourceTree = "<group>";
+        };
+        000000000000000000000003 /* EuphoriaApp */ = {
+            isa = PBXGroup;
+            children = (
+                00000000000000000000000E /* EuphoriaApp.swift */,
+                00000000000000000000000F /* ContentView.swift */,
+                000000000000000000000010 /* OpenBotEndpoint.swift */,
+            );
+            path = EuphoriaApp;
+            sourceTree = "<group>";
+        };
+        000000000000000000000004 /* EuphoriaTests */ = {
+            isa = PBXGroup;
+            children = (000000000000000000000011 /* OpenBotEndpointTests.swift */);
+            path = EuphoriaTests;
+            sourceTree = "<group>";
+        };
+        000000000000000000000005 /* Products */ = {
+            isa = PBXGroup;
+            children = (
+                000000000000000000000012 /* Euphoria.app */,
+                000000000000000000000013 /* EuphoriaTests.xctest */,
+            );
+            name = Products;
+            sourceTree = "<group>";
+        };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+        000000000000000000000006 /* Euphoria */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = 000000000000000000000019 /* Build configuration list for PBXNativeTarget "Euphoria" */;
+            buildPhases = (
+                000000000000000000000008 /* Sources */,
+                000000000000000000000009 /* Frameworks */,
+                00000000000000000000000A /* Resources */,
+            );
+            buildRules = ();
+            dependencies = ();
+            name = Euphoria;
+            productName = Euphoria;
+            productReference = 000000000000000000000012 /* Euphoria.app */;
+            productType = "com.apple.product-type.application";
+        };
+        000000000000000000000007 /* EuphoriaTests */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = 00000000000000000000001A /* Build configuration list for PBXNativeTarget "EuphoriaTests" */;
+            buildPhases = (
+                00000000000000000000000B /* Sources */,
+                00000000000000000000000C /* Frameworks */,
+                00000000000000000000000D /* Resources */,
+            );
+            buildRules = ();
+            dependencies = (000000000000000000000022 /* PBXTargetDependency */);
+            name = EuphoriaTests;
+            productName = EuphoriaTests;
+            productReference = 000000000000000000000013 /* EuphoriaTests.xctest */;
+            productType = "com.apple.product-type.bundle.unit-test";
+        };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+        000000000000000000000001 /* Project object */ = {
+            isa = PBXProject;
+            attributes = {
+                BuildIndependentTargetsInParallel = YES;
+                LastUpgradeCheck = 1700;
+                TargetAttributes = {
+                    000000000000000000000006 = { CreatedOnToolsVersion = 17.0; };
+                    000000000000000000000007 = { CreatedOnToolsVersion = 17.0; TestTargetID = 000000000000000000000006; };
+                };
+            };
+            buildConfigurationList = 000000000000000000000018 /* Build configuration list for PBXProject "Euphoria" */;
+            compatibilityVersion = "Xcode 14.0";
+            developmentRegion = en;
+            hasScannedForEncodings = 0;
+            knownRegions = (en, Base);
+            mainGroup = 000000000000000000000002;
+            productRefGroup = 000000000000000000000005 /* Products */;
+            projectDirPath = "";
+            projectRoot = "";
+            targets = (
+                000000000000000000000006 /* Euphoria */,
+                000000000000000000000007 /* EuphoriaTests */,
+            );
+        };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+        00000000000000000000000A /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        00000000000000000000000D /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+        000000000000000000000008 /* Sources */ = {
+            isa = PBXSourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = (
+                000000000000000000000014 /* EuphoriaApp.swift in Sources */,
+                000000000000000000000015 /* ContentView.swift in Sources */,
+                000000000000000000000016 /* OpenBotEndpoint.swift in Sources */,
+            );
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        00000000000000000000000B /* Sources */ = {
+            isa = PBXSourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = (000000000000000000000017 /* OpenBotEndpointTests.swift in Sources */);
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+        000000000000000000000022 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = 000000000000000000000006 /* Euphoria */; targetProxy = 000000000000000000000021 /* PBXContainerItemProxy */; };
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+        00000000000000000000001B /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
+            ALWAYS_SEARCH_USER_PATHS = NO;
+            CLANG_ENABLE_MODULES = YES;
+            DEBUG_INFORMATION_FORMAT = dwarf;
+            ENABLE_TESTABILITY = YES;
+            GCC_OPTIMIZATION_LEVEL = 0;
+            IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+            SDKROOT = iphoneos;
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+            SWIFT_VERSION = 6.0;
+        }; name = Debug; };
+        00000000000000000000001C /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
+            ALWAYS_SEARCH_USER_PATHS = NO;
+            CLANG_ENABLE_MODULES = YES;
+            DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+            IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+            SDKROOT = iphoneos;
+            SWIFT_COMPILATION_MODE = wholemodule;
+            SWIFT_OPTIMIZATION_LEVEL = "-O";
+            SWIFT_VERSION = 6.0;
+        }; name = Release; };
+        00000000000000000000001D /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
+            ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+            CODE_SIGN_STYLE = Automatic;
+            GENERATE_INFOPLIST_FILE = YES;
+            INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+            INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+            IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+            PRODUCT_BUNDLE_IDENTIFIER = dev.euphoria.ios;
+            PRODUCT_NAME = "$(TARGET_NAME)";
+            SWIFT_EMIT_LOC_STRINGS = YES;
+            SWIFT_STRICT_CONCURRENCY = complete;
+            SWIFT_VERSION = 6.0;
+            TARGETED_DEVICE_FAMILY = "1,2";
+        }; name = Debug; };
+        00000000000000000000001E /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
+            ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+            CODE_SIGN_STYLE = Automatic;
+            GENERATE_INFOPLIST_FILE = YES;
+            INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+            INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+            IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+            PRODUCT_BUNDLE_IDENTIFIER = dev.euphoria.ios;
+            PRODUCT_NAME = "$(TARGET_NAME)";
+            SWIFT_EMIT_LOC_STRINGS = YES;
+            SWIFT_STRICT_CONCURRENCY = complete;
+            SWIFT_VERSION = 6.0;
+            TARGETED_DEVICE_FAMILY = "1,2";
+        }; name = Release; };
+        00000000000000000000001F /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
+            BUNDLE_LOADER = "$(TEST_HOST)";
+            CODE_SIGN_STYLE = Automatic;
+            GENERATE_INFOPLIST_FILE = YES;
+            IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+            PRODUCT_BUNDLE_IDENTIFIER = dev.euphoria.ios.tests;
+            PRODUCT_NAME = "$(TARGET_NAME)";
+            SWIFT_STRICT_CONCURRENCY = complete;
+            SWIFT_VERSION = 6.0;
+            TARGETED_DEVICE_FAMILY = "1,2";
+            TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Euphoria.app/Euphoria";
+        }; name = Debug; };
+        000000000000000000000020 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
+            BUNDLE_LOADER = "$(TEST_HOST)";
+            CODE_SIGN_STYLE = Automatic;
+            GENERATE_INFOPLIST_FILE = YES;
+            IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+            PRODUCT_BUNDLE_IDENTIFIER = dev.euphoria.ios.tests;
+            PRODUCT_NAME = "$(TARGET_NAME)";
+            SWIFT_STRICT_CONCURRENCY = complete;
+            SWIFT_VERSION = 6.0;
+            TARGETED_DEVICE_FAMILY = "1,2";
+            TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Euphoria.app/Euphoria";
+        }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+        000000000000000000000018 /* Build configuration list for PBXProject "Euphoria" */ = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000001B /* Debug */, 00000000000000000000001C /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+        000000000000000000000019 /* Build configuration list for PBXNativeTarget "Euphoria" */ = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000001D /* Debug */, 00000000000000000000001E /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+        00000000000000000000001A /* Build configuration list for PBXNativeTarget "EuphoriaTests" */ = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000001F /* Debug */, 000000000000000000000020 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+    };
+    rootObject = 000000000000000000000001 /* Project object */;
+}

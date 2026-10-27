@@ -13,6 +13,11 @@ command -v xcrun >/dev/null 2>&1 || { echo "BLOCKED: xcrun not found." >&2; exit
 
 xcodebuild -version
 xcodebuild -showsdks
+SDK_VERSION="$(xcrun --sdk iphonesimulator --show-sdk-version)"
+if [[ "$SDK_VERSION" != 27.* ]]; then
+  echo "BLOCKED: iOS 27 simulator SDK required; found $SDK_VERSION." >&2
+  exit 2
+fi
 xcodebuild -list -project "$PROJECT"
 
 for configuration in Debug Release; do

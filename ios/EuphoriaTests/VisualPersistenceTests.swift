@@ -36,4 +36,33 @@ final class VisualPersistenceTests: XCTestCase {
         XCTAssertEqual(recovered?.values["brief.team"], .text("EUPHORIA"))
         XCTAssertEqual(recovered?.pending.map(\.id), ["answer-staging"])
     }
+
+    func testDiskSnapshotSurvivesContainerReopen() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("snapshot.store")
+        var original = VisualState(surface: try SourceFixtures.surface())
+        try original.apply(VisualAction(id: "disk-draft", surfaceID: original.surface.surfaceID,
+            expectedRevision: original.surface.revision, nodeID: "brief", kind: .setField,
+            values: ["team": .text("Saved locally")]))
+        try original.apply(VisualAction(id: "disk-choice", surfaceID: original.surface.surfaceID,
+            expectedRevision: original.surface.revision, nodeID: "deployment", kind: .choose,
+            values: ["choice": .text("staging"), "label": .text("Staging")]))
+
+        try autoreleasepool {
+            let container = try ModelContainer(for: VisualSnapshot.self,
+                configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+            try VisualSnapshotRepository(context: ModelContext(container)).save(original)
+        }
+        // New container over the same SQLite store, not a second context over memory.
+        let reopened = try ModelContainer(for: VisualSnapshot.self,
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+        let restored = try VisualSnapshotRepository(context: ModelContext(reopened))
+            .load(surfaceID: original.surface.surfaceID)
+        XCTAssertEqual(restored, original)
+        XCTAssertEqual(restored?.values["brief.team"], .text("Saved locally"))
+        XCTAssertEqual(restored?.pending.map(\.id), ["disk-choice"])
+    }
+
 }

@@ -36,7 +36,7 @@ Gallery names are a source snapshot, **not the entire CopilotKit A2UI basic cata
 
 For v2, implement typed layout tree and stable binding IDs after source A2UI catalog audit; schema migrations must be explicit (`schemaVersion` compatibility window, server-side upgrade and read-only fallback). Unknown renderers should be presented as unsupported, preserving raw state safely and avoiding tool execution. In V1 unknown kinds are rejected rather than dropped.
 
-## Minimum gateway boundary (DESIGN ONLY, no routes deployed)
+## Minimum gateway boundary (routes remain design-only; internal provider transport implemented)
 
 - `POST /v1/sessions` authenticates EUPHORIA identity, enforces quotas, creates OpenAI Agents API session, persists owner/session mapping; never forwards API credentials to iOS.
 - `GET /v1/sessions/{id}` and `GET /v1/sessions/{id}/events` verify per-user ownership; stream sanitized Agents event envelopes, preserve event/item IDs and real turn status. On disconnect, reread authoritative Agents session/items and reconcile; streams have no full event replay.
@@ -57,17 +57,21 @@ For v2, implement typed layout tree and stable binding IDs after source A2UI cat
 ## Acceptance ladder and current test evidence
 
 - **Core-only local proof**: `cd ios/VisualRuntimeCore && swift test --jobs 2` on Linux Swift 6.2.1. **8 XCTest cases, 0 failures**, source fixture kinds, form type conversion, gating/read-only split, duplicate choice, approval queue, Codable relaunch snapshot, stale revision, invalid kind/version. Actual local command was run.
-- **Not executed**: Xcode app target, SwiftUI renderer smoke, SwiftData `ModelContainer` restoration test (iOS only), accessibility/visual screenshot; iOS simulator must build/test on Mac. Existing previous branch had prior operator 6/0, **not attributed to this new branch**.
+- **Executed on macOS 2026-10-28**: Debug/Release builds and built-plist checks; nine iOS XCTest including on-disk SwiftData container reopen; native fixture draft and queued choice survived app termination/relaunch. Eight portable Swift tests and twelve internal provider adapter tests also passed. See `TEST_EVIDENCE.md` for exact scope.
 - **Not executed**: live Agents API session, streamed native surface, genuine tool `required_actions`, gateway, cloud revision ack, webhooks/APNs, schedule, cross-user authorization. No real token or endpoint provided and no live integration attempt made.
 
-## Next executable vertical slice (gated)
+## Next executable vertical slice (live proof deferred until key availability)
 
-1. Xcode Debug/Release + all XCTest, launch fixture, edit choice/form/page checkbox, force quit/reopen, assert SwiftData restoration of local drafts and queued actions; capture `xcresult` and screenshots.
+1. **Partially verified:** Debug/Release +9 XCTest, native choice/form draft termination/relaunch passed; editable checkbox manual re-entry remains unchecked. Internal server-side provider transport is tested locally; not yet connected to native UI.
 2. In separately deployed gateway, provision OpenAI key as server secret, create a genuine managed session with no environment and source-based **function tool** `euphoria.render_surface` that returns schemaVersion=1 data; persist owner/session/surface.
 3. On actual `required_actions`, validate the model-emitted payload, render natively, accept user edit, store idempotent intent, submit real `agent.session.input.tool_result` (with exact `turn_id`/`call_id`), then wait for agent-generated revised surface revision+1; verify no duplicate effect and no silent fallback.
 4. Kill and relaunch app, re-fetch authoritative snapshot and session items; same user recovers revised surface. Other account receives 403/404 for session, surface and action routes. Network dropped mid-action must reconcile by idempotency key, not resubmit a tool effect blindly.
-5. Only after real traces prove that round trip, add missing A2UI primitives, custom gallery and semantic page blocks incrementally against the complete source inventory.
+5. Continue incremental source parity without a key as authorized by the user; retain the live round-trip gate for any claim of real agent behavior or functional parity.
 
 ## Machine-readable schema artifacts
 
 The bundled `visual-surface-v1.schema.json` formalizes the currently supported **five** node types, and `visual-surface-v1.fixture.json` records the source-derived interaction snapshot as JSON. Both validate under JSON Schema draft 2020-12. Swift additionally enforces cross-field constraints such as unique node/field IDs, required options for selects, numeric bounds and writable-vs-readonly checklists. This is a v1 prototype subset and must not be advertised as full A2UI. If the model emits this schema through a function tool, the gateway MUST perform the same semantic validation before publishing it.
+
+## User-directed data scope (2026-10-28)
+
+Personal records stay on-device by default. Submitted model context and hosted agent history remain remote processing. The gateway still needs minimal identity/session ownership, integration credential and durable operation state; this does not require mirroring all personal records. Sign in with Apple is a candidate, not implemented or accepted as a complete authentication design. No auth/storage vendor adopted. `gateway/agents-client.mjs` is internal transport only, not a public authorization boundary.

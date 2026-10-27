@@ -1,54 +1,28 @@
-# EUPHORIA: Native Visual Runtime and Agents API spike
+# EUPHORIA phase-one handoff
 
-**Status:** isolated source audit and portable Swift proof. **Not** an OpenDuet parity claim or live Agents API integration. Started from the validated SwiftUI foundation at `ba91291e75b84c71e18a00edec2db42f079cf4a5`. No changes to `main`, `feature/ios-native-m0-m1`, `openbot/`, or CopilotKit.
+Updated 2026-10-28. Work lives in the real Xcode project on `feature/agents-native-visual-contract-spike`. Baseline `de9d990`; this change adds an internal provider transport and stronger native persistence evidence. Main and the existing CopilotKit/OpenBot implementation are untouched.
 
-The full testable code, native SwiftUI renderer, SwiftData persistence model, and detailed capability matrix were produced as a separate downloadable engineering bundle, with an installer that **refuses** to run except on this new branch. This branch contains the architecture handoff only until the native artifacts are applied and independently built on macOS.
+## Target
 
-## Source-driven parity families, not a generic card
+Phase one ports OpenDuet functionality to SwiftUI and replaces its intelligence backend with OpenAI Agents API. Phase two evolves the interface into ETERNAL's Home/Workspace/Focus/Orb experience. Five native fixture types are an implemented subset, not full OpenDuet or A2UI parity.
 
-The canonical screen inventory remains `docs/ios/FEATURE_PARITY.md` (79 TSX route source files, including layouts). The renderer port must preserve every functional state and permission rule, not just layouts.
+## Implemented
 
-| Behavior | Existing implementation | Native requirement |
-|---|---|---|
-| A2UI | `openbot/app/src/lib/copilot/a2ui.tsx`, CopilotKit `basicCatalog` and SDK data binding/action semantics | Native catalog, typed tree, bindings, actions and versioned replay. Not yet implemented. |
-| Generative HTML/CSS/JS | `generative-ui.ts`, `provider.tsx` | Independent sandbox with no shared API credentials; never the basis of the entire app. |
-| Gallery discovery and governance | `gallery-registry.ts`, `gallery-tools.tsx` | Per-Bot grants, published model descriptions, refusal/NOT_SHOWN history, rendering-only vs suspended decision. |
-| Sandboxed components | `sandboxed-tools.tsx` | Published JSON Schema, versioning, per-call source and grant checks; separate rendering confinement. |
-| Decision controls | `components/gallery/decisions.tsx` | `askChoice` returns `{choice,label}`, `askApproval` returns `{decision,note?}`; pending vs completed distinct; real agent wait/resume. |
-| Form | `components/gallery/form.tsx` | `askForm` 1–8 fields, unique IDs, email/number/select bounds, `{status:"submitted",values}`; invalid requests release the waiting agent. |
-| Read-only and editable checklists | `gallery/cards.tsx`; `components/duet/page-view.tsx` and `page-rich-block.tsx` | `showChecklist` is read-only; a page-block checklist uses explicit persisted edits and callbacks. |
-| Charts/tables/cards | `gallery/charts.tsx`, `table.tsx`, `cards.tsx` | Typed schemas for every component, not generic substitutions. |
-| Tools and approvals | `bot-tools.tsx`, `skill-tools.tsx`, `approval-tools.tsx`, `computer-tools.tsx` | Grant-gated execution and HITL; mutating computer 202 interrupts existing run and server owns side effect. |
-| Artifacts, channels, automations | `page-card-tool.tsx`, `task-card-tool.tsx`, `reply-chips-tool.tsx`, backend routes | Product services for artifacts, roles, connections, schedules, sharing, memory, audit. |
+- Five source-derived native controls: choice, form, approval, reporting checklist, editable page checklist.
+- SwiftData saves visual surfaces, drafts and queued intents; local approvals do not execute effects.
+- `gateway/agents-client.mjs`: server-side session creation/retrieval, user messages and pending function results. Explicit model, beta header, stable submission keys, current required-action identity and no automatic write retries. No dependency or public server added.
+- Empty202 event acceptance is handled separately from completion; provider errors are sanitized. Gateway authentication and action authorization must precede use of this transport.
 
-## Versioned EUPHORIA contract, first subset
+## Verified
 
-`VisualSurface {schemaVersion:1,surfaceID,revision,nodes:[{id,kind,title,summary?,options?,fields?,items?}]}` where `kind` currently permits only `askChoice`, `askForm`, `askApproval`, `showChecklist`, `pageChecklist`. No scripts, markup, arbitrary Swift symbols, or raw credentials are executable. Unknown component kinds and unsupported versions fail closed.
+Debug/Release builds, built-plist checks, 9 iOS XCTest, 8 portable Swift XCTest, and12 local HTTP provider-contract tests passed. Native Team name draft and pending Staging choice survived app termination/relaunch. See `TEST_EVIDENCE.md` for commands, artifacts and limitations.
 
-`VisualAction {id,surfaceID,expectedRevision,nodeID,kind,values}` is an idempotent user **intent**. Draft form fields persist locally; submission, selection, approval and page checkbox actions enter a durable pending queue. Local mutation never claims remote success or advances the authoritative revision. The gateway must acknowledge event IDs after checking identity, tool grants, server-side revision and current OpenAI `required_actions`.
+## Data and identity direction
 
-The complete contract and acceptance sequence are in the separate spike's `docs/agents/NATIVE_VISUAL_PARITY.md`, which extends (does not replace) the existing parity ledger.
+The user prefers personal app records to stay on-device. Preserve that default; sending selected context to a cloud model still creates remote session data. Keep only required server ownership, credential and operation state for remote work. Unattended execution requires server state while the app is closed. Sign in with Apple is a proposed identity mechanism; it must be verified by a server and is not implemented here. No cloud database or auth vendor has been adopted.
 
-## Proposed cloud gateway, not implemented
+## Remaining
 
-- Authenticated per-user `POST /v1/sessions` maps a user to OpenAI `POST /v1/agents/sessions` and stores cloud ownership.
-- Authenticated `GET /v1/sessions/{id}/events` streams real Agents API events; `GET /v1/sessions/{id}` reconciles authoritative items after disconnect.
-- `GET /v1/surfaces/{id}` returns versioned, authorized visual snapshots.
-- `POST /v1/surfaces/{id}/actions` requires `id` idempotency and expected revision; retrieves pending `function_call` including `turn_id` and `call_id`, submits the real `agent.session.input.tool_result`, and awaits an actual revised surface.
-- Approvals, service OAuth and tool effects are executed server-side with audit and replay protection.
-- Verified session webhooks trigger cloud state fetch and APNs; SwiftData is a local view/cache, not unattended execution state.
+There is no public gateway, live agent session, native transport connection, streamed model-generated UI or complete source parity. Provider adapter tests use a local stub. A key is deferred by the user; continue implementation, then verify live access separately.
 
-OpenAI reference:
-- https://developers.openai.com/api/docs/guides/agents-api/sessions
-- https://developers.openai.com/api/docs/guides/agents-api/tools/functions
-- https://developers.openai.com/api/docs/guides/agents-api/sessions/events
-- https://developers.openai.com/api/docs/guides/agents-api/sessions/webhooks
-- https://developers.openai.com/api/reference/resources/beta/subresources/agents/subresources/automations/methods/create
-
-## Evidence and gating
-
-**Executed independently on Linux Swift 6.2.1:** `swift test --jobs 2` in the portable `VisualRuntimeCore` package: **8 tests passed, zero failures**. These test validation, typed choice and form responses, pending approvals, read-only vs editable checklists, deduplication, Codable state restoration and authoritative revision acknowledgement.
-
-**Not executed here:** Xcode/iOS 27 build, SwiftUI interaction, SwiftData in-app restoration, OpenAI Agents API request, function-tool continuation, real agent-generated revision, scheduled task, gateway webhooks or cross-user access tests. The prior branch's 6/0 simulator report does not apply automatically to this new branch.
-
-**Next executable milestone:** apply the spike to this branch on a Mac, run both simulator builds and the expanded XCTest suite, prove local draft/action restoration, then deploy the smallest authenticated gateway and run a real `render_surface` function call -> native edit -> `tool_result` -> revised native surface -> kill/reopen -> cloud reconciliation. No full-screen port or parity declaration before this live proof.
+Next: authenticated owner/session boundary + validated surface/action round trip using the existing renderer. Preserve provider turn/call IDs and durable action intents; never replay uncertain effects. Source capability inventory and visual schema are in `NATIVE_VISUAL_PARITY.md`; internal adapter instructions are in `../../gateway/README.md`. Deployment and full capability migration remain unfinished.

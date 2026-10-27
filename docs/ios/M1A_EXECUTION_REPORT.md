@@ -92,3 +92,7 @@ Relaunch -> [history events, message count, thread match] NOT CAPTURED
 - Enhanced Xcode verification: build-product plist validation, explicit `.xcresult` bundle and machine-readable counts. This updated script is **NOT YET EXECUTED** on macOS; the prior 6-pass report applies to the earlier commit/script.
 - The runtime entitlement status and cross-user thread endpoint checks are now required before any native streaming implementation claims parity. The runtime's own documentation warns `events`, `state` and `stop` may be ID-only. OpenBot global `/api/*` authentication does not establish per-thread authorization. **No backend code was changed; review-required potential security gap.**
 - No authenticated session, live AG-UI trace, tool invocation or approval continuation was captured. No new Swift agent or transport code was added.
+
+## Optional local integration preflight
+
+Added `ios/scripts/inspect-openbot-fixture.py` for read-only Mac-host checks against the **real** local OpenBot server, including `runtimeEntitlements.status` from runtime info. **It was not run here: no local OpenBot deployment is accessible from the assistant environment.** Do not call a successful host probe an authenticated native session or an agent trace.

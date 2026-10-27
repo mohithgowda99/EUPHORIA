@@ -41,3 +41,5 @@ Current run environment (Linux Swift 6.2.1, 2026-10-27): `xcodebuild`, `docker`,
 ## Reviewer revalidation (M1-A)
 
 After pulling the corrected branch, rerun `EUPHORIA_SIMULATOR_ID=<installed-iOS-27-UDID> bash ios/scripts/verify-xcode.sh`. This now stores unique `.xcresult` bundles inside ignored `ios/.build-logs/`, queries the Xcode result summary, fails if there are not exactly six passed XCTest cases and zero failures/skips, and checks that only the built Debug app has `NSAllowsLocalNetworking`. A successful build/plist assertion is **not** the separately required live simulator ATS smoke test with `http://localhost:3001` and `http://127.0.0.1:3001` running on the real local OpenBot service. See `docs/ios/M1_PROOF_PLAN.md` for the two-user runtime authorization and entitlement-readiness fixtures.
+
+For local server preflight after `bash scripts/start.sh`, run `python3 ios/scripts/inspect-openbot-fixture.py http://127.0.0.1:3001`. This makes only four unauthenticated, read-only GETs and prints sanitized status/entitlement data. Its results do not substitute for native OAuth, per-thread authorization, iOS ATS or an agent run.

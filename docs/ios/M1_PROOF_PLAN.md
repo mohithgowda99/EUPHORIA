@@ -73,3 +73,13 @@ Reviewer reported `96372aec`: iPhone 18 Pro Max on iOS 27.0, Debug build PASS, R
 5. Only then demonstrate the real nonmutating frontend tool, authorized approval interruption/server-only continuation, stop/cancel and restored history. Capture a trace consisting solely of response statuses, event names, redacted identifiers and ordering; never raw cookies, join tokens, model prompts or user content.
 
 **Runtime reference:** https://docs.copilotkit.ai/backend/runtime-endpoints (Runtime entitlements and Thread authorization sections). **Mac result format:** `xcrun xcresulttool get test-results summary --format json --path <bundle.xcresult>`.
+
+### Read-only local fixture preflight
+
+From the **repository root** (after following the root README configuration and starting the unmodified service with `bash scripts/start.sh`), run:
+
+```sh
+python3 ios/scripts/inspect-openbot-fixture.py http://127.0.0.1:3001
+```
+
+The script performs four GETs without a session (`/health`, `/api/capabilities`, `/api/me`, `/api/copilotkit/info`), prints HTTP statuses and the *non-sensitive* entitlement status/error code and advertised thread flags, and exits nonzero when the Runtime is unreachable or not `ready`. An `/api/me` 200 in local single-user mode is **not** authentication proof. The script does not exercise simulator ATS, sign-in, cross-user thread isolation or agent transport. Only claim a live fixture after the operator runs it and returns sanitized output. **No endpoint was contacted during authoring.**

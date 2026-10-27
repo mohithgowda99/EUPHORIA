@@ -10,6 +10,13 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             Form {
+                #if DEBUG
+                Section("Visual contract proof") {
+                    NavigationLink("Open source-derived UI fixtures") {
+                        VisualFixtureView()
+                    }
+                }
+                #endif
                 Section("Existing OpenBot deployment") {
                     TextField("https://openbot.example.com", text: $serverAddress)
                         .textInputAutocapitalization(.never)

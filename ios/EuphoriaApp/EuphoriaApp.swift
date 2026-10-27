@@ -6,5 +6,6 @@ struct EuphoriaApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(for: VisualSnapshot.self)
     }
 }

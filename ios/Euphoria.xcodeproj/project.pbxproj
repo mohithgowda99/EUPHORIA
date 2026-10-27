@@ -11,6 +11,12 @@
         000000000000000000000015 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000000F /* ContentView.swift */; };
         000000000000000000000016 /* OpenBotEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000010 /* OpenBotEndpoint.swift */; };
         000000000000000000000017 /* OpenBotEndpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000011 /* OpenBotEndpointTests.swift */; };
+        000000000000000000000030 /* VisualContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000024 /* VisualContract.swift */; };
+        000000000000000000000031 /* VisualState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000025 /* VisualState.swift */; };
+        000000000000000000000032 /* SourceFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000026 /* SourceFixtures.swift */; };
+        000000000000000000000033 /* VisualFixtureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000027 /* VisualFixtureView.swift */; };
+        000000000000000000000034 /* VisualSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000028 /* VisualSnapshot.swift */; };
+        000000000000000000000035 /* VisualPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000029 /* VisualPersistenceTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -30,6 +36,12 @@
         000000000000000000000011 /* OpenBotEndpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenBotEndpointTests.swift; sourceTree = "<group>"; };
         000000000000000000000012 /* Euphoria.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Euphoria.app; sourceTree = BUILT_PRODUCTS_DIR; };
         000000000000000000000013 /* EuphoriaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EuphoriaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+        000000000000000000000024 /* VisualContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/VisualContract.swift"; sourceTree = "<group>"; };
+        000000000000000000000025 /* VisualState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/VisualState.swift"; sourceTree = "<group>"; };
+        000000000000000000000026 /* SourceFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/SourceFixtures.swift"; sourceTree = "<group>"; };
+        000000000000000000000027 /* VisualFixtureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VisualFixtureView.swift"; sourceTree = "<group>"; };
+        000000000000000000000028 /* VisualSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VisualSnapshot.swift"; sourceTree = "<group>"; };
+        000000000000000000000029 /* VisualPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VisualPersistenceTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -53,13 +65,18 @@
                 00000000000000000000000E /* EuphoriaApp.swift */,
                 00000000000000000000000F /* ContentView.swift */,
                 000000000000000000000010 /* OpenBotEndpoint.swift */,
+                000000000000000000000024 /* VisualContract.swift */,
+                000000000000000000000025 /* VisualState.swift */,
+                000000000000000000000026 /* SourceFixtures.swift */,
+                000000000000000000000027 /* VisualFixtureView.swift */,
+                000000000000000000000028 /* VisualSnapshot.swift */,
             );
             path = EuphoriaApp;
             sourceTree = "<group>";
         };
         000000000000000000000004 /* EuphoriaTests */ = {
             isa = PBXGroup;
-            children = (000000000000000000000011 /* OpenBotEndpointTests.swift */);
+            children = (000000000000000000000011 /* OpenBotEndpointTests.swift */, 000000000000000000000029 /* VisualPersistenceTests.swift */);
             path = EuphoriaTests;
             sourceTree = "<group>";
         };
@@ -147,13 +164,18 @@
                 000000000000000000000014 /* EuphoriaApp.swift in Sources */,
                 000000000000000000000015 /* ContentView.swift in Sources */,
                 000000000000000000000016 /* OpenBotEndpoint.swift in Sources */,
+                000000000000000000000030 /* VisualContract.swift in Sources */,
+                000000000000000000000031 /* VisualState.swift in Sources */,
+                000000000000000000000032 /* SourceFixtures.swift in Sources */,
+                000000000000000000000033 /* VisualFixtureView.swift in Sources */,
+                000000000000000000000034 /* VisualSnapshot.swift in Sources */,
             );
             runOnlyForDeploymentPostprocessing = 0;
         };
         00000000000000000000000B /* Sources */ = {
             isa = PBXSourcesBuildPhase;
             buildActionMask = 2147483647;
-            files = (000000000000000000000017 /* OpenBotEndpointTests.swift in Sources */);
+            files = (000000000000000000000017 /* OpenBotEndpointTests.swift in Sources */, 000000000000000000000035 /* VisualPersistenceTests.swift in Sources */);
             runOnlyForDeploymentPostprocessing = 0;
         };
 /* End PBXSourcesBuildPhase section */

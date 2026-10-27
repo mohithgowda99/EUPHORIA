@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "surfaceID": "openduet-reference-fixture",
+  "revision": 1,
+  "nodes": [
+    {"id":"deployment","kind":"askChoice","title":"Which environment should this go to?","summary":"The build is green and nothing else is queued.","options":[{"id":"staging","label":"Staging","description":"Safe, and reversible"},{"id":"production","label":"Production","description":"Live customers"}]},
+    {"id":"brief","kind":"askForm","title":"Plan your next project","summary":"A few details to prepare a useful first draft.","fields":[{"id":"team","label":"Team name","type":"text","required":true},{"id":"email","label":"Work email","type":"email","required":true},{"id":"priority","label":"Priority","type":"select","required":false,"options":["This week","This month","Exploring"]},{"id":"seats","label":"People involved","type":"number","required":false,"min":1},{"id":"notes","label":"What would a good outcome look like?","type":"textarea","required":false}]},
+    {"id":"refund","kind":"askApproval","title":"Refund this order?","summary":"The customer was charged twice for the same order and the second charge has not settled."},
+    {"id":"release","kind":"showChecklist","title":"Before the release","items":[{"id":"migrations","text":"Migrations applied","done":true},{"id":"changelog","text":"Changelog written","done":true},{"id":"loadtest","text":"Load test","done":false,"note":"Waiting on staging"}]},
+    {"id":"page_tasks","kind":"pageChecklist","title":"Editable page tasks","items":[{"id":"review","text":"Review native visual contract","done":false},{"id":"record","text":"Record integration evidence","done":false}]}
+  ]
+}

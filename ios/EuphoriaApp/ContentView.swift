@@ -5,6 +5,7 @@ struct ContentView: View {
     @State private var serverAddress = ""
     @State private var probeState: ProbeState = .idle
     @State private var probeTask: Task<Void, Never>?
+    @State private var probeID = UUID()
 
     var body: some View {
         NavigationStack {
@@ -17,11 +18,14 @@ struct ContentView: View {
                         .textContentType(.URL)
                         .onChange(of: serverAddress) { _, _ in
                             probeTask?.cancel()
+                            probeID = UUID()
                             probeState = .idle
                         }
                     Button("Check server capabilities") {
                         probeTask?.cancel()
-                        probeTask = Task { await checkServer() }
+                        let nextID = UUID()
+                        probeID = nextID
+                        probeTask = Task { await checkServer(id: nextID) }
                     }
                     .disabled(serverAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                               || probeState.isLoading)
@@ -63,20 +67,24 @@ struct ContentView: View {
         }
         .onDisappear {
             probeTask?.cancel()
+            probeID = UUID()
         }
     }
 
     @MainActor
-    private func checkServer() async {
+    private func checkServer(id: UUID) async {
+        guard probeID == id else { return }
         probeState = .loading
         do {
             let endpoint = try OpenBotEndpoint(serverAddress)
             let capabilities = try await OpenBotAPI().capabilities(at: endpoint)
             try Task.checkCancellation()
+            guard probeID == id else { return }
             probeState = .reachable(capabilities)
         } catch is CancellationError {
-            probeState = .idle
+            if probeID == id { probeState = .idle }
         } catch {
+            guard probeID == id else { return }
             probeState = .failed(error.localizedDescription)
         }
     }

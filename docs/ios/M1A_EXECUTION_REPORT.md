@@ -2,7 +2,24 @@
 
 **Review authorization:** M1-A only. **Previous reviewed SHA:** `21042884289d320a27069694f7c252675bc33b99`. **Branch:** `feature/ios-native-m0-m1`. **Baseline:** `5b0e15f9719db0628c02a3fe6386dcad683c8302`. No backend edits, no agent/tool stubs, no redirection to a new agent framework.
 
-## Step 1: Xcode foundation evidence
+## 2026-10-27 reviewer validation update (supersedes the *historical* Linux-only status below)
+
+Operator-reported execution at reviewed SHA `96372aec7fd84bb65804107bf807cb4d39e1c664`, on **iPhone 18 Pro Max / iOS 27.0**:
+
+| Task | Evidence | Interpretation |
+|---|---|---|
+| Debug simulator build | PASS, user report | Validated on the user's Mac; not independently executed here |
+| Release simulator build | PASS, user report | Validated on the user's Mac |
+| XCTest | **6 run, 0 failures**, user report | Source suite validated by operator |
+| Original script | Exit `0`, user report | No errors reported |
+| Original logs | `/Users/mohithgowda/EUPHORIA/ios/.build-logs` | Mac-local generated files; not attached or remotely readable here |
+| XCTest counts from `.xcresult` | **NOT YET EXTRACTED** | New verification script emits and checks bundle counts when rerun |
+| ATS simulator-to-real-server smoke | **NOT REPORTED** | Built Info.plist alone does not prove network behavior |
+| Authenticated real agent | **NOT RUN** | M1-A remains open |
+
+No source files were changed by the operator's validation; generated logs should remain untracked. The new reviewer corrections are captured in `docs/ios/M1_PROOF_PLAN.md`; both runtime entitlement readiness and per-thread ownership isolation are security/acceptance gates. **The following original Linux investigation section is kept as historical context, not the current Xcode outcome.**
+
+## Step 1: Xcode foundation evidence (historical Linux executor)
 
 Run environment was Linux x86_64 with Swift 6.2.1; `xcodebuild`, `docker`, `bun` were absent; shell DNS to github.com unavailable. There is no Xcode/iOS SDK or iOS Simulator, so **no iOS Debug/Release build, XCTest run, signing check or localhost/ATS runtime test was possible here**. These tests are **BLOCKED**, not passed.
 
@@ -68,3 +85,10 @@ Relaunch -> [history events, message count, thread match] NOT CAPTURED
 2. Choose a test environment with Docker, Intelligence, model key and configured OAuth/SSO. A local single-user smoke server alone will not establish native auth.
 3. Approve validated native Better Auth flow, then pick SDK components only after observing the actual Intelligence WebSocket admission/join contract; may use `AGUICore` without shipping `HttpAgent`.
 4. Preserve current scope, original backend, all React functionality and main unchanged. Do not advance to screens.
+
+## Corrections commit: post-review scope and evidence
+
+- Added `/ios/.build-logs/` to repository `.gitignore`; existing untracked build logs stay on the operator's Mac and do not belong in commits.
+- Enhanced Xcode verification: build-product plist validation, explicit `.xcresult` bundle and machine-readable counts. This updated script is **NOT YET EXECUTED** on macOS; the prior 6-pass report applies to the earlier commit/script.
+- The runtime entitlement status and cross-user thread endpoint checks are now required before any native streaming implementation claims parity. The runtime's own documentation warns `events`, `state` and `stop` may be ID-only. OpenBot global `/api/*` authentication does not establish per-thread authorization. **No backend code was changed; review-required potential security gap.**
+- No authenticated session, live AG-UI trace, tool invocation or approval continuation was captured. No new Swift agent or transport code was added.

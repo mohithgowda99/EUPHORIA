@@ -29,3 +29,11 @@ No `.env`, API keys, user credentials, or model secrets belong in this target.
 ## Architecture freeze until reviewer decision
 
 Read `docs/ios/M0_ARCHITECTURE.md`, `docs/ios/FEATURE_PARITY.md` and `docs/ios/M1_PROOF_PLAN.md`. Before adding authenticated chat, validate the existing server's Better Auth mobile flow and choose a tested Swift AG-UI SDK. Do not introduce custom transport or duplicate server authority without proving necessity.
+
+## M1-A validation and known limits
+
+Run `bash ios/scripts/verify-xcode.sh` from the repository root on a Mac with Xcode and the iOS 27 simulator SDK. To run XCTest, first select an installed simulator UDID with `xcrun simctl list devices available` and set `EUPHORIA_SIMULATOR_ID` before invoking the script. The script runs both configurations and the existing `EuphoriaTests` suite; it does not auto-start Docker or log credentials.
+
+A Debug-specific Info.plist declares `NSAllowsLocalNetworking=YES` for loopback iOS simulator testing; the Release target retains the Xcode-generated Info.plist without an ATS exemption. The app's `OpenBotEndpoint` independently restricts plaintext HTTP to exact loopback hosts and only in Debug. Actual ATS behavior must still be verified on iOS 27; static plist syntax is not runtime proof.
+
+Current run environment (Linux Swift 6.2.1, 2026-10-27): `xcodebuild`, `docker`, `bun` unavailable and GitHub shell network blocked. Portable copy of `OpenBotEndpoint.swift` passed strict Swift 6 type-check/compile and seven behavior assertions in both Debug/Release conditions, but **native Xcode builds and XCTest remain NOT RUN**. See `docs/ios/M1A_EXECUTION_REPORT.md`.

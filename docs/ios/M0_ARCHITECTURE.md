@@ -51,6 +51,8 @@ The React root registers computer tools, sign-in, bot creation, skill creation, 
 
 For AG-UI, preserve RUN_STARTED/FINISHED/ERROR, message snapshots and deltas, tool call argument assembly, tool result correlation, state snapshots/JSON Patch deltas, interruptions, cancellations, session-aware streaming, ordering, duplicated frames and replay. Custom/RAW/activity/A2UI and open-generative-ui events cannot be silently ignored when they carry an OpenDuet capability. **Read and preserve unknown payloads rather than discarding them.**
 
+**M1-A clarification (2026-10-27):** The runtime here is **Intelligence-backed**. Per the CopilotKit v2 runtime HTTP contract, the multi-route `POST /api/copilotkit/agent/:agentId/run` may return JSON containing `threadId`, `runId`, `joinToken`, and `realtime: {clientUrl, topic}`. The client then joins the Intelligence WebSocket and receives AG-UI events on that channel; `POST .../connect` is also an admission route. Therefore an HTTP/SSE-only Swift `HttpAgent` is **insufficient for the production path**, even if its AG-UI event decoder is reusable. Implementing simple `URLSession.bytes` SSE from `/run` is **not** M1 proof. The v2 REST runtime also exposes `GET .../info`, `POST .../stop/:threadId`, `GET .../threads/:threadId/messages` and `GET .../threads/:threadId/events`. Probe the exact deployed version before coding against documentation. Source: https://docs.copilotkit.ai/ms-agent-python/backend/runtime-endpoints (Runtime HTTP endpoints, Intelligence section).
+
 ## Swift AG-UI SDK decision record (not yet approved)
 
 Checked community source repositories on 2026-10-27:
@@ -81,3 +83,10 @@ Root `LICENSE` is MIT; verify all *transitive* dependencies, component/gallery a
 4. Decide native renderer boundary for A2UI and generated HTML without reducing capabilities.
 
 **No M1 end-to-end proof is claimed by this audit.**
+
+
+## M1-A candidate revision pins and observed gap
+
+- `mattsp1290/ag-ui-swift` main on audit: `9412aab2549e06e165ada85fe6346b9b6e5a0f2b`. SwiftPM includes `AGUICore` and `AGUIClient`, bounded SSE transport. No dedicated CopilotKit Intelligence realtime WebSocket client identified in the manifest/source tree. **Evaluated from source, NOT compiled with Xcode or integrated.**
+- `paduh/ag-ui-swift` main on audit: `659aa553ceb6893cd834874f3d1b9bf5cde31959`. SwiftPM includes `AGUICore`, `AGUIClient`, `AGUIAgentSDK`, `AGUITools` and an SSE `HttpAgent`; its default run route is `/run`, not CopilotKit's `/agent/:agentId/run`. No runtime Intelligence WebSocket bridge identified in the library sources. **Evaluated from source, NOT compiled or integrated.**
+- **No SDK selected or added.** The first spike must validate the JSON run admission + token-bearing realtime join and historical event replay against actual OpenBot, including frontend tool-result and approval resume semantics. Apple's `URLSessionWebSocketTask` may be the transport if existing SDKs cannot bridge it, but do not implement or credential it until live admission and realtime shapes are verified.

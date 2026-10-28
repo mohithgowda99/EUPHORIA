@@ -6,7 +6,7 @@ Status: **source-backed inventory with local native/gateway continuation, galler
 
 | Contract family | Exact source reference | Behavioral contract | Native milestone |
 |---|---|---|---|
-| A2UI primitives | `app/src/lib/copilot/a2ui.tsx` | `Catalog` wraps CopilotKit `basicCatalog`; SDK owns data bindings, actions, component schema; gated by `a2uiProviderOptions` | **unimplemented**: inventory full basicCatalog types, action/data binding model and conformance fixtures before declaring A2UI support |
+| A2UI primitives | `app/src/lib/copilot/a2ui.tsx` | `Catalog` wraps CopilotKit `basicCatalog`; SDK owns data bindings, actions, component schema; gated by `a2uiProviderOptions` | **partial source form adapter**: pinned basic catalog has18 components; source trip-form test translated through native askForm with flat string bindings and event context. Unknown shapes/functions fail; remaining catalog/data binding semantics unimplemented |
 | HTML Generative UI | `app/src/lib/copilot/generative-ui.ts`, `provider.tsx` | `openGenerativeUI` design skill; sandboxed iframe HTML/JS/CSS; no same-origin session/fetch; theme message channel | **local implementation**: isolated ephemeral WKWebView, unique origin, inline interaction, enforced no-network CSP and denied native/device access. Real WebKit tests pass; arbitrary online/sandboxed-tool parity remains pending |
 | Gallery registration | `app/src/lib/copilot/gallery-registry.ts` | Modules export `GALLERY`: `name`, `title`, `kind` chart/card/decision, `description`, `parameters`, `preview`, `Component`, optional `confirmation`/`reads`; sorted stable registry | **partial**: native typed gallery and decisions implemented; no dynamic server-published registry |
 | Gallery governance | `gallery-tools.tsx` | Per-active-Bot grant and published description; forbidden components return NOT_SHOWN; revocations override rendering; decisions use `useHumanInTheLoop` and must resolve with denial | **unimplemented**: server-owned component catalog, per-person/Bot grants and denial history |
@@ -28,7 +28,7 @@ Gallery names are a source snapshot, **not the entire CopilotKit A2UI basic cata
 
 ## Versioned native protocol and persistence
 
-`VisualSurface {schemaVersion,surfaceID,revision,nodes}` uses stable IDs and a strict kind discriminant. Version 1 supports askChoice, askForm, askApproval, showChecklist and pageChecklist. Version 2 additionally supports typed gallery and isolated htmlArtifact. The compatibility schema remains named `visual-surface-v1.schema.json`; new kinds require version 2. This is an EUPHORIA adapter, not native CopilotKit or Agents API output. Full A2UI layout/bindings remain unimplemented.
+`VisualSurface {schemaVersion,surfaceID,revision,nodes}` uses stable IDs and a strict kind discriminant. Version 1 supports askChoice, askForm, askApproval, showChecklist and pageChecklist. Version 2 additionally supports typed gallery and isolated htmlArtifact. The compatibility schema remains named `visual-surface-v1.schema.json`; new kinds require version 2. This is an EUPHORIA adapter, not native CopilotKit or Agents API output. The source-backed form adapter normalizes a strict v0.9 form shape into this contract; full A2UI layout/bindings remain unimplemented.
 
 `VisualAction {id,surfaceID,expectedRevision,nodeID,kind,values}` separates local drafts from queued external intentions. `setField` persists form/approval drafts locally. Notes use existing node/revision-scoped values. `choose`, `decide`, `submitForm` translate to source-equivalent tool results. `displayed` returns `{status:"shown"}` for read-only surfaces; it is an acknowledgement, not a user approval. `pageChecklist` is still a local interaction analogue, not connected page mutation.
 
@@ -60,3 +60,9 @@ Official contracts checked 2026-10-28:
 - https://developers.openai.com/api/docs/guides/agents-api/tools/functions
 - https://developers.openai.com/api/docs/guides/agents-api/sessions/events
 - https://developers.openai.com/api/reference/typescript/resources/beta/subresources/agents/subresources/sessions/subresources/items/methods/list
+
+## Source A2UI form slice — c126000
+
+OpenDuet `app/tests/a2ui.test.tsx` supplies the initial Card/Column/Text/TextField/Button conformance case. Pinned renderer1.77.0 and web_core0.10.4 were inspected; tarball integrity matches the committed lock. `euphoria_render_surface` accepts canonical native surfaces or `{a2ui:[v0.9 messages]}`. The adapter recognizes one form shape and returns native askForm with initialValue, submitLabel and a validated formEvent descriptor. The gateway owns revision/surface authority and resolves `{userAction:{name,surfaceId,sourceComponentId,context,timestamp}}` from current submitted data through the existing journal.
+
+Source drafts retain empty/whitespace strings and are keyed by revision. Source field defaults/literals and editable strings use a shared2000 UTF-16-unit limit. Standard forms retain trimming and typed validation. Supported source paths are distinct flat string bindings; unsupported nested layouts/models, functions, dynamic labels, numeric/secret inputs, validators and other catalog controls are rejected. This is partial source conformance, not full A2UI activation or a general renderer. Exact design: `../superpowers/specs/2026-10-28-a2ui-form-adapter-design.md`.

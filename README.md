@@ -1,3 +1,11 @@
+# EUPHORIA native iOS work
+
+Current native implementation: `feature/agents-native-visual-contract-spike`. Start with [project rules](AGENTS.md), [current state](docs/NOW.md), [accepted decisions](docs/DECISIONS.md), and [verification evidence](docs/agents/TEST_EVIDENCE.md). Build/run instructions: [iOS](ios/README.md), [gateway](gateway/README.md).
+
+Phase one recreates OpenDuet functionality with a native SwiftUI shell and an OpenAI Agents API backend. Generated artifacts alone may use isolated WebKit. **Full parity and real-provider execution remain unfinished.** The OpenDuet README below documents the reference implementation.
+
+---
+
 <div align="center">
 
 # OpenDuet

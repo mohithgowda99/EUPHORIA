@@ -140,10 +140,11 @@ For every tool record: exact name; offered conditions; parameter schema; read vs
 
 | Capability | Current evidence | Remaining gap |
 |---|---|---|
-| Debug/Release native builds | Passed; 16 iOS XCTest passed, no failures/skips | Signing/physical-device qualification |
+| Debug/Release native builds | Passed; 17 iOS XCTest passed, no failures/skips | Signing/physical-device qualification |
 | Approval-note draft recovery | Core and on-disk SwiftData reopen passed; node/revision scoped and locked after submission | Full live external approval workflow |
 | Native choice/form/approval result | Gateway fixture tests and prior native three-step trace; current request/choice trace accepted | Real provider and external executor |
-| Conversation follow-up/cancel/history | 35 gateway and 33 core suite totals; owned endpoints, intent journal, newest-window pagination and persisted re-entry | Live API, streaming, attachments/grouped/rich AG-UI parity; new full native manual trace incomplete |
+| Conversation follow-up/cancel/history | 42 gateway and 37 core suite totals; owned endpoints, intent journal, newest-window pagination and persisted re-entry | Live API, streaming, attachments/grouped/rich AG-UI parity; new full native manual trace incomplete |
+| A2UI source form | Source trip form → native initial values/edit/reopen → source event through the gateway journal;42 gateway/37 core/17 iOS totals | Boolean/selection and remaining basic catalog, dynamic layouts/functions/bindings/grants; full source parity |
 | Gallery/HTML | Nine native gallery types and isolated HTML; shared 10-node fixture validates in Swift and gateway; real WebKit tests execute inline interaction and block fetch | Dynamic grants/registries, A2UI bindings, source formatting options, full online sandboxed tools |
 | Production auth/deployment | Development-token owner isolation tests | Real identity verifier, login/revoke, hosted deployment, distributed state |
 | Computer/integrations/routines/admin and all other routes | Source inventory only | Native/service implementation and end-to-end traces |

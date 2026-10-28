@@ -49,3 +49,9 @@ Protocol references checked2026-10-28:
 - https://developers.openai.com/api/docs/guides/agents-api/sessions
 - https://developers.openai.com/api/docs/guides/agents-api/tools/functions
 - https://developers.openai.com/api/reference/typescript/resources/beta/subresources/agents/subresources/sessions/subresources/events/methods/create
+
+## Source A2UI form adapter
+
+The existing `euphoria_render_surface` function also accepts `{a2ui:[...]}` with source v0.9 createSurface/updateComponents/updateDataModel messages. The supported shape is the source-tested Card → Column → heading/1–8 shortText or longText fields/one event Button. Flat string paths only; unsupported catalog features fail explicitly. See `tests/fixtures/a2ui-trip-v09.json` and the [adapter design](../docs/superpowers/specs/2026-10-28-a2ui-form-adapter-design.md).
+
+The adapter publishes canonical native askForm data. Submitted edits preserve empty strings and whitespace and produce a source userAction event with resolved context and a once-assigned timestamp. Existing ownership, revision, exact call/turn IDs and journal/idempotency rules apply. No React/A2UI runtime dependency is added to the iOS app. This is partial form conformance, not full A2UI support.

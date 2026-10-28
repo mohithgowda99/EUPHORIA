@@ -1,13 +1,15 @@
 # Current state — 2026-10-28
 
-Project: EUPHORIA. Branch: `feature/agents-native-visual-contract-spike`. Implementation `3b8941b`; evidence record `2b77562`. Inspect Git for the current documentation HEAD. Phase one remains unfinished.
+Project: EUPHORIA. Branch: `feature/agents-native-visual-contract-spike`. Current implementation `c126000`, following `3b8941b`. Context baseline `d7f3aa8`; inspect Git for the latest documentation HEAD. Phase one remains unfinished.
 
-Implemented: durable revision-scoped approval notes; same-session messages, cancellation and paginated history; account-scoped SwiftData projections; native records/metrics/notices/tables/charts/progress; isolated generated HTML/JavaScript; durable display acknowledgements. Existing native renderer and gateway journals are reused.
+Implemented: durable approval notes; owned conversation continuation/cancellation/paginated history; account-scoped SwiftData projections; native gallery; isolated HTML/JavaScript; durable display receipts. The existing renderer and operation journals are reused.
 
-Executed checks: 35 gateway tests, 33 Swift core tests, 16 iOS XCTest, Debug/Release builds and built-plist checks passed. Real WebKit tests execute inline interaction and verify isolation. Current manual native QA reached request/choice/form; expanded gallery flow is unverified because input automation was unreliable. No live OpenAI request or real external action verified.
+**Latest slice:** strict source A2UI v0.9 form normalization. The source Card/Column/Text/TextField/Button trip form becomes the existing native askForm, initialized with Paris. Edited context (including empty/whitespace strings) emits source userAction metadata through the same authenticated, revision-checked, once-only tool-result path. Source drafts are revision scoped and survive disk reopen. Unknown source layouts/features fail explicitly; no additional runtime dependency.
 
-Still required: A2UI bindings/actions and dynamic grants, rich pages, tasks/routines/bots/skills/memory, channels/media, integrations/computer workflows, production identity/deployment/admin and streaming. A key gates live verification, not these implementation tasks.
+Executed checks: **42 gateway tests,37 Swift core tests,17 iOS XCTest**, Debug/Release and plist checks passed. Fresh review's Unicode-boundary and event-timestamp findings were fixed with regressions. Reference renderer1.77.0 tarball integrity matched the committed lock. No live OpenAI request or real external action verified. Expanded manual source-form/gallery flows remain unverified.
 
-**Next:** audit OpenDuet's pinned A2UI catalog and implement the first native binding/action subset through the existing validated boundary, with regression and re-entry tests.
+Still required: remaining A2UI bindings/actions/catalog and dynamic grants, rich pages, tasks/routines/bots/skills/memory, channels/media, integrations/computer workflows, production identity/deployment/admin and streaming. A key gates live-provider acceptance, not this implementation work.
 
-Details: [handoff](agents/SPIKE_HANDOFF.md), [evidence](agents/TEST_EVIDENCE.md), [full parity inventory](ios/FEATURE_PARITY.md), [protocol](agents/NATIVE_VISUAL_PARITY.md).
+**Next:** extend the source-backed binding adapter to boolean/selection controls through the same native state and action boundary, with source conformance and re-entry tests.
+
+Details: [handoff](agents/SPIKE_HANDOFF.md), [evidence](agents/TEST_EVIDENCE.md), [full parity inventory](ios/FEATURE_PARITY.md), [protocol](agents/NATIVE_VISUAL_PARITY.md), [latest design](superpowers/specs/2026-10-28-a2ui-form-adapter-design.md).

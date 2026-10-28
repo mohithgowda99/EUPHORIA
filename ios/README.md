@@ -1,16 +1,14 @@
-# Euphoria iOS: native M0/M1 foundation
+# Euphoria native iOS
 
-This folder contains a **native SwiftUI** iOS application target named `Euphoria`. It does not import React Native, Expo, WebKit or an agent SDK, and it does not alter OpenBot. The web app under `openbot/app/` remains the behavioral reference.
+Native SwiftUI application target `Euphoria`, iOS27. Standard controls remain native; generated artifacts alone use isolated WebKit. OpenDuet under `openbot/app/` is the behavioral reference.
 
-## Implemented today
+## Current implementation
 
-- An ordinary SwiftUI `NavigationStack`/system `Form` with a developer-facing deployment diagnostic.
-- HTTPS-only OpenBot origin validation, with loopback HTTP allowed in Debug only.
-- A real public `GET /api/capabilities` request against the person's existing server and typed decoding of the server's capability flags.
-- Cancellation when navigating away or editing the origin.
-- XCTest cases for origin validation and capability decoding.
+Shared native decisions/forms/checklists and typed gallery; revision-scoped persisted notes and source-form drafts; owner-scoped gateway sessions/messages/history/cancel; isolated offline HTML/JavaScript artifacts. The first source A2UI adapter reproduces the source trip-form binding/action test through the existing native form and journal. It is not a general A2UI renderer.
 
-**Not implemented:** native Better Auth sign-in/session transfer, AG-UI /info and stream, frontend tool registration, approvals, live channel events, history, and any production feature screen. No mock conversations or server tool behavior is present. This project is a build-oriented foundation, **not** an M1 integration proof. No tests have been executed against a live OpenBot server.
+Debug entries include gateway connection proof, source-derived controls, gallery/artifact fixtures and an A2UI form fixture. Fixture controls queue local intentions; they perform no inference or real external action. Gateway launch setup is in [gateway/README](../gateway/README.md).
+
+Current verification and remaining scope: [NOW](../docs/NOW.md), [evidence](../docs/agents/TEST_EVIDENCE.md), [full parity ledger](../docs/ios/FEATURE_PARITY.md). Production login/deployment, full A2UI/catalog/page/workflow/integration/computer parity and live OpenAI execution remain pending.
 
 ## Build on the MacBook Air
 

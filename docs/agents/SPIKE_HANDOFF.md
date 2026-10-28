@@ -1,6 +1,6 @@
 # EUPHORIA phase-one handoff
 
-Updated 2026-10-28. Branch `feature/agents-native-visual-contract-spike`, implementation `3b8941b`, continuation based on `ccc37ca`. Main and OpenBot/CopilotKit are untouched.
+Updated 2026-10-28. Branch `feature/agents-native-visual-contract-spike`, latest implementation `c126000`, following `3b8941b`. Main and OpenBot/CopilotKit are untouched.
 
 Phase one ports OpenDuet functionality to iOS with OpenAI Agents API behind an authenticated gateway. Phase two applies ETERNAL's visual experience. **Phase one remains unfinished.** User approved isolated generated HTML artifacts on 2026-10-28; the shell and standard interface remain native SwiftUI.
 
@@ -13,14 +13,16 @@ Phase one ports OpenDuet functionality to iOS with OpenAI Agents API behind an a
 - Read-only results use a durable display acknowledgement rather than inventing a human question. Rejected unreceived receipts can be acknowledged again; widgets remain usable after acceptance.
 - Generated HTML/JS uses unique isolated origins and ephemeral WKWebView stores. CSP blocks external network, frames, workers, forms and objects. No native bridge or credentials; navigation, popup, file and device permissions are denied. WebRTC/WebTransport constructors are removed before artifact code. This intentionally does not grant arbitrary online artifact access.
 
+- First source A2UI v0.9 form adapter: strict Card/Column/Text/TextField/Button shape normalized into existing askForm. Flat string defaults/bindings, source event context and timestamp, revision-scoped drafts, empty/whitespace preservation and shared Unicode limits are verified. No full catalog/interpreter or new runtime dependency.
+
 ## Verification
 
 Current counts and commands are in `TEST_EVIDENCE.md`. Real WebKit execution checks inline interaction, blocked fetch, bridge absence and origin/state separation. On-disk SwiftData tests verify note and conversation recovery. Manual native QA reached a request and accepted choice; the expanded full gallery flow was not manually verified because input automation was unreliable. Do not substitute unit tests for that missing trace.
 
 ## Required remaining implementation
 
-Full A2UI data bindings/actions and dynamic per-Bot grants; rich page blocks; tasks/routines/responsibilities/notifications; bot/skill and memory management; channel/group/attachment/voice behavior; integration grants/OAuth/credentials; computer/browser/files/commands and server-owned approvals; production identity/deployment/admin; streaming and authoritative reconciliation of genuinely uncertain provider effects. See the complete source inventory in `../ios/FEATURE_PARITY.md` and capability map in `NATIVE_VISUAL_PARITY.md`.
+Remaining A2UI data bindings/actions and dynamic per-Bot grants; rich page blocks; tasks/routines/responsibilities/notifications; bot/skill and memory management; channel/group/attachment/voice behavior; integration grants/OAuth/credentials; computer/browser/files/commands and server-owned approvals; production identity/deployment/admin; streaming and authoritative reconciliation of genuinely uncertain provider effects. See the complete source inventory in `../ios/FEATURE_PARITY.md` and capability map in `NATIVE_VISUAL_PARITY.md`.
 
 These are code and service gaps, not all API-key blockers. A key is needed only for real-provider acceptance. No real OpenAI request or external action has been verified. Development bearer identity and single-process SQLite are not production authentication or distributed execution.
 
-Next: implement the source A2UI binding/action subset through the existing validated surface boundary, keeping provider/session recovery intact. Do not restart or adopt another runtime merely to expand the catalog.
+Next: extend the source-backed adapter to boolean/selection controls through the same state/action boundary, keeping provider/session recovery intact. Do not restart or adopt another runtime merely to expand the catalog.

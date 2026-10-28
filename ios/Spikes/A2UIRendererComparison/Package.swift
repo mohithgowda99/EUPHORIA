@@ -9,7 +9,7 @@ let package = Package(
     dependencies: [
         .package(path: "../../VisualRuntimeCore"),
         .package(url: "https://github.com/BBC6BAE9/a2ui-swift.git",
-                 revision: "4af5dda15dd050e091a80026b940cd41f8d5b93c")
+                 revision: "16476ba2cb3fcb4c4bcb141dfa4c2804adbdedb0")
     ],
     targets: [
         .target(name: "A2UIRendererComparison", dependencies: [

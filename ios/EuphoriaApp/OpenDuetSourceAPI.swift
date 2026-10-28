@@ -74,7 +74,7 @@ enum SourceAPIError: LocalizedError {
         case .unauthenticated: return "Sign in to the original OpenDuet account before managing Bots."
         case .invalidInput: return "Check the Bot name, title and instructions."
         case .invalidResponse: return "The OpenDuet service returned an unexpected response."
-        case .rejected(let code): return "OpenDuet rejected this request (HTTP \\(code))."
+        case .rejected(let code): return "OpenDuet rejected this request (HTTP \(code))."
         case .unavailable: return "The OpenDuet service is unreachable."
         }
     }
@@ -89,13 +89,13 @@ enum SourceSessionCookie {
               let payload = URLComponents(url: callback, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "cookie" })?.value,
               payload.count <= 16_384,
-              !payload.contains("\\r"), !payload.contains("\\n")
+              !payload.contains("\r"), !payload.contains("\n")
         else { throw SourceAPIError.unauthenticated }
 
         // Better Auth's source expo() plugin puts the original Set-Cookie
         // header in the native callback. Do not persist attributes, unrelated
         // cookie names or any third-party cookies.
-        let pattern = #"(?:^|,)\\s*((?:__Secure-)?better-auth\\.session_token)=([^;,\\s]+)"#
+        let pattern = #"(?:^|,)\s*((?:__Secure-)?better-auth\.session_token)=([^;,\s]+)"#
         let regex = try NSRegularExpression(pattern: pattern)
         let range = NSRange(payload.startIndex..<payload.endIndex, in: payload)
         guard let match = regex.firstMatch(in: payload, range: range),
@@ -179,7 +179,7 @@ struct OpenDuetSourceAPI: Sendable {
     func bots() async throws -> [SourceBot] {
         let response: SourceBotsResponse = try await get("api/agents")
         guard response.agents.count <= 1000,
-              Set(response.agents.map(\\.id)).count == response.agents.count
+              Set(response.agents.map(\.id)).count == response.agents.count
         else { throw SourceAPIError.invalidResponse }
         return response.agents
     }

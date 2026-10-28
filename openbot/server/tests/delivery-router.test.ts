@@ -191,6 +191,36 @@ test("queue invokes selected Bot and original conversation, emits durable async 
   });
   expect(f.statuses.at(-1)).toMatchObject({ state: "sent" });
 });
+test("managed asynchronous 202 remains accepted, not a completed source reply", async () => {
+  const f = fixture();
+  const router = createDeliveryRouter({
+    store: f.store,
+    queue: f.queue,
+    owner: "worker",
+    authoriseScope: async () => true,
+    runTurn: async () => ({ replyText: "", pending: true }),
+    providers: {
+      slack: {
+        send: async () => {
+          throw Error("Provider must not be notified before a verified completed turn");
+        },
+      },
+    },
+  });
+  await router.sweep("delivery.inbound");
+  expect(f.statuses).toContainEqual({ state: "accepted", error: undefined });
+  expect(f.statuses.some((entry) =>
+    typeof entry === "object" && entry !== null && "state" in entry &&
+    entry.state === "sent")).toBe(false);
+  expect(f.offered).toHaveLength(0);
+  const reply = await router.converse({
+    transport: "slack", realm: "T", identity: "U",
+    externalId: "new-event", text: "Please research this", signal: new AbortController().signal,
+  });
+  expect(reply.kind).toBe("waiting");
+  expect(f.statuses.at(-1)).toMatchObject({ state: "accepted" });
+});
+
 test("revoked source ownership and lost lease cannot execute turns or sends", async () => {
   const f = fixture();
   f.revoke();

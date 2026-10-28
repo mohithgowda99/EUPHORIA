@@ -157,6 +157,7 @@ test('initial stream rejects foreign root events rather than fabricating a Bot c
       turn:{id:'old_turn',session_id:'session_foreign',subagent_id:null}};
    })(),
   }),sendMessage:async()=>{}};
- await assert.rejects(submitManagedSourceInput(input(storage,provider,'inbox_1')),/source-bound session/);
+ await assert.rejects(submitManagedSourceInput(input(storage,provider,'inbox_1')),
+  error=>error.name==='ManagedSourceOutcomeUnknown'&&error.outcomeUnknown===true);
  assert.equal(closed,1);
 });

@@ -2,8 +2,9 @@ import SwiftUI
 
 /// Phase-one navigation has Chat as home, not a list of provider sessions
 /// masquerading as OpenDuet Tasks. All ordinary screens remain native SwiftUI.
-/// These integration screens still require a configured development gateway;
-/// production OpenDuet sign-in and source Bot binding are not yet implemented.
+/// Source-backed screens require a reachable HTTPS OpenDuet deployment and
+/// its existing Better Auth sign-in. Their provider execution still needs the
+/// CopilotKit-to-Agents API adapter and actual iOS acceptance validation.
 struct ContentView: View {
     var body: some View {
         TabView {

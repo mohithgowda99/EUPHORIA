@@ -198,7 +198,7 @@ struct SourceConversationDetailView: View {
                             }.id(message.id)
                             ForEach(completedVisuals.filter { $0.afterMessageID == message.id }, id: \.surface.surfaceID) { saved in
                                 VStack(alignment: .leading, spacing: 12) {
-                                    VisualNodesView(state: restoredVisual(saved.surface), onAction: { _, _, _ in }).disabled(true)
+                                    SourceCompletedVisualReceipt(saved: saved, state: restoredVisual(saved.surface))
                                 }.padding(16)
                                     .background(botColor, in: RoundedRectangle(cornerRadius: 20))
                             }
@@ -397,6 +397,42 @@ struct SourceConversationDetailView: View {
     }
 }
 
+
+/// A finished decision is a receipt, not another disabled set of buttons.
+/// Read-only result/gallery nodes continue to use the original native renderer.
+private struct SourceCompletedVisualReceipt: View {
+    let saved: SourceCompletedVisual
+    let state: VisualState
+
+    var body: some View {
+        ForEach(saved.surface.nodes) { node in
+            switch node.kind {
+            case .askChoice:
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(node.title).font(.subheadline.weight(.semibold))
+                    if let selectedLabel = saved.selectedLabel {
+                        Label("Selected: " + selectedLabel, systemImage: "checkmark.circle.fill")
+                    } else {
+                        Label("Choice closed", systemImage: "clock")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            case .askForm, .askApproval, .sourceComposition:
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(node.title).font(.subheadline.weight(.semibold))
+                    Label("Interaction closed", systemImage: "checkmark.circle")
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            default:
+                VisualNodesView(state: state, onAction: { _, _, _ in })
+                    .section(for: node)
+                    .disabled(true)
+            }
+        }
+    }
+}
 
 /// Native drawing translated from OpenDuet mic-orb-draw.ts: Ocean palette,
 /// four drifting masses, spherical eye projection and five-slot microphone pads.

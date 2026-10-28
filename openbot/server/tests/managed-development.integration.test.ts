@@ -2,6 +2,8 @@ import {test,expect} from 'bun:test';
 import {createDatabase} from '../src/db/client';
 import {createManagedDevelopment} from '../src/agents/managed-development';
 import {DEV_ACTOR} from '../src/auth/dev-actor';
+import {and,eq} from 'drizzle-orm';
+import {workItems} from '../src/db/schema/work';
 const address=process.env.TEST_DATABASE_URL;
 test.skipIf(!address)('original stores and queue execute managed delivery and restore actual history without Intelligence',async()=>{
  const database=createDatabase(address!);let creates=0,offline=false;
@@ -81,6 +83,9 @@ for(const fails of [false,true])test.skipIf(!address)('native decision uses orig
  await source.tick();expect(results).toBe(1);
  const restored=await createManagedDevelopment({database,provider,token,model:'test-only'});
  await restored.tick();expect(results).toBe(1);
+ // Simulate queue retention for an accepted decision: the completed source
+ // projection, not a temporary work item, must retain the chosen label.
+ if(!fails)await database.delete(workItems).where(and(eq(workItems.kind,'managed.native-response'),eq(workItems.key,callID)));
  const reopened=await restored.app.request(path+'/visual?agentId='+bot.id,{headers});expect(reopened.status).toBe(200);
  const saved=await reopened.json();
  if(fails)expect(saved.surface.surfaceID).toBe(callID);

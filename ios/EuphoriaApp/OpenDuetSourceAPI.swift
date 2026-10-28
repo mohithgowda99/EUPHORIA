@@ -436,6 +436,33 @@ struct SourceBotInput: Encodable, Sendable {
     }
 }
 
+/// Source editing preserves the existing Bot's visibility and endpoint.
+/// Omitting its endpoint from source parseAgentInput can silently convert an
+/// existing remote Bot to a built-in one, while forcing "private" would
+/// unintentionally unpublish an authorized public Bot.
+struct SourceBotChange: Encodable, Sendable {
+    let name: String
+    let title: String
+    let roleDescription: String
+    let visibility: String
+    let endpoint: String?
+
+    init(previous: SourceBot, name: String, title: String, instructions: String) throws {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (1...80).contains(n.count), (1...120).contains(t.count),
+              (1...1000).contains(body.count),
+              ["private", "public"].contains(previous.visibility)
+        else { throw SourceAPIError.invalidInput }
+        self.name = n
+        self.title = t
+        self.roleDescription = body
+        self.visibility = previous.visibility
+        self.endpoint = previous.endpoint
+    }
+}
+
 enum SourceAPIError: LocalizedError {
     case unauthenticated
     case invalidInput
@@ -590,7 +617,7 @@ struct OpenDuetSourceAPI: Sendable {
         let response: SourceBotResponse = try await request("api/agents", method: "POST", body: input)
         return response.agent
     }
-    func updateBot(id: String, input: SourceBotInput) async throws -> SourceBot {
+    func updateBot(id: String, input: SourceBotChange) async throws -> SourceBot {
         let response: SourceBotResponse = try await request("api/agents/" + checkedID(id), method: "PATCH", body: input)
         guard response.agent.id == id else { throw SourceAPIError.invalidResponse }
         return response.agent

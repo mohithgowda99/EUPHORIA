@@ -228,6 +228,29 @@ struct SourceRoutineRunsResponse: Decodable, Sendable { let runs: [SourceRoutine
 private struct SourceRoutineEnabledInput: Encodable { let enabled: Bool }
 private struct SourceRoutineEnabledResult: Decodable { let enabled: Bool }
 
+struct SourceSuggestion: Decodable, Identifiable, Sendable {
+    let id: String
+    let agentId: String
+    let title: String
+    let detail: String
+    let status: String
+    let sourceApp: String?
+    let sourceLink: String?
+}
+struct SourceSuggestionsResponse: Decodable, Sendable {
+    let suggestions: [SourceSuggestion]
+}
+struct SourceSuggestionResponse: Decodable, Sendable {
+    let suggestion: SourceSuggestion
+}
+struct SourceOpenedSuggestionTask: Decodable, Sendable {
+    let id: String
+}
+struct SourceStartedSuggestionResponse: Decodable, Sendable {
+    let suggestion: SourceSuggestion
+    let task: SourceOpenedSuggestionTask
+}
+
 struct SourceTask: Decodable, Identifiable, Sendable {
     let id: String
     let botId: String
@@ -666,6 +689,31 @@ struct OpenDuetSourceAPI: Sendable {
             "api/routines/" + checkedID(id) + "/enabled", method: "PUT",
             body: SourceRoutineEnabledInput(enabled: false))
         guard response.enabled == false else { throw SourceAPIError.invalidResponse }
+    }
+
+    /// Up Next cards are original ProactiveStore suggestions, not tasks or
+    /// provider sessions. Only the source engine may start or dismiss them.
+    func sourceSuggestions() async throws -> [SourceSuggestion] {
+        let response: SourceSuggestionsResponse = try await get("api/proactive/suggestions")
+        guard response.suggestions.count <= 2000,
+              Set(response.suggestions.map(\.id)).count == response.suggestions.count,
+              response.suggestions.allSatisfy { ["open","started","dismissed"].contains($0.status) }
+        else { throw SourceAPIError.invalidResponse }
+        return response.suggestions
+    }
+    func startSourceSuggestion(id: String) async throws -> SourceStartedSuggestionResponse {
+        let response: SourceStartedSuggestionResponse = try await request(
+            "api/proactive/suggestions/" + checkedID(id) + "/start", method: "POST")
+        guard response.suggestion.id == id, !response.task.id.isEmpty else {
+            throw SourceAPIError.invalidResponse
+        }
+        return response
+    }
+    func dismissSourceSuggestion(id: String) async throws -> SourceSuggestion {
+        let response: SourceSuggestionResponse = try await request(
+            "api/proactive/suggestions/" + checkedID(id) + "/dismiss", method: "POST")
+        guard response.suggestion.id == id else { throw SourceAPIError.invalidResponse }
+        return response.suggestion
     }
 
     /// This endpoint uses the ORIGINAL OpenDuet TaskStore/TaskThreads.

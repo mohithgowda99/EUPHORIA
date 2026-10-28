@@ -39,6 +39,38 @@ struct SourceUser: Decodable, Sendable {
     let email: String
     let name: String?
 }
+struct SourceApprovalAction: Decodable, Sendable {
+    let botId: String?
+    let toolRef: String?
+    let effect: String?
+    let scope: String?
+}
+struct SourceApproval: Decodable, Identifiable, Sendable {
+    let id: String
+    let status: String
+    let botId: String?
+    let toolRef: String?
+    let effect: String?
+    let scope: String?
+    let action: SourceApprovalAction?
+}
+struct SourcePersonQuestion: Decodable, Identifiable, Sendable {
+    let id: String
+    let question: String
+    let why: String?
+    let botId: String
+    let channelId: String?
+}
+struct SourceApprovalInbox: Decodable, Sendable {
+    let requests: [SourceApproval]
+    let questions: [SourcePersonQuestion]?
+}
+private struct SourceQuestionResponse: Encodable { let response: String }
+private struct SourceApprovalDecisionInput: Encodable { let decision: String }
+struct SourceApprovalDecisionResult: Decodable, Sendable {
+    let id: String
+    let status: String
+}
 struct SourceMemory: Decodable, Identifiable, Sendable {
     let id: String
     let content: String
@@ -241,6 +273,26 @@ struct OpenDuetSourceAPI: Sendable {
         return response.agent
     }
 
+    /// Source ApprovalService owns every decision and subsequent tool effect.
+    /// This transport deliberately never implements approval policy or execution.
+    func approvalInbox() async throws -> SourceApprovalInbox {
+        try await get("api/approvals")
+    }
+    func refuseApproval(id: String) async throws -> SourceApprovalDecisionResult {
+        let response: SourceApprovalDecisionResult = try await request(
+            "api/approvals/" + checkedID(id) + "/decision", method: "POST",
+            body: SourceApprovalDecisionInput(decision: "deny"))
+        guard response.id == id else { throw SourceAPIError.invalidResponse }
+        return response
+    }
+    func answerQuestion(id: String, response: String) async throws {
+        let safe = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (1...6000).contains(safe.count) else { throw SourceAPIError.invalidInput }
+        let _: SourceQuestionAnswerReceipt = try await request(
+            "api/approvals/questions/" + checkedID(id) + "/respond", method: "POST",
+            body: SourceQuestionResponse(response: safe))
+    }
+
     /// User-editable memory remains in original OpenDuet MemoryStore, not an
     /// Agents session's context. Every mutation is authorized by requireUser.
     func memories() async throws -> [SourceMemory] {
@@ -359,6 +411,13 @@ private struct SourceSocialInput: Encodable {
     let callbackURL: String
 }
 private struct SourceVoidResponse: Decodable {}
+private struct SourceQuestionAnswerReceipt: Decodable {
+    // Source answerQuestion returns the original service's queued outcome.
+    // Accept a JSON object, but never infer completion from HTTP acceptance.
+    let id: String?
+    let status: String?
+}
+
 private struct AnyEncodableSource: Encodable {
     let encodeValue: (Encoder) throws -> Void
     init(_ value: any Encodable) { encodeValue = value.encode }

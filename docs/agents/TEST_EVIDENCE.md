@@ -1,5 +1,9 @@
 # Current verification evidence — 2026-10-28
 
+## Revision feedback —8888428
+
+124 gateway tests pass offline. Exact success/refusal result is present in SQLite before provider boundary and survives reopen; successful graph metadata drives next authoritative partial update. Invalid initial partial calls receive creation guidance; mutated refusal arguments cannot receive a tool error. Namespaced provider-only metadata preserves exact userAction and legacy outputs. Terra/medium review2 important findings fixed RED→GREEN. No paid calls, native edits or fresh native/Swift suite claim. Final log:/private/tmp/euphoria-feedback-final.log. Full provider/native graph acceptance and broader service/cloud objective stay open.
+
 ## Backend-only graph milestone —7c9d765
 
 119 gateway/71 unchanged Swift core tests pass. Actual HTTP/disk SQLite and real AgentsClient serialization against offline transport cover graph admission, authoritative revisions, partial updates, ownership, exact source context, cancellation, restart/deduplication, safe certainty, unknown-effect blocking, malformed successful provider replies and bounded fingerprinting. Temporary Swift executable decoded versioned fixture, edited shared text/boolean, generated exact native action and restored one pending action. No ios implementation edits or new native executor/build run. Prior25 iOS/Debug/Release evidence below is historical. No paid calls or real-provider graph acceptance.

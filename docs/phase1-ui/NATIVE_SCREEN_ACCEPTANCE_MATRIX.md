@@ -1,10 +1,12 @@
 # EUPHORIA / Agent B: full OpenDuet product UI acceptance register
 
+**Source-of-truth and 79-route behavior ledger:** [OPENDUET_SOURCE_FIDELITY_LEDGER.md](OPENDUET_SOURCE_FIDELITY_LEDGER.md). The goal is **OpenDuet as-is on iPhone**, not a redesign. Source behavior, backend effects, failures and restoration are separately graded. See the ledger's corrected redirects and overlays, rather than treating every legacy route as an independent screen.
+
 Canonical reference: `docs/ios/FEATURE_PARITY.md`, 79 `.tsx` route modules under `openbot/app/src/routes` including layout/index routes. This is an acceptance map, **not** a completed native port. The native code must reuse existing gateway-backed Tasks/Conversation/SwiftData models and wait for stable API contracts for missing services. Statuses: *existing partial*, *fixture only*, *not implemented*, *live verified*. A generic mock screen is not parity.
 
 | Source routes / components | Required native flows and interaction states | Current evidence; gaps | Agent A contracts |
 |---|---|---|---|
-| Home `/index`, sidebar, activity, inbox | Native navigation, global selection, unread/busy, refresh, empty/loading/denied/failed, deep links | Existing partial shell and WorkList; full state/navigation unverified | list/work summary, typed activity/unread streams |
+| Chat `/` and source app shell, activity, legacy inbox redirect | `ChatScreen` as the person's ongoing bot conversation, original AppShell navigation, read/busy/first-message/error, overlays and source `/inbox`→`/tasks` redirect | Existing partial shell/conversation, original mobile interaction parity unverified; **do not substitute a dashboard** | conversation/channel/agent ownership and events, typed activity/unread streams |
 | Bot direct conversation, channel transcript | Send, stream, queued turns, tool/HITL display, stop, historical items and live recovery | Existing partial GatewaySession and conversation history, one prior live choice. Full parity open | canonical session events, tool/result IDs and pagination |
 | Tasks `/tasks`, `/tasks.$taskId`, questions, reports | Browse/resume, question responses, status/failed/denied/interrupted/report | Existing Tasks browser/pagination agent-owned, do not recreate storage | Tasks list/detail/status/questions/receipt schemas |
 | Bots `/bots`, `bots.$agentId.*`, team Bots | Create/edit/profile, role grants, skills, reach, handoff, sharing and revocation | Not implemented as native complete workflow | bot schema, owner/team permissions, publish/change receipts |

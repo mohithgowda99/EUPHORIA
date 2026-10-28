@@ -60,6 +60,13 @@ export class AgentsClient {
    * A cursor is supplied verbatim from OpenAI's last_id, not inferred from
    * the last data element. The caller must read all pages before settling.
    */
+  async retrieveTurn(sessionID,turnID,{signal}={}) {
+    const turn=await this.#request('GET','/'+identifier(sessionID)+'/turns/'+identifier(turnID),
+      undefined,undefined,signal);
+    if(turn?.id!==turnID||turn?.session_id!==sessionID)
+      throw Error('Agents root turn identity mismatch');
+    return turn;
+  }
   async listTurnItems(sessionID,turnID,{after,limit=100,order='asc',signal}={}) {
     if(!Number.isInteger(limit)||limit<1||limit>100||!['asc','desc'].includes(order))
       throw Error('Invalid turn items page');

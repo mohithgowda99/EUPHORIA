@@ -23,7 +23,7 @@ function links(){
   },
   async reserve(given,creationKey){
    assert.deepEqual(given,scope);
-   if(session)return {create:false,providerSessionId:session};
+   if(session)return {create:false,providerSessionId:session,creationKey:key};
    if(key)throw Error('uncertain; no second create');
    key=creationKey;
    return {create:true,providerSessionId:null};
@@ -75,6 +75,22 @@ test('provider success is only acceptance: source cannot fabricate reply or comp
  const outcome=await submitManagedSourceInput(input(storage,provider));
  assert.deepEqual(Object.keys(outcome).sort(),['phase','sessionID']);
  assert.equal(outcome.phase,'accepted');
+});
+
+test('crash between original session binding and first Inbox receipt cannot replay initial input',async()=>{
+ const storage=links();let creates=0,followups=0;
+ const provider={createSession:async()=>{creates++;return {id:'session_created'};},
+  sendMessage:async()=>{followups++;}};
+ // Mimic the link completing with its immutable initial request key,
+ // while the process dies before the Inbox receipt is committed.
+ const reserved=await storage.reserve(scope,'source_create_run_initial');
+ assert.equal(reserved.create,true);
+ await storage.bind(scope,'source_create_run_initial','session_created');
+ const outcome=await submitManagedSourceInput(input(storage,provider,'run_initial'));
+ assert.deepEqual(outcome,{sessionID:'session_created',phase:'accepted'});
+ assert.equal(creates,0);
+ assert.equal(followups,0);
+ assert.equal((await storage.turns.read('run_initial')).providerSessionId,'session_created');
 });
 
 test('worker replay of original session creation never becomes a new follow-up input',async()=>{

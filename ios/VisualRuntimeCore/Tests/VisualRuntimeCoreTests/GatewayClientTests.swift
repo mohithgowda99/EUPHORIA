@@ -138,6 +138,43 @@ final class GatewayClientTests: XCTestCase, @unchecked Sendable {
             XCTAssertThrowsError(try JSONDecoder().decode(GatewayTaskList.self, from: Data(bad.utf8)))
         }
     }
+    func testTaskCreateUsesServerOwnedIdentityAndPreservesStableSubmissionKey() async throws {
+        let body = #"{"task":{"id":"task_actual","title":"Plan visit","instruction":"Prepare visit","sessionID":"session_actual","status":"working","resolvedAt":null,"createdAt":"2026-10-28T00:00:00Z","updatedAt":"2026-10-28T00:00:00Z","deliveryPhase":"accepted","pendingNodeIDs":[],"failure":null}}"#
+        let box = RequestBox()
+        GatewayTestProtocol.box.set { req in box.record(req); return (201, Data(body.utf8)) }
+        let id = "request_stable"
+        let first = try await client().startTask(title: "Plan visit", instruction: "Prepare visit", requestID: id)
+        XCTAssertEqual(first.task.id, "task_actual")
+        XCTAssertNotEqual(first.task.id, first.task.sessionID)
+        let req = try XCTUnwrap(box.last)
+        XCTAssertEqual(req.url?.path, "/v1/tasks")
+        XCTAssertEqual(req.httpMethod, "POST")
+        XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer development-token")
+        let posted = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(req.httpBody)) as? [String:String])
+        XCTAssertEqual(posted, ["id":id,"title":"Plan visit","instruction":"Prepare visit"])
+        _ = try await client().startTask(title: "Plan visit", instruction: "Prepare visit", requestID: id)
+        let repeated = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(box.last?.httpBody)) as? [String:String])
+        XCTAssertEqual(posted, repeated, "An explicit recovery reuses the original idempotency key and payload")
+        do { _ = try await client().startTask(title: " ", instruction: "Execute", requestID: "bad"); XCTFail("Empty task sent") }
+        catch { XCTAssertNotNil(error as? GatewayClientError) }
+        do { _ = try await client().startTask(title: "Plan visit", instruction: "Execute", requestID: "../other"); XCTFail("Invalid ID sent") }
+        catch { XCTAssertNotNil(error as? GatewayClientError) }
+    }
+
+    func testHumanTaskReviewUsesOwnedTaskEndpointAndCannotClaimExecution() async throws {
+        let body = #"{"task":{"id":"task_actual","title":"Plan visit","instruction":"Prepare visit","sessionID":"session_actual","status":"resolved","resolvedAt":"2026-10-28T00:00:00Z","createdAt":"2026-10-28T00:00:00Z","updatedAt":"2026-10-28T00:00:00Z","deliveryPhase":"accepted","pendingNodeIDs":[],"failure":null}}"#
+        let box = RequestBox()
+        GatewayTestProtocol.box.set { req in box.record(req); return (200, Data(body.utf8)) }
+        let response = try await client().setTaskResolved(id: "task_actual", resolved: true)
+        XCTAssertEqual(response.task.status, "resolved")
+        XCTAssertEqual(box.last?.url?.path, "/v1/tasks/task_actual/resolve")
+        XCTAssertEqual(String(data: try XCTUnwrap(box.last?.httpBody), encoding: .utf8), "{}")
+        _ = try await client().setTaskResolved(id: "task_actual", resolved: false)
+        XCTAssertEqual(box.last?.url?.path, "/v1/tasks/task_actual/reopen")
+        do { _ = try await client().setTaskResolved(id: "../foreign", resolved: true); XCTFail("Foreign ID accepted") }
+        catch { XCTAssertNotNil(error as? GatewayClientError) }
+    }
+
     private func client() throws -> GatewayClient {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [GatewayTestProtocol.self]

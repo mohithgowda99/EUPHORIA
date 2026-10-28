@@ -39,6 +39,51 @@ struct SourceUser: Decodable, Sendable {
     let email: String
     let name: String?
 }
+struct SourceTask: Decodable, Identifiable, Sendable {
+    let id: String
+    let botId: String
+    let channelId: String
+    let title: String
+    let why: String?
+    let status: String
+    let next: String?
+    let failure: String?
+    let resolvedAt: String?
+    let createdAt: String
+    let updatedAt: String
+}
+struct SourceTasksResponse: Decodable, Sendable { let tasks: [SourceTask] }
+struct SourceTaskResponse: Decodable, Sendable { let task: SourceTask }
+struct SourceTaskReportEnvelope: Decodable, Sendable { let report: SourceTaskReport }
+struct SourceTaskReport: Decodable, Sendable {
+    let taskId: String
+    let entries: [SourceTaskReportEntry]
+    let resources: [SourceTaskResource]
+}
+struct SourceTaskReportEntry: Decodable, Identifiable, Sendable {
+    let kind: String
+    let id: String
+    let text: String?
+    let decision: String?
+    let at: String?
+}
+struct SourceTaskResource: Decodable, Identifiable, Sendable {
+    let kind: String
+    let id: String
+    let title: String?
+    let subject: String?
+    let from: String?
+    let link: String?
+}
+private struct SourceTaskCreateInput: Encodable {
+    let botId: String
+    let instruction: String
+    let title: String
+}
+private struct SourceTaskReplyInput: Encodable {
+    let reply: String
+    let messageId: String
+}
 struct SourceConversation: Decodable, Identifiable, Sendable {
     let id: String
     let name: String
@@ -333,6 +378,53 @@ struct OpenDuetSourceAPI: Sendable {
         let response: SourceBotResponse = try await request(
             "api/agents/" + checkedID(id) + "/duplicate", method: "POST")
         return response.agent
+    }
+
+    /// This endpoint uses the ORIGINAL OpenDuet TaskStore/TaskThreads.
+    /// It must never be confused with gateway /v1/tasks metadata.
+    func sourceTasks() async throws -> [SourceTask] {
+        let response: SourceTasksResponse = try await get("api/openduet/tasks")
+        guard response.tasks.count <= 2000,
+              Set(response.tasks.map(\.id)).count == response.tasks.count,
+              response.tasks.allSatisfy { ["needs_input","working","ready_for_review","failed","resolved"].contains($0.status) }
+        else { throw SourceAPIError.invalidResponse }
+        return response.tasks
+    }
+    func sourceTask(id: String) async throws -> SourceTask {
+        let response: SourceTaskResponse = try await get("api/openduet/tasks/" + checkedID(id))
+        guard response.task.id == id else { throw SourceAPIError.invalidResponse }
+        return response.task
+    }
+    func sourceTaskReport(id: String) async throws -> SourceTaskReport {
+        let report: SourceTaskReportEnvelope = try await get("api/openduet/tasks/" + checkedID(id) + "/report")
+        guard report.report.taskId == id else { throw SourceAPIError.invalidResponse }
+        return report.report
+    }
+    /// The original API does not accept a creation idempotency key. Call once;
+    /// if its response is lost, inspect original tasks instead of repeating POST.
+    func createSourceTask(botID: String, title: String, instruction: String) async throws -> SourceTask {
+        let safeTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let safeInstruction = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (1...160).contains(safeTitle.count), (1...4000).contains(safeInstruction.count)
+        else { throw SourceAPIError.invalidInput }
+        let response: SourceTaskResponse = try await request("api/openduet/tasks", method: "POST",
+            body: SourceTaskCreateInput(botId: checkedID(botID), instruction: safeInstruction, title: safeTitle))
+        return response.task
+    }
+    func sourceTaskReply(id: String, message: String, messageID: String) async throws -> SourceTask {
+        guard UUID(uuidString: messageID) != nil,
+              (1...4000).contains(message.trimmingCharacters(in: .whitespacesAndNewlines).count)
+        else { throw SourceAPIError.invalidInput }
+        let response: SourceTaskResponse = try await request("api/openduet/tasks/" + checkedID(id) + "/reply",
+            method: "POST", body: SourceTaskReplyInput(reply: message, messageId: messageID))
+        guard response.task.id == id else { throw SourceAPIError.invalidResponse }
+        return response.task
+    }
+    func sourceSetTaskResolved(id: String, resolved: Bool) async throws -> SourceTask {
+        let response: SourceTaskResponse = try await request(
+            "api/openduet/tasks/" + checkedID(id) + (resolved ? "/resolve" : "/reopen"), method: "POST")
+        guard response.task.id == id else { throw SourceAPIError.invalidResponse }
+        return response.task
     }
 
     /// The original source channel list and delivery queue are the only

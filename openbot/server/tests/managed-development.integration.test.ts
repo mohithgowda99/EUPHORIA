@@ -63,6 +63,12 @@ for(const fails of [false,true])test.skipIf(!address)('native decision uses orig
  await source.tick();
  const visual=await source.app.request(path+'/visual?agentId='+bot.id,{headers});expect(visual.status).toBe(200);
  const surface=(await visual.json()).surface;expect(surface.nodes[0].title).toBe('Choose a plan');
+ // A second server instance must still expose the exact pending provider call.
+ // This is a restart test, NOT evidence the provider preserves it for hours.
+ const beforeAnswerRestart=await createManagedDevelopment({database,provider,token,model:'test-only'});
+ const restoredPending=await beforeAnswerRestart.app.request(path+'/visual?agentId='+bot.id,{headers});
+ expect(restoredPending.status).toBe(200);
+ expect((await restoredPending.json()).surface.surfaceID).toBe(callID);
  const before=await source.app.request(path+'/history?agentId='+bot.id,{headers});
  const originalHistory=(await before.json()).history.messages;
  expect(originalHistory.some((v:any)=>v.role==='assistant')).toBe(false);

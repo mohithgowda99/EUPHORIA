@@ -274,8 +274,10 @@ export function createDeliveryRouter(deps: {
         kind: extras.approvals.length || result.waiting || result.pending ? "waiting" : "replied",
         binding,
         inboxId: row.id,
-        replyText: result.replyText,
-        ...(result.components?.length ? { components: result.components } : {}),
+        // A pending managed turn is not a verified assistant message, even
+        // if transport already saw partial text or UI components.
+        replyText: result.pending ? "" : result.replyText,
+        ...(result.pending ? {} : result.components?.length ? { components: result.components } : {}),
         extras,
       };
     } catch (error) {

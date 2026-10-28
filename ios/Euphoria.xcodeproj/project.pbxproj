@@ -7,6 +7,8 @@
     objects = {
 
 /* Begin PBXBuildFile section */
+        0000000000000000000000E1 /* OpenDuetSourceAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000E0 /* OpenDuetSourceAPI.swift */; };
+        0000000000000000000000E3 /* SourceBotsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000E2 /* SourceBotsView.swift */; };
         0000000000000000000000D1 /* TaskCreationSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000D0 /* TaskCreationSnapshot.swift */; };
         0000000000000000000000C1 /* NativeTaskAcceptanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C0 /* NativeTaskAcceptanceView.swift */; };
         0000000000000000000000B4 = {isa = PBXBuildFile; fileRef = 0000000000000000000000A4; };
@@ -53,6 +55,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+        0000000000000000000000E0 /* OpenDuetSourceAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenDuetSourceAPI.swift; sourceTree = "<group>"; };
+        0000000000000000000000E2 /* SourceBotsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceBotsView.swift; sourceTree = "<group>"; };
         0000000000000000000000D0 /* TaskCreationSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskCreationSnapshot.swift; sourceTree = "<group>"; };
         0000000000000000000000C0 /* NativeTaskAcceptanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeTaskAcceptanceView.swift; sourceTree = "<group>"; };
         0000000000000000000000A4 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/Fixtures/a2ui-choice-deployment-v09.json"; sourceTree = "<group>"; };
@@ -112,6 +116,8 @@
                 00000000000000000000000F /* ContentView.swift */,
                 0000000000000000000000C0 /* NativeTaskAcceptanceView.swift */,
                 0000000000000000000000D0 /* TaskCreationSnapshot.swift */,
+                0000000000000000000000E0 /* OpenDuetSourceAPI.swift */,
+                0000000000000000000000E2 /* SourceBotsView.swift */,
                 000000000000000000000010 /* OpenBotEndpoint.swift */,
                 000000000000000000000024 /* VisualContract.swift */,
                 000000000000000000000025 /* VisualState.swift */,
@@ -232,6 +238,8 @@
                 000000000000000000000015 /* ContentView.swift in Sources */,
                 0000000000000000000000C1 /* NativeTaskAcceptanceView.swift in Sources */,
                 0000000000000000000000D1 /* TaskCreationSnapshot.swift in Sources */,
+                0000000000000000000000E1 /* OpenDuetSourceAPI.swift in Sources */,
+                0000000000000000000000E3 /* SourceBotsView.swift in Sources */,
                 000000000000000000000016 /* OpenBotEndpoint.swift in Sources */,
                 000000000000000000000030 /* VisualContract.swift in Sources */,
                 000000000000000000000031 /* VisualState.swift in Sources */,

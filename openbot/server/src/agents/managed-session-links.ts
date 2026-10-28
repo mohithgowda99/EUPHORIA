@@ -53,7 +53,7 @@ export function createManagedSessionLinkStore(database: Database) {
      */
     async reserve(scope: ManagedSourceScope, creationKey: string):
       Promise<{ create: true; providerSessionId: null } |
-        { create: false; providerSessionId: string }> {
+        { create: false; providerSessionId: string; creationKey: string }> {
       if (!creationKey || creationKey.length > 256) {
         throw new ManagedSessionIdentityConflict();
       }
@@ -68,7 +68,8 @@ export function createManagedSessionLinkStore(database: Database) {
       const previous = await read(scope);
       if (!previous) throw new ManagedSessionIdentityConflict();
       if (!previous.providerSessionId) throw new UncertainManagedSession();
-      return { create: false, providerSessionId: previous.providerSessionId };
+      return { create: false, providerSessionId: previous.providerSessionId,
+        creationKey: previous.creationKey };
     },
     /**
      * Link only the session created under this exact immutable reservation.

@@ -329,3 +329,69 @@ test('live projection holds a coherent publication through deferred history read
   const frames=parseSSE(res.body)[Symbol.asyncIterator]();const update=JSON.parse((await frames.next()).value.data);
   assert.ok((await http).body.publication>update.snapshot.publication);controller.abort();await frames.return().catch(()=>{});
 });
+
+test('nested source defaults and edited context use existing owned revision journal across reopen',async t=>{
+  const packet=JSON.parse(readFileSync(new URL('./fixtures/a2ui-controls-v09.json',import.meta.url)));
+  for(const c of packet.a2ui[1].updateComponents.components){
+    if(c.value?.path)c.value.path='/trip'+c.value.path;
+    if(c.action)for(const v of Object.values(c.action.event.context))v.path='/trip'+v.path;
+  }
+  packet.a2ui[2].updateDataModel.value={trip:packet.a2ui[2].updateDataModel.value};
+  const {start,request,reopen,provider}=await setup(t,sourceProvider(packet));const snapshot=await start();
+  assert.equal(snapshot.surface.nodes[0].fields[0].initialValue,'Paris');
+  const action={id:'nested-submit',surfaceID:snapshot.surface.surfaceID,expectedRevision:snapshot.surface.revision,nodeID:'form',kind:'submitForm',values:{field_0:'Kyoto',field_1:true,field_2:['push'],field_3:[]}};
+  const route='/v1/surfaces/'+snapshot.surface.surfaceID+'/actions';
+  assert.equal((await request(route,{user:'bob',method:'POST',body:action})).status,404);
+  assert.equal((await request(route,{method:'POST',body:{...action,expectedRevision:0}})).status,409);
+  assert.equal((await request(route,{method:'POST',body:action})).status,202);
+  await reopen();assert.equal((await request(route,{method:'POST',body:action})).status,202);
+  assert.equal(provider.results.length,1);
+  assert.deepEqual(provider.results[0].result.output.userAction.context,{destination:'Kyoto',notify:true,channel:['push'],activities:[]});
+});
+
+function rejectingProvider(){
+  const p=sourceProvider({a2ui:[{version:'v0.9',createSurface:{bad:true}}]});p.refusals=[];
+  p.rejectToolCall=async(id,result,key)=>{p.refusals.push({id,result,key});};return p;
+}
+test('unsupported renders receive durable bounded error feedback without accepted human receipts',async t=>{
+  const p=rejectingProvider(),{request,reopen}=await setup(t,p);
+  await request('/v1/sessions',{method:'POST',body:{id:'create',message:'Synthetic check'}});
+  for(let i=0;i<3;i++){
+    p.current.required_actions[0].call_id='bad_'+i;
+    const r=await request('/v1/sessions/sess_test');assert.equal(r.status,200);assert.equal(r.body.surface,null);
+    assert.deepEqual(r.body.acknowledgedActionIDs,[]);assert.deepEqual(r.body.resolvedNodeIDs,[]);
+  }
+  assert.equal(p.refusals.length,3);await reopen();
+  assert.equal((await request('/v1/sessions/sess_test')).status,200);assert.equal(p.refusals.length,3,'Never replay refusal across restart');
+  p.current.required_actions[0].call_id='bad_3';assert.equal((await request('/v1/sessions/sess_test')).status,502);assert.equal(p.refusals.length,3);
+});
+test('uncertain render refusal remains blocked after restart and cannot become an approval',async t=>{
+  const p=rejectingProvider();let attempts=0;p.rejectToolCall=async()=>{attempts++;throw Error('connection lost');};
+  const {request,reopen}=await setup(t,p);await request('/v1/sessions',{method:'POST',body:{id:'create',message:'Synthetic'}});
+  assert.equal((await request('/v1/sessions/sess_test')).body.phase,'uncertain');await reopen();
+  assert.equal((await request('/v1/sessions/sess_test')).body.phase,'uncertain');assert.equal(attempts,1);
+});
+test('unsupported tool names are never executed or automatically refused as rendering',async t=>{
+  const p=rejectingProvider();p.current.required_actions[0].name='delete_everything';const {request}=await setup(t,p);
+  await request('/v1/sessions',{method:'POST',body:{id:'create',message:'Synthetic'}});
+  assert.equal((await request('/v1/sessions/sess_test')).status,502);assert.equal(p.refusals.length,0);
+});
+
+test('a published decision mutated to malformed input is not refused or resolved',async t=>{
+  const p=sourceProvider();p.refusals=[];p.rejectToolCall=async(...args)=>p.refusals.push(args);
+  const {start,request}=await setup(t,p);await start();
+  p.current.required_actions[0].arguments={a2ui:[]};
+  assert.equal((await request('/v1/sessions/sess_test')).status,502);assert.equal(p.refusals.length,0);
+  const roster=(await request('/v1/sessions')).body.sessions[0];
+  assert.equal(roster.phase,'waiting');assert.deepEqual(roster.resolvedNodeIDs,[]);assert.equal(roster.displayAcknowledged,false);
+});
+test('a refused call cannot mutate into a valid actionable decision under the same identity',async t=>{
+  for(const uncertain of [false,true]){
+    const p=rejectingProvider();if(uncertain)p.rejectToolCall=async()=>{throw Error('lost response');};
+    const {request}=await setup(t,p);await request('/v1/sessions',{method:'POST',body:{id:'create',message:'Synthetic'}});
+    assert.equal((await request('/v1/sessions/sess_test')).status,200);
+    p.current.required_actions[0].arguments=choice();
+    const r=await request('/v1/sessions/sess_test');assert.equal(r.status,502);
+    assert.equal((await request('/v1/sessions')).body.sessions[0].surface,null);
+  }
+});

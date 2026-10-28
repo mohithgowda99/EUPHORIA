@@ -1,0 +1,14 @@
+# Nested source form bindings
+
+Continue approved phase-one parity in the existing feature checkout. Source: pinned @a2ui/web_core0.10.4 v0_9/state/data-model.js and processing/message-processor.js; React wrapper1.77.0. Source root set replaces the model; descendant set replaces that subtree, refuses traversal through a primitive and creates absent object parents.
+
+Implement a bounded object-only absolute-path subset (1–8 safe named segments; existing key syntax and prototype exclusions). Up to128 object entries total, depth8, at most32 entries per object; existing scalar/string-list bounds. No relative paths, numeric indices, escaped keys, null, executable functions or arbitrary new interpreter. Unsupported cases fail before publication. Root must remain an object. JSON pointer escapes/array traversal and repeated shared-control bindings remain explicit parity gaps.
+
+Normalize nested leaves into the same canonical field IDs/defaults/contextFields. No new schema/store/Swift renderer: after normalization source paths have no authority. Existing revision scopes preserve edits, submit validates typed values and owner/journal checks execute once. Root updates replace, not merge; subtree replacement removes omitted descendants. Missing/undefined bindings fail. Traversing primitive/array rejects. Hidden unsupported model values are rejected too.
+
+Alternatives: add a client data-model runtime (unnecessary duplicate state), keep rejecting all nested data (blocks ordinary source forms), or extend gateway normalization (chosen implementation within delegated scope). Limits are implementation bounds, not full A2UI conformance.
+
+Separately create an ignored private gateway/.env with empty OPENAI_API_KEY and gpt-6-luna as explicitly requested. Use Node --env-file; never source shell text or print values. Key setup is not live API verification. Real native journey follows configuration; do not claim full product completion.
+
+## Measured live blocker: unsupported render feedback
+The first actual GPT-6 Luna session created successfully but returned a single malformed createSurface packet mixing native choice and A2UI. Current gateway rejects safely yet leaves the provider waiting forever. Extend the existing action journal with internal refusal phases, persist before sending a provider tool error (`success:false,error` per official function guide), at most3 refusals per turn and500 total journal rows. Do not replay uncertain errors after restart. Refusals never appear as accepted human actions or resolved native nodes. Only the exact pending euphoria_render_surface call qualifies; unknown tools stay unsupported. Give one static valid canonical example; never echo raw invalid content. Existing providers lacking explicit rejectToolCall remain fail-closed. This is an implementation ruling driven by live evidence within the approved native journey, not a second orchestrator.

@@ -19,7 +19,8 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     CREATE TABLE IF NOT EXISTS actions(session_id TEXT,action_id TEXT,payload TEXT,phase TEXT,node_id TEXT,call_id TEXT,
       PRIMARY KEY(session_id,action_id),UNIQUE(session_id,call_id));
     UPDATE creations SET phase='uncertain' WHERE phase='creating';
-    UPDATE actions SET phase='uncertain' WHERE phase='submitting';`);
+    UPDATE actions SET phase='uncertain' WHERE phase='submitting';
+    UPDATE actions SET phase='refusal_uncertain' WHERE phase='refusing';`);
   if(!db.prepare('PRAGMA table_info(sessions)').all().some(c=>c.name==='active')) db.exec('ALTER TABLE sessions ADD COLUMN active INTEGER NOT NULL DEFAULT 0');
   if(!db.prepare('PRAGMA table_info(sessions)').all().some(c=>c.name==='title'))db.exec('ALTER TABLE sessions ADD COLUMN title TEXT');
   if(!db.prepare('PRAGMA table_info(sessions)').all().some(c=>c.name==='publication'))db.exec('ALTER TABLE sessions ADD COLUMN publication INTEGER NOT NULL DEFAULT 0');
@@ -39,7 +40,7 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     const actions=db.prepare('SELECT * FROM actions WHERE session_id=? ORDER BY rowid').all(row.id);
     let phase=row.active?'waiting':row.provider_phase||'unknown';
     if(row.active&&actions.some(a=>a.call_id===row.call_id&&a.phase==='accepted'))phase='accepted';
-    if(actions.some(a=>['uncertain','submitting'].includes(a.phase)))phase='uncertain';
+    if(actions.some(a=>['uncertain','submitting','refusing','refusal_uncertain'].includes(a.phase)))phase='uncertain';
     return {sessionID:row.id,title:row.title,phase,verificationMode,publication,surface:row.surface?JSON.parse(row.surface):null,
       acknowledgedActionIDs:actions.filter(a=>a.phase==='accepted').map(a=>a.action_id),
       rejectedActionIDs:actions.filter(a=>a.phase==='cancelled').map(a=>a.action_id),
@@ -57,8 +58,19 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     if(calls.length>1||calls.some(a=>a.name!=='euphoria_render_surface'))fail(502,'Unsupported pending tool');
     if(calls.length){
       const call=calls[0];identifier(call.turn_id);identifier(call.call_id);
-      const normalized=normalizeRenderInput(call.arguments);
       const fingerprint=stable(call.arguments);
+      if(row.call_id===call.call_id&&row.turn_id===call.turn_id&&row.call_payload!==fingerprint)fail(502,'Provider mutated a published call');
+      const journalCall=db.prepare('SELECT * FROM actions WHERE session_id=? AND call_id=?').get(id,call.call_id);
+      if(journalCall?.phase.startsWith('refus')){
+        const recorded=JSON.parse(journalCall.payload);
+        if(recorded.turnID!==call.turn_id||recorded.fingerprint!==fingerprint)fail(502,'Provider mutated a refused call');
+        return refuseRender(row,call,owner);
+      }
+      let normalized;
+      try{normalized=normalizeRenderInput(call.arguments);}catch(error){
+        if(!(error instanceof GatewayError)||error.status!==502||typeof provider.rejectToolCall!=='function')throw error;
+        return refuseRender(row,call,owner);
+      }
       if(row.call_id===call.call_id&&row.turn_id===call.turn_id){
         if(row.call_payload!==fingerprint)fail(502,'Provider mutated a published call');
       }else{
@@ -72,6 +84,27 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     row=owned(id,owner);
     if(row.surface)db.prepare('INSERT OR IGNORE INTO surface_versions VALUES(?,?,?,?,?)').run(row.id,row.revision,row.surface,row.turn_id,row.call_id);
     return snapshot(row);
+  }
+  async function refuseRender(row,call,owner){
+    const records=db.prepare('SELECT * FROM actions WHERE session_id=?').all(row.id);
+    const previous=records.find(a=>a.call_id===call.call_id);
+    if(previous){
+      if(!['refused','refusing','refusal_uncertain'].includes(previous.phase))fail(502,'Invalid published tool contract');
+    }else{
+      if(records.length>=500||records.filter(a=>a.phase.startsWith('refus')&&JSON.parse(a.payload).turnID===call.turn_id).length>=3)fail(502,'Unsupported render correction limit reached');
+      const actionID='refusal-'+createHash('sha256').update(row.id+'\0'+call.turn_id+'\0'+call.call_id).digest('hex');
+      const payload=stable({turnID:call.turn_id,fingerprint:stable(call.arguments)});
+      db.prepare('INSERT INTO actions VALUES(?,?,?,?,?,?)').run(row.id,actionID,payload,'refusing',null,call.call_id);
+      try{
+        await provider.rejectToolCall(row.id,{turnID:call.turn_id,callID:call.call_id,name:'euphoria_render_surface',
+          error:'Unsupported UI contract; nothing was rendered or approved. Use canonical native JSON, not a mixture of A2UI and native formats. Example: {"schemaVersion":1,"surfaceID":"temporary","revision":0,"nodes":[{"id":"choice","kind":"askChoice","title":"Choose","options":[{"id":"first","label":"First"}]}]}. Use a new tool call with valid arguments.'},actionID);
+        db.prepare("UPDATE actions SET phase='refused' WHERE session_id=? AND action_id=?").run(row.id,actionID);
+      }catch{
+        db.prepare("UPDATE actions SET phase='refusal_uncertain' WHERE session_id=? AND action_id=?").run(row.id,actionID);
+      }
+    }
+    db.prepare("UPDATE sessions SET active=0,provider_phase='in_progress' WHERE id=?").run(row.id);
+    return snapshot(owned(row.id,owner));
   }
   async function body(req){
     let size=0,chunks=[];
@@ -93,7 +126,7 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     let session;
     try{
       session=await provider.createSession({model,input:input.message,
-        instructions:'Use euphoria_render_surface to present native gallery results, isolated htmlArtifact content, or one askChoice/askForm/askApproval decision. Use schemaVersion2 for gallery/htmlArtifact nodes. Do not invent a question when showing a result; display-only surfaces receive a native display receipt. Generated HTML has no external network, file, form submission, media permission or native tool authority. Follow its native JSON schema. Alternatively submit {a2ui:[...]} with v0.9 createSurface/updateComponents/updateDataModel messages using the basic catalog. Supported source shape only: Card root, Column, one Text heading,1-8 bound TextField/CheckBox/ChoicePicker controls, one Button with Text label and event action. Values use distinct flat model paths: strings for TextField, booleans for CheckBox, arrays of supported strings for ChoicePicker. Choice variants mutuallyExclusive or multipleSelection are supported. Filters/chip layouts are not supported. No other components, functions or attributes. A source form returns a userAction event with current bound context. Supply a temporary surfaceID and revision 0; the gateway assigns authoritative identity and revisions. After the human answers, continue the task and use a fresh tool call for another decision. Do not execute external effects or claim an approval executed anything.',
+        instructions:'Use euphoria_render_surface to present native gallery results, isolated htmlArtifact content, or one askChoice/askForm/askApproval decision. Prefer canonical native JSON for decisions. An askChoice call uses {"schemaVersion":1,"surfaceID":"temporary","revision":0,"nodes":[{"id":"choice","kind":"askChoice","title":"Choose","options":[{"id":"first","label":"First"}]}]}. Do not put native node definitions inside createSurface. A2UI is an alternative for supported bound forms only, not native choice decisions. Use schemaVersion2 for gallery/htmlArtifact nodes. Do not invent a question when showing a result; display-only surfaces receive a native display receipt. Generated HTML has no external network, file, form submission, media permission or native tool authority. Follow its native JSON schema. Alternatively submit {a2ui:[...]} with v0.9 createSurface/updateComponents/updateDataModel messages using the basic catalog. Supported source shape only: Card root, Column, one Text heading,1-8 bound TextField/CheckBox/ChoicePicker controls, one Button with Text label and event action. Values use distinct absolute model paths with up to8 safe named segments: strings for TextField, booleans for CheckBox, arrays of supported strings for ChoicePicker. Choice variants mutuallyExclusive or multipleSelection are supported. Filters/chip layouts are not supported. No other components, functions or attributes. A source form returns a userAction event with current bound context. Supply a temporary surfaceID and revision 0; the gateway assigns authoritative identity and revisions. After the human answers, continue the task and use a fresh tool call for another decision. Do not execute external effects or claim an approval executed anything.',
         tools:[{type:'function',name:'euphoria_render_surface',description:'Present a native choice, form or approval and wait for the human response.',parameters:renderInputSchema}]},submissionKey);
       identifier(session.id);
       db.exec('BEGIN IMMEDIATE');

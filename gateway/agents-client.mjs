@@ -87,6 +87,17 @@ export class AgentsClient {
     }]}, submissionKey);
   }
 
+  async rejectToolCall(sessionID,{turnID,callID,name,error},submissionKey){
+    identifier(turnID);identifier(callID);key(submissionKey);requireText(name,'tool name');
+    if(typeof error!=='string'||!error||error.length>2000)throw Error('Invalid tool error');
+    const session=await this.retrieveSession(sessionID);
+    const pending=session.required_actions?.find(a=>a.type==='function_call'&&a.turn_id===turnID&&a.call_id===callID&&a.name===name);
+    if(!pending)throw Error('Tool call is not currently pending');
+    return this.#request('POST','/'+identifier(sessionID)+'/events',{events:[{
+      type:'agent.session.input.tool_result',turn_id:pending.turn_id,call_id:pending.call_id,success:false,error
+    }]},submissionKey);
+  }
+
   async #request(method, path, body, submissionKey,signal) {
     const headers = {'Authorization': 'Bearer ' + this.#apiKey,
       'OpenAI-Beta': 'agents=v1', 'Content-Type': 'application/json'};

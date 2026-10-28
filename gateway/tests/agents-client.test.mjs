@@ -159,3 +159,9 @@ test('event transport refuses non-SSE responses and malformed payloads',async t=
   const stream=await b.client.openEventStream('sess_test');
   await assert.rejects(async()=>{for await(const event of stream.events)void event;},/interrupted/);
 });
+
+test('rejected UI calls return a provider error with exact pending identity and no success output',async t=>{
+  const {client,requests}=await provider(t,(req,res)=>json(res,req.method==='GET'?{id:'sess_test',required_actions:[pending]}:{}));
+  await client.rejectToolCall('sess_test',{turnID:'turn_test',callID:'call_test',name:'askChoice',error:'Unsupported UI contract'},'refuse-1');
+  assert.deepEqual(requests[1].body,{events:[{type:'agent.session.input.tool_result',turn_id:'turn_test',call_id:'call_test',success:false,error:'Unsupported UI contract'}]});
+});

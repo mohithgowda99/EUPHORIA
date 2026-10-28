@@ -1,26 +1,22 @@
 import {fail,validateSurface,surfaceSchema} from './visual-contract.mjs';
+import {SourceFormModel,sourcePath} from './a2ui-model.mjs';
 
 export const basicCatalogID='https://a2ui.org/specification/v0_9/basic_catalog.json';
 const bad=()=>fail(502,'Unsupported A2UI form contract');
 const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const key=x=>typeof x==='string'&&/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(x)&&!['__proto__','prototype','constructor'].includes(x);
 const text=(x,max=2000)=>typeof x==='string'&&x.length<=max;
-const modelValue=x=>text(x)||typeof x==='boolean'||(Array.isArray(x)&&x.length<=20&&new Set(x).size===x.length&&x.every(v=>text(v)));
 function shape(x,required,optional=[]){
   if(!object(x)||required.some(k=>!Object.hasOwn(x,k))||Object.keys(x).some(k=>![...required,...optional].includes(k)))bad();
 }
-function path(x){
-  shape(x,['path']);
-  if(typeof x.path!=='string'||!x.path.startsWith('/')||!key(x.path.slice(1)))bad();
-  return x.path.slice(1);
-}
+const path=sourcePath;
 
 /** Translate only the source-tested form tree. Unknown features fail; nothing is silently flattened. */
 export function normalizeRenderInput(input){
   if(!object(input)||!Object.hasOwn(input,'a2ui'))return validateSurface(input);
   shape(input,['a2ui']);
   if(!Array.isArray(input.a2ui)||input.a2ui.length<3||input.a2ui.length>20)bad();
-  let surfaceID;const components=new Map(),model=Object.create(null);
+  let surfaceID;const components=new Map(),model=new SourceFormModel();
   for(const message of input.a2ui){
     if(!object(message)||message.version!=='v0.9')bad();
     const operation=Object.keys(message).filter(k=>k!=='version');
@@ -41,12 +37,7 @@ export function normalizeRenderInput(input){
         }
       }else if(kind==='updateDataModel'){
         shape(value,['surfaceId','path','value']);
-        if(value.path==='/'){
-          if(!object(value.value)||Object.keys(value.value).length>32)bad();
-          for(const [k,v] of Object.entries(value.value)){if(!key(k)||!modelValue(v))bad();model[k]=v;}
-        }else{
-          const k=path({path:value.path});if(!modelValue(value.value))bad();model[k]=value.value;
-        }
+        model.set(value.path,value.value);
       }else bad();
     }
   }
@@ -72,9 +63,9 @@ export function normalizeRenderInput(input){
     const label=Object.hasOwn(c,'label')?c.label:'';
     if(!text(label,100)||(type!=='ChoicePicker'&&!label))bad();
     const binding=path(c.value);
-    if(bindingFields.has(binding)||!Object.hasOwn(model,binding))bad();
+    if(bindingFields.has(binding))bad();
     const fieldID='field_'+fields.length;bindingFields.set(binding,fieldID);
-    const field={id:fieldID,label,type:'text',required:false,initialValue:model[binding]};
+    const field={id:fieldID,label,type:'text',required:false,initialValue:model.get(binding)};
     if(type==='TextField'){
       if(![undefined,'shortText','longText'].includes(c.variant))bad();
       field.type=c.variant==='longText'?'textarea':'text';

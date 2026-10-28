@@ -13,7 +13,7 @@ struct ContentView: View {
             .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
 
             NavigationStack {
-                NativeTaskAcceptanceView()
+                SourceTasksView()
             }
             .tabItem { Label("Tasks", systemImage: "checklist") }
 

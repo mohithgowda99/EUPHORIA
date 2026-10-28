@@ -78,7 +78,7 @@ test("remote endpoints and tombstones are NOT replaced with a managed agent", as
   for (const entry of [
     { id: "bot-a", name: "Research Bot", type: "remote_ag_ui", endpoint: "https://other.test" },
     { id: "bot-a", name: "Research Bot", type: "unavailable", reason: "deleted" },
-  ] as RegisteredAgent[][][number][]) {
+  ] as RegisteredAgent[]) {
     const input = context({ registered: [entry] });
     await expect(resolveManagedSourceBot(input)).rejects.toBeInstanceOf(ManagedSourceBotRefusal);
   }

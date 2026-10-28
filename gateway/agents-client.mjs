@@ -34,6 +34,54 @@ export class AgentsClient {
       spend_control: {limit: this.#sessionSpendLimitCents}}, submissionKey);
   }
 
+  /** One authoritative initial submission AND its event stream.
+   *
+   * Unlike creating first and opening an SSE subscription afterward, this
+   * stream contains the original session.created and root turn.created
+   * events. A caller must persist original source identity BEFORE invoking
+   * this method and bind both events before reporting an accepted source run.
+   * HTTP interruption is UNCERTAIN; never replay under a new key.
+   */
+  async createSessionStream({model,instructions,input,tools=[],environment,multiAgent},submissionKey,{signal}={}) {
+    requireText(model,'model');requireText(instructions,'instructions');requireText(input,'input');
+    if(!Array.isArray(tools))throw Error('Invalid tools');
+    const agent={model,instructions,tools};
+    const delegation=checkedDelegation(multiAgent);
+    if(delegation)agent.multi_agent=delegation;
+    const body=JSON.stringify({agent,environment:checkedEnvironment(environment),input,
+      stream:true,spend_control:{limit:this.#sessionSpendLimitCents}});
+    const controller=new AbortController();
+    let response;
+    try {
+      response=await this.#fetch('https://api.openai.com/v1/agents/sessions',{
+        method:'POST',redirect:'error',body,
+        headers:{Authorization:'Bearer '+this.#apiKey,'OpenAI-Beta':'agents=v1',
+          'Idempotency-Key':key(submissionKey),'Content-Type':'application/json',Accept:'text/event-stream'},
+        signal:AbortSignal.any([controller.signal,AbortSignal.timeout(60_000),...(signal?[signal]:[])])
+      });
+      if(!response.ok||response.headers.get('content-type')?.split(';')[0].trim().toLowerCase()!=='text/event-stream'||!response.body)
+        throw Error('Invalid session stream');
+    }catch{
+      controller.abort();try{await response?.body?.cancel();}catch{}
+      const error=Error('Agents session submission outcome unknown; reconcile original source before retry');
+      error.outcomeUnknown=true;error.failureStage='submission';throw error;
+    }
+    return {close:()=>controller.abort(),events:(async function*(){
+      try{
+        for await(const frame of parseSSE(response.body)){
+          const event=JSON.parse(frame.data);
+          if(!event||typeof event.type!=='string'||typeof event.event_id!=='string'||
+             event.type==='error')throw Error('Invalid provider event');
+          yield event;
+        }
+        throw Error('Provider stream closed without established result');
+      }catch{
+        const error=Error('Agents initial stream interrupted; reconcile saved provider/source identity');
+        error.outcomeUnknown=true;error.failureStage='stream';throw error;
+      }finally{controller.abort();}
+    })()};
+  }
+
   async retrieveSession(sessionID,{signal}={}) {
     const session = await this.#request('GET', '/' + identifier(sessionID),undefined,undefined,signal);
     if (session?.id !== sessionID) throw new Error('Agents API session identity mismatch');

@@ -59,6 +59,7 @@ final class A2UIExtendedCatalogTests: XCTestCase {
         ],model:.object(["date":.string("2026-10-28")]))
         XCTAssertEqual(try doc.edit(componentID:"root",value:.string("2026-11-05")),"/date")
         XCTAssertThrowsError(try doc.edit(componentID:"root",value:.string("next Tuesday")))
+        XCTAssertThrowsError(try doc.edit(componentID:"root",value:.string("2026-99-99")))
     }
     func testInvalidSourceShapesFailClosed() throws {
         XCTAssertThrowsError(try make([node("root","Image",["url":.string("http://localhost/private")])]))

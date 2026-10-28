@@ -63,7 +63,7 @@ public struct A2UICompositionView: View {
                 }
             case "Divider":
                 if node.properties["axis"]?.text == "vertical" {
-                    Rectangle().fill(.separator).frame(width:1).frame(minHeight:32)
+                    Rectangle().fill(Color.secondary.opacity(0.3)).frame(width:1).frame(minHeight:32)
                 } else { Divider() }
             case "Tabs":
                 let tabs = tabEntries(node)
@@ -73,7 +73,7 @@ public struct A2UICompositionView: View {
                             Text(tabs[index].title).tag(index)
                         }
                     }.pickerStyle(.segmented)
-                    if tabs.indices.contains(selectedTabIndex) { content(for:tabs[selectedTabIndex].child) }
+                    if let chosen=tabs.indices.contains(selectedTabIndex) ? tabs[selectedTabIndex] : tabs.first { content(for:chosen.child) }
                 }
             case "Modal":
                 if let trigger = node.properties["trigger"]?.text,

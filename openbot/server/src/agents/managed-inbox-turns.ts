@@ -64,11 +64,12 @@ export function createManagedInboxTurnStore(database: Database, links: {
       const [inserted] = await database.insert(managedAgentInboxTurns)
         .values({inboxId,providerSessionId:sessionID})
         .onConflictDoNothing().returning();
-      if (inserted) return;
+      if (inserted) return "reserved" as const;
       const [existing] = await database.select().from(managedAgentInboxTurns)
         .where(eq(managedAgentInboxTurns.inboxId,inboxId)).limit(1);
       if (existing?.providerSessionId !== sessionID)
         throw new Error("Original Inbox cannot switch managed sessions");
+      return "existing" as const;
     },
     /** Only the initial root-created event can establish this exact
      * correlation. It must never be supplied from iOS or a tool parameter.

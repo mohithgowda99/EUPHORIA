@@ -113,7 +113,7 @@ public struct A2UIDocument: Codable, Equatable, Sendable {
             guard depth <= 24, let n = byID[id], !stack.contains(id) else { throw A2UIError.invalidTree }
             if visited.contains(id) { throw A2UIError.invalidTree }
             guard Self.safeKey(id) else { throw A2UIError.invalidTree }
-            let allowed: Set<String> = ["Column", "Row", "Card", "Text", "Button", "TextField", "CheckBox", "ChoicePicker"]
+            let allowed: Set<String> = Set(["Column", "Row", "Card", "Text", "Button", "TextField", "CheckBox", "ChoicePicker"]).union(A2UIExtendedCatalog.kinds)
             guard allowed.contains(n.component) else { throw A2UIError.unsupportedComponent(n.component) }
             let keys: Set<String>
             switch n.component {
@@ -124,7 +124,7 @@ public struct A2UIDocument: Codable, Equatable, Sendable {
             case "TextField": keys = ["label","value"]
             case "CheckBox": keys = ["label","value"]
             case "ChoicePicker": keys = ["label","options","value","variant"]
-            default: throw A2UIError.invalidTree
+            default: keys = A2UIExtendedCatalog.properties(for:n.component) ?? []
             }
             guard Set(n.properties.keys).isSubset(of:keys) else { throw A2UIError.invalidTree }
             if n.properties["variant"] != nil && n.properties["variant"]?.text == nil { throw A2UIError.invalidTree }
@@ -157,6 +157,8 @@ public struct A2UIDocument: Codable, Equatable, Sendable {
                     guard value.utf16.count<=2000 && values.insert(visualWireStringKey(value)).inserted && Set(obj.keys) == Set(["label","value"]) else { throw A2UIError.invalidTree }
                 }
                 guard Self.validChoices(try resolve(n.properties["value"]!),node:n) else {throw A2UIError.invalidData}
+            case "List", "Tabs", "Modal", "Divider", "Slider", "DateTimeInput", "Image", "Icon", "Video", "AudioPlayer":
+                for child in try A2UIExtendedCatalog.validate(n, in:self) { try visit(child, depth:depth+1) }
             default: break
             }
             stack.remove(id); visited.insert(id)
@@ -164,7 +166,7 @@ public struct A2UIDocument: Codable, Equatable, Sendable {
         try visit("root",depth:0)
         guard visited.count == components.count else { throw A2UIError.invalidTree }
         // Every bound path used by this slice must resolve to the expected type.
-        let editablePaths=Set(components.filter{["TextField","CheckBox","ChoicePicker"].contains($0.component)}.compactMap{$0.properties["value"]?.object?["path"]?.text})
+        let editablePaths=Set(components.filter{["TextField","CheckBox","ChoicePicker","Slider","DateTimeInput"].contains($0.component)}.compactMap{$0.properties["value"]?.object?["path"]?.text})
         for (path,value) in localEdits {
             try Self.checkPath(path)
             guard editablePaths.contains(path), let original = try? Self.lookup(path, in:dataModel), Self.sameShape(original,value) else { throw A2UIError.invalidData }
@@ -210,12 +212,13 @@ public struct A2UIDocument: Codable, Equatable, Sendable {
     /// Local model edit: no agent response or remote effect is claimed. Caller persists via existing snapshot.
     public mutating func edit(componentID:String, value:A2UIValue) throws -> String {
         guard let node=components.first(where:{$0.id==componentID}),
-              ["TextField","CheckBox","ChoicePicker"].contains(node.component),
+              ["TextField","CheckBox","ChoicePicker","Slider","DateTimeInput"].contains(node.component),
               let raw=node.properties["value"],case .object(let bind)=raw,
               Set(bind.keys)==Set(["path"]),let path=bind["path"]?.text else { throw A2UIError.invalidAction }
         try Self.checkPath(path)
         let old=try valueForBoundPath(path)
         guard Self.sameShape(old,value), (node.component != "ChoicePicker" || Self.validChoices(value,node:node)) else { throw A2UIError.invalidData }
+        try A2UIExtendedCatalog.validateEdit(value,node:node)
         var proposed=self; proposed.localEdits[path]=value
         try proposed.validate()
         self=proposed

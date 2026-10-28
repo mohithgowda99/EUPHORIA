@@ -74,7 +74,7 @@ final class A2UICompositionTests: XCTestCase {
         XCTAssertEqual(try doc.value(id:"heading",property:"text"),.string("Oslo"))
     }
     func testUnsupportedComponentsFunctionsAndCyclesFailClosed() throws {
-        XCTAssertThrowsError(try A2UIDocument(surfaceId:"x",catalogId:catalog,components:[component("root","Video",["url":.string("https://example.com")])]))
+        XCTAssertThrowsError(try A2UIDocument(surfaceId:"x",catalogId:catalog,components:[component("root","Video",["url":.string("http://localhost/unsafe")])]))
         XCTAssertThrowsError(try A2UIDocument(surfaceId:"x",catalogId:catalog,components:[component("root","Column",["children":.array([.string("root")])])]))
         XCTAssertThrowsError(try A2UIDocument(surfaceId:"x",catalogId:catalog,components:[component("root","Text",["text":.object(["functionCall":.object(["name":.string("fetch")])])])]))
     }

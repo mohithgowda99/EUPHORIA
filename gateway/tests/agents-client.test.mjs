@@ -99,6 +99,30 @@ test('unsafe sandbox or delegation options fail closed without a provider reques
   assert.equal(calls,0,'Invalid options must never incur a model call or hosted environment charge');
 });
 
+test('hosted artifacts use provider-owned immutable metadata and bounded read routes',async t=>{
+ const {client,requests}=await provider(t,(_,res)=>{
+  json(res,requests.length===1?{data:[{id:'art_completed',turn_id:'turn_done',path:'/workspace/outputs/summary.json'}],has_more:false}:
+   {id:'art_completed',turn_id:'turn_done',path:'/workspace/outputs/summary.json'});
+ });
+ const list=await client.listArtifacts('sess_hosted',{limit:5,order:'desc'});
+ assert.equal(list.data[0].id,'art_completed');
+ assert.equal(requests[0].method,'GET');
+ assert.equal(requests[0].path,'/v1/agents/sessions/sess_hosted/artifacts?limit=5&order=desc');
+ const artifact=await client.retrieveArtifact('sess_hosted','art_completed');
+ assert.equal(artifact.turn_id,'turn_done');
+ assert.equal(requests[1].path,'/v1/agents/sessions/sess_hosted/artifacts/art_completed');
+});
+
+test('artifact requests reject untrusted session, IDs and cursor before HTTP',async()=>{
+ let calls=0;const client=new AgentsClient({apiKey:'test-only-key',
+  fetchImpl:async()=>{calls++;throw Error('unexpected');}});
+ await assert.rejects(client.listArtifacts('../other'));
+ await assert.rejects(client.listArtifacts('sess_ok',{after:'../other'}));
+ await assert.rejects(client.listArtifacts('sess_ok',{limit:101}));
+ await assert.rejects(client.retrieveArtifact('sess_ok','../other'));
+ assert.equal(calls,0);
+});
+
 test('user messages retain exact content and caller submission key', async t => {
   const {client,requests} = await provider(t, (_,res)=>{res.writeHead(202);res.end();});
   await client.sendMessage('sess_test','Keep my text exactly.','message-1');

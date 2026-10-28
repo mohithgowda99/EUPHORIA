@@ -1,0 +1,12 @@
+{
+  "version":"v0.9", "surfaceId":"release", "catalogId":"https://a2ui.org/specification/v0_9/basic_catalog.json", "revision":2,
+  "components":[
+    {"id":"root","component":"Card","child":"selection"},
+    {"id":"selection","component":"Column","children":["heading","choice","button"]},
+    {"id":"heading","component":"Text","text":"Choose release target","variant":"h3"},
+    {"id":"choice","component":"ChoicePicker","label":"Destination","variant":"mutuallyExclusive","options":[{"label":"Staging","value":"stage"},{"label":"Production","value":"prod"}],"value":{"path":"/deploy/target"}},
+    {"id":"button","component":"Button","child":"buttonLabel","action":{"event":{"name":"choose_target","context":{"selected":{"path":"/deploy/target"}}}}},
+    {"id":"buttonLabel","component":"Text","text":"Apply"}
+  ],
+  "dataModel":{"deploy":{"target":["stage"]}},"localEdits":{}
+}

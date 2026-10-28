@@ -1,3 +1,4 @@
+import {stable} from './visual-contract.mjs';
 import {parseSSE} from './sse.mjs';
 
 /** Server-side Agents API transport. No user authentication, tool execution, or retries here. */
@@ -70,17 +71,22 @@ export class AgentsClient {
   }
 
   /** A pending action, not a history item, authorizes this provider-level result. */
-  async submitToolResult(sessionID, {turnID, callID, name, output}, submissionKey) {
+  async submitToolResult(sessionID, {turnID, callID, name, output}, submissionKey, {expectedArguments}={}) {
+    try{
     identifier(turnID); identifier(callID); key(submissionKey);
     requireText(name, 'tool name');
     // Encode before any request; do not lose a result to a local serialization error after GET.
     const encoded = JSON.stringify(output);
     if (encoded === undefined || Buffer.byteLength(encoded, 'utf8') > 4_000_000)
       throw new Error('Invalid or oversized tool result');
+    }catch{const e=Error('Invalid tool result; nothing was submitted');e.outcomeUnknown=false;e.failureStage='validation';throw e;}
+    let pending;try{
     const session = await this.retrieveSession(sessionID);
-    const pending = session.required_actions?.find(action => action.type === 'function_call'
+    pending = session.required_actions?.find(action => action.type === 'function_call'
       && action.turn_id === turnID && action.call_id === callID && action.name === name);
-    if (!pending) throw new Error('Tool call is not currently pending');
+    if (!pending||expectedArguments!==undefined&&stable(pending.arguments)!==stable(expectedArguments)) throw new Error('Tool call is not currently pending');
+    }catch{const e=Error('Could not verify pending tool result; nothing was submitted');e.outcomeUnknown=false;e.failureStage='pending_lookup';throw e;}
+    const encoded=JSON.stringify(output);
     return this.#request('POST', '/' + identifier(sessionID) + '/events', {events: [{
       type: 'agent.session.input.tool_result', turn_id: pending.turn_id,
       call_id: pending.call_id, success: true, output: encoded,

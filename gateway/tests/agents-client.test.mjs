@@ -179,3 +179,8 @@ test('render refusal distinguishes rejected HTTP from uncertain submission and r
   const {client}=await provider(t,(req,res)=>{if(req.method==='GET')json(res,{id:'sess_test',required_actions:[pending]});else{res.writeHead(200);res.end('invalid');}});
   await assert.rejects(client.rejectToolCall('sess_test',{turnID:'turn_test',callID:'call_test',name:'askChoice',error:'Unsupported'},'refuse-1'),e=>e.failureStage==='response'&&e.outcomeUnknown===true);
 });
+
+test('human result refuses mutated pending arguments before any POST',async()=>{
+ let writes=0;const client=new AgentsClient({apiKey:'secret',fetchImpl:async(url,options)=>{if(options.method==='POST')writes++;return Response.json({id:'sess_test',required_actions:[{type:'function_call',turn_id:'turn_test',call_id:'call_test',name:'render',arguments:{changed:true}}]});}});
+ await assert.rejects(client.submitToolResult('sess_test',{turnID:'turn_test',callID:'call_test',name:'render',output:{ok:true}},'human-key',{expectedArguments:{changed:false}}),e=>e.outcomeUnknown===false&&e.failureStage==='pending_lookup');assert.equal(writes,0);
+});

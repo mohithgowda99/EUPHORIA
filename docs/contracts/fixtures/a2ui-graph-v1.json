@@ -1,0 +1,259 @@
+{
+  "contractVersion": "a2ui-graph-v1",
+  "toolArguments": {
+    "a2uiGraph": [
+      {
+        "version": "v0.9",
+        "createSurface": {
+          "surfaceId": "trip",
+          "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"
+        }
+      },
+      {
+        "version": "v0.9",
+        "updateComponents": {
+          "surfaceId": "trip",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "title",
+                "card",
+                "notify",
+                "submit"
+              ]
+            },
+            {
+              "id": "title",
+              "component": "Text",
+              "text": {
+                "path": "/trip/destination"
+              },
+              "variant": "h2"
+            },
+            {
+              "id": "card",
+              "component": "Card",
+              "child": "row"
+            },
+            {
+              "id": "row",
+              "component": "Row",
+              "children": [
+                "mirror",
+                "field"
+              ]
+            },
+            {
+              "id": "mirror",
+              "component": "Text",
+              "text": {
+                "path": "/trip/destination"
+              }
+            },
+            {
+              "id": "field",
+              "component": "TextField",
+              "label": "Destination",
+              "value": {
+                "path": "/trip/destination"
+              }
+            },
+            {
+              "id": "notify",
+              "component": "CheckBox",
+              "label": "Send an update",
+              "value": {
+                "path": "/trip/notify"
+              }
+            },
+            {
+              "id": "submit",
+              "component": "Button",
+              "child": "submitLabel",
+              "variant": "primary",
+              "action": {
+                "event": {
+                  "name": "confirm_trip",
+                  "context": {
+                    "destination": {
+                      "path": "/trip/destination"
+                    },
+                    "notify": {
+                      "path": "/trip/notify"
+                    },
+                    "source": "native"
+                  }
+                }
+              }
+            },
+            {
+              "id": "submitLabel",
+              "component": "Text",
+              "text": "Confirm trip"
+            }
+          ]
+        }
+      },
+      {
+        "version": "v0.9",
+        "updateDataModel": {
+          "surfaceId": "trip",
+          "path": "/",
+          "value": {
+            "trip": {
+              "destination": "Paris",
+              "notify": false
+            }
+          }
+        }
+      }
+    ]
+  },
+  "surface": {
+    "schemaVersion": 2,
+    "surfaceID": "synthetic-gateway-surface",
+    "revision": 1,
+    "nodes": [
+      {
+        "id": "composition",
+        "kind": "sourceComposition",
+        "title": "Interactive workspace",
+        "composition": {
+          "version": "v0.9",
+          "surfaceId": "trip",
+          "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json",
+          "revision": 1,
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "title",
+                "card",
+                "notify",
+                "submit"
+              ]
+            },
+            {
+              "id": "title",
+              "component": "Text",
+              "text": {
+                "path": "/trip/destination"
+              },
+              "variant": "h2"
+            },
+            {
+              "id": "card",
+              "component": "Card",
+              "child": "row"
+            },
+            {
+              "id": "row",
+              "component": "Row",
+              "children": [
+                "mirror",
+                "field"
+              ]
+            },
+            {
+              "id": "mirror",
+              "component": "Text",
+              "text": {
+                "path": "/trip/destination"
+              }
+            },
+            {
+              "id": "field",
+              "component": "TextField",
+              "label": "Destination",
+              "value": {
+                "path": "/trip/destination"
+              }
+            },
+            {
+              "id": "notify",
+              "component": "CheckBox",
+              "label": "Send an update",
+              "value": {
+                "path": "/trip/notify"
+              }
+            },
+            {
+              "id": "submit",
+              "component": "Button",
+              "child": "submitLabel",
+              "variant": "primary",
+              "action": {
+                "event": {
+                  "name": "confirm_trip",
+                  "context": {
+                    "destination": {
+                      "path": "/trip/destination"
+                    },
+                    "notify": {
+                      "path": "/trip/notify"
+                    },
+                    "source": "native"
+                  }
+                }
+              }
+            },
+            {
+              "id": "submitLabel",
+              "component": "Text",
+              "text": "Confirm trip"
+            }
+          ],
+          "dataModel": {
+            "trip": {
+              "destination": "Paris",
+              "notify": false
+            }
+          },
+          "localEdits": {}
+        }
+      }
+    ]
+  },
+  "action": {
+    "id": "synthetic-action",
+    "surfaceID": "synthetic-gateway-surface",
+    "expectedRevision": 1,
+    "nodeID": "composition",
+    "kind": "submitForm",
+    "values": {
+      "$button": "submit",
+      "context:destination": "Kyoto",
+      "context:notify": true,
+      "context:source": "native"
+    }
+  },
+  "toolResult": {
+    "userAction": {
+      "name": "confirm_trip",
+      "surfaceId": "trip",
+      "sourceComponentId": "submit",
+      "timestamp": "2026-10-28T00:00:00.000Z",
+      "context": {
+        "destination": "Kyoto",
+        "notify": true,
+        "source": "native"
+      }
+    }
+  },
+  "partialUpdate": {
+    "expectedRevision": 1,
+    "a2uiGraph": [
+      {
+        "version": "v0.9",
+        "updateDataModel": {
+          "surfaceId": "trip",
+          "path": "/trip/destination",
+          "value": "Kyoto"
+        }
+      }
+    ]
+  }
+}

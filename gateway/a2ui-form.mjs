@@ -1,3 +1,4 @@
+import {normalizeGraphInput} from './a2ui-graph.mjs';
 import {fail,validateSurface,surfaceSchema} from './visual-contract.mjs';
 import {SourceFormModel,sourcePath} from './a2ui-model.mjs';
 
@@ -12,7 +13,9 @@ function shape(x,required,optional=[]){
 const path=sourcePath;
 
 /** Translate only the source-tested form tree. Unknown features fail; nothing is silently flattened. */
-export function normalizeRenderInput(input){
+export function normalizeRenderInput(input,previous){
+  if(object(input)&&Object.hasOwn(input,'a2uiGraph'))return validateSurface(normalizeGraphInput(input,previous));
+  if(input?.nodes?.some(n=>n.kind==='sourceComposition'))bad();
   if(!object(input)||!Object.hasOwn(input,'a2ui'))return validateSurface(input);
   shape(input,['a2ui']);
   if(!Array.isArray(input.a2ui)||input.a2ui.length<3||input.a2ui.length>20)bad();
@@ -108,4 +111,4 @@ export const renderInputSchema={type:'object',oneOf:[nativeSchema,{
   type:'object',additionalProperties:false,required:['a2ui'],properties:{a2ui:{type:'array',minItems:3,maxItems:20,items:{
     type:'object',required:['version'],properties:{version:{const:'v0.9'},createSurface:{type:'object'},updateComponents:{type:'object'},updateDataModel:{type:'object'}},additionalProperties:false
   }}}
-}],$defs};
+},{type:'object',additionalProperties:false,required:['a2uiGraph'],properties:{expectedRevision:{type:'integer',minimum:0},a2uiGraph:{type:'array',minItems:1,maxItems:40,items:{type:'object'}}}}],$defs};

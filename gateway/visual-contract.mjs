@@ -1,3 +1,4 @@
+import {validateGraph,graphResult} from './a2ui-graph.mjs';
 import Ajv from 'ajv/dist/2020.js';
 import {readFileSync} from 'node:fs';
 export const surfaceSchema=JSON.parse(readFileSync(new URL('../docs/agents/visual-surface-v1.schema.json',import.meta.url)));
@@ -30,14 +31,21 @@ function sourceFieldValid(field){
   return sourceValueValid(field,field.initialValue);
 }
 export function validateSurface(surface){
-  if(!validate(surface))fail(502,'Unsupported visual surface');
+  const graphs=surface?.nodes?.filter(n=>n.kind==='sourceComposition')??[];
+  if(graphs.length){
+    if(surface.schemaVersion!==2||surface.nodes.length!==1)fail(502,'Unsupported source surface');
+    const n=graphs[0];if(Object.keys(n).sort().join(',')!=='composition,id,kind,title'||n.id!=='composition'||typeof n.title!=='string'||!n.title||n.title.length>120)fail(502,'Invalid source node');
+    validateGraph(n.composition);
+  }
+  const check=graphs.length?{...surface,nodes:[{id:'composition',kind:'showChecklist',title:graphs[0].title,items:[]}]}:surface;
+  if(!validate(check))fail(502,'Unsupported visual surface');
   const unique=items=>new Set(items.map(x=>x.id)).size===items.length;
   if(!unique(surface.nodes))fail(502,'Duplicate node identity');
   let decisions=0;
   for(const n of surface.nodes){
     // These IDs participate in local flat binding paths; exclude separators/prototype names.
     if(!/^[A-Za-z0-9_-]{1,64}$/.test(n.id))fail(502,'Unsupported node identity');
-    if(['askChoice','askForm','askApproval'].includes(n.kind))decisions++;
+    if(['askChoice','askForm','askApproval','sourceComposition'].includes(n.kind))decisions++;
     if(n.submitLabel!==undefined&&n.kind!=='askForm')fail(502,'Invalid form label');
     if(!n.formEvent&&n.fields?.some(f=>['checkbox','choice'].includes(f.type)||f.choices!==undefined||f.allowsMultipleSelection!==undefined||(f.initialValue!==undefined&&!boundedText(f.initialValue))))fail(502,'Invalid native field');
     if(n.formEvent){
@@ -83,11 +91,12 @@ export function decisionResult(surface,action){
   const node=surface.nodes.find(n=>n.id===action.nodeID),v=action.values;
   if(!node||!v||Array.isArray(v)||typeof v!=='object')fail(422,'Invalid decision');
   const keys=Object.keys(v);
-  if(action.kind==='displayed'&&!surface.nodes.some(n=>['askChoice','askForm','askApproval'].includes(n.kind))){
+  if(action.kind==='displayed'&&!surface.nodes.some(n=>['askChoice','askForm','askApproval','sourceComposition'].includes(n.kind))){
     if(action.nodeID!==surface.nodes[0].id||keys.length)fail(422,'Invalid display receipt');
     return {status:'shown'};
   }
   const text=x=>typeof x==='string'&&x.length<=2000;
+  if(node.kind==='sourceComposition'&&action.kind==='submitForm')return graphResult(node.composition,v);
   if(node.kind==='askChoice'&&action.kind==='choose'){
     const option=node.options.find(o=>o.id===v.choice);
     if(keys.length!==2||!option||v.label!==option.label)fail(422,'Invalid choice');

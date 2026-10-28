@@ -1,0 +1,51 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createGateway} from '../gateway.mjs';
+const d=JSON.parse(readFileSync(new URL('./fixtures/a2ui-graph-trip-v09.json',import.meta.url)));
+const packet=()=>({a2uiGraph:[{version:'v0.9',createSurface:{surfaceId:d.surfaceId,catalogId:d.catalogId}},{version:'v0.9',updateComponents:{surfaceId:d.surfaceId,components:d.components}},{version:'v0.9',updateDataModel:{surfaceId:d.surfaceId,path:'/',value:d.dataModel}}]});
+async function setup(t){
+ const dir=await mkdtemp(join(tmpdir(),'euphoria-graph-'));let server,origin;
+ const p={writes:[],current:{id:'session',status:'in_progress',required_actions:[{type:'function_call',name:'euphoria_render_surface',turn_id:'turn',call_id:'call',arguments:packet()}]},async createSession(){return{id:'session'};},async retrieveSession(){return structuredClone(this.current);},async submitToolResult(id,result,key){this.writes.push({id,result,key});if(this.error)throw this.error;}};
+ async function reopen(){if(server)await new Promise(r=>server.close(r));server=createGateway({provider:p,databasePath:join(dir,'db.sqlite'),model:'test',authenticate:async req=>req.headers.authorization==='Bearer alice'?'alice':req.headers.authorization==='Bearer bob'?'bob':null});await new Promise(r=>server.listen(0,'127.0.0.1',r));origin=`http://127.0.0.1:${server.address().port}`;}
+ await reopen();t.after(async()=>{await new Promise(r=>server.close(r));await rm(dir,{recursive:true,force:true});});
+ async function request(path,{method='GET',body,user='alice'}={}){const r=await fetch(origin+path,{method,headers:{authorization:'Bearer '+user,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return{status:r.status,body:await r.json()};}
+ await request('/v1/sessions',{method:'POST',body:{id:'create',message:'Plan a trip'}});return{p,request,reopen};
+}
+const answer=s=>({id:'answer',surfaceID:s.surface.surfaceID,expectedRevision:s.surface.revision,nodeID:'composition',kind:'submitForm',values:{'$button':'submit','context:destination':'Kyoto','context:notify':true,'context:source':'native'}});
+test('real gateway admits pending function graph, owns identity, authorizes exactly one event and restores receipt',async t=>{
+ const {p,request,reopen}=await setup(t),s=(await request('/v1/sessions/session')).body;
+ assert.equal(s.surface.nodes[0].kind,'sourceComposition');assert.equal(s.surface.nodes[0].composition.revision,1);
+ const path=`/v1/surfaces/${s.surface.surfaceID}/actions`,a=answer(s);
+ assert.equal((await request(path,{method:'POST',body:a,user:'bob'})).status,404);
+ assert.equal((await request(path,{method:'POST',body:{...a,expectedRevision:0}})).status,409);
+ assert.equal((await request(path,{method:'POST',body:{...a,kind:'displayed',values:{}}})).status,422);
+ const r=await request(path,{method:'POST',body:a});assert.equal(r.status,202);assert.deepEqual(r.body.resolvedNodeIDs,['composition']);assert.equal(p.writes.length,1);
+ const result=p.writes[0].result.output.userAction;assert.equal(result.name,'confirm_trip');assert.equal(result.surfaceId,'trip');assert.deepEqual(result.context,{destination:'Kyoto',notify:true,source:'native'});assert.ok(Number.isFinite(Date.parse(result.timestamp)));
+ await reopen();await request(path,{method:'POST',body:a});assert.equal(p.writes.length,1);
+ p.current.required_actions=[{...p.current.required_actions[0],call_id:'call2',arguments:{expectedRevision:1,a2uiGraph:[{version:'v0.9',updateDataModel:{surfaceId:'trip',path:'/trip/destination',value:'Kyoto'}}]}}];
+ const next=await request('/v1/sessions/session');assert.equal(next.status,200);assert.equal(next.body.surface.revision,2);assert.equal(next.body.surface.nodes[0].composition.revision,2);assert.equal(next.body.surface.nodes[0].composition.dataModel.trip.destination,'Kyoto');assert.deepEqual(next.body.resolvedNodeIDs,[]);
+ await request(path,{method:'POST',body:{...a,id:'stale'}});assert.equal(p.writes.length,1);
+});
+for(const mutation of ['gone','changed'])test(`pending ${mutation} call cannot authorize an old graph action`,async t=>{
+ const {p,request}=await setup(t),s=(await request('/v1/sessions/session')).body;
+ if(mutation==='gone')p.current.required_actions=[];else p.current.required_actions[0].arguments.a2uiGraph[2].updateDataModel.value.trip.notify=true;
+ const r=await request(`/v1/surfaces/${s.surface.surfaceID}/actions`,{method:'POST',body:answer(s)});assert.equal(r.status,409);assert.equal(p.writes.length,0);
+});
+test('unknown submission survives restart without replay while definite no-send retains safe failure classification',async t=>{
+ const {p,request,reopen}=await setup(t),s=(await request('/v1/sessions/session')).body,path=`/v1/surfaces/${s.surface.surfaceID}/actions`,a=answer(s);
+ p.error=Error('private');let r=await request(path,{method:'POST',body:a});assert.equal(r.body.phase,'uncertain');await reopen();r=await request(path,{method:'POST',body:a});assert.equal(r.body.phase,'uncertain');assert.equal(p.writes.length,1);
+});
+
+test('provider JSON-string function arguments normalize as graphs without losing raw pending identity',async t=>{
+ const {p,request}=await setup(t);p.current.required_actions[0].arguments=JSON.stringify(packet());
+ const r=await request('/v1/sessions/session');assert.equal(r.status,200);assert.equal(r.body.surface.nodes[0].kind,'sourceComposition');
+ assert.equal((await request(`/v1/surfaces/${r.body.surface.surfaceID}/actions`,{method:'POST',body:answer(r.body)})).status,202);assert.equal(p.writes.length,1);
+});
+for(const [kind,error] of [['not_sent',{outcomeUnknown:false,failureStage:'pending_lookup'}],['rejected',{outcomeUnknown:false,failureStage:'submission',status:400}],['uncertain',{outcomeUnknown:true,failureStage:'submission',status:503}]])test(`human graph ${kind} outcome is sanitized durable and never blindly replayed`,async t=>{
+ const {p,request,reopen}=await setup(t),s=(await request('/v1/sessions/session')).body,path=`/v1/surfaces/${s.surface.surfaceID}/actions`,a=answer(s);p.error=Object.assign(Error('secret raw message'),error);
+ let r=await request(path,{method:'POST',body:a});assert.equal(r.body.failure.kind,kind);assert.ok(!JSON.stringify(r.body).includes('secret'));await reopen();r=await request(path,{method:'POST',body:a});assert.equal(r.body.failure.kind,kind);assert.equal(p.writes.length,1);
+});

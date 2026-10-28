@@ -5,7 +5,7 @@ import {
 } from "../src/agents/managed-source-definition";
 import type { AgentProfileStore } from "../src/agents/profile-store";
 import type { AgentProfile } from "../src/agents/profile-types";
-import type { RegisteredAgent } from "../src/copilot";
+import type { AgentStandingProfile, RegisteredAgent } from "../src/copilot";
 
 const actor = { id: "owner-a", role: "user" as const };
 const profile = {
@@ -35,7 +35,7 @@ function context(overrides: {
     actor,
     botId: "bot-a",
     profiles,
-    registered: async (readActor: typeof actor) => {
+    registered: async (readActor: typeof actor): Promise<RegisteredAgent[]> => {
       rosterReads++;
       expect(readActor).toEqual(actor);
       return overrides.registered ?? [{
@@ -44,7 +44,7 @@ function context(overrides: {
       }];
     },
     model: "test-model",
-    roleMessage: ({ id, name }: { id: string; name: string }) => ({
+    roleMessage: ({ id, name }: AgentStandingProfile) => ({
       content: overrides.roleContent ?? `Role ${id}: ${name}`,
     }),
     reads: () => ({ profileReads, rosterReads }),

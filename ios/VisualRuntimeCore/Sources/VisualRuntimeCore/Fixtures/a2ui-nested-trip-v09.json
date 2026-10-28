@@ -1,0 +1,15 @@
+{
+  "version": "v0.9", "surfaceId": "trip", "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json", "revision": 4,
+  "components": [
+    {"id":"root", "component":"Column", "children":["title", "card", "notify", "submit"]},
+    {"id":"title", "component":"Text", "text":{"path":"/trip/destination"}, "variant":"h2"},
+    {"id":"card", "component":"Card", "child":"row"},
+    {"id":"row", "component":"Row", "children":["mirror", "field"]},
+    {"id":"mirror", "component":"Text", "text":{"path":"/trip/destination"}},
+    {"id":"field", "component":"TextField", "label":"Destination", "value":{"path":"/trip/destination"}},
+    {"id":"notify", "component":"CheckBox", "label":"Send an update", "value":{"path":"/trip/notify"}},
+    {"id":"submit", "component":"Button", "child":"submitLabel", "variant":"primary", "action":{"event":{"name":"confirm_trip","context":{"destination":{"path":"/trip/destination"},"notify":{"path":"/trip/notify"},"source":"native"}}}},
+    {"id":"submitLabel", "component":"Text", "text":"Confirm trip"}
+  ],
+  "dataModel":{"trip":{"destination":"Paris","notify":false}}, "localEdits":{}
+}

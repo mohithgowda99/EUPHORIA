@@ -1,5 +1,6 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {fail,identifier,stable} from './visual-contract.mjs';
+import {taskStatus} from '../openbot/server/src/openduet/task-status.ts';
 const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const exact=(x,keys)=>object(x)&&Object.keys(x).sort().join(',')===[...keys].sort().join(',');
 const text=(x,n)=>typeof x==='string'&&!!x.trim()&&x.length<=n;
@@ -37,7 +38,7 @@ export function taskServices({db,provider,create,refresh,conversation,locked}){
    page=await conversation.history(c.session_id,row.owner,{after:page.nextCursor});hasReply=page.entries.some(matches);
   }
   const failed=turn&&(['failed','cancelled'].includes(turn.status)||turn.status==='completed'&&!hasReply);
-  const status=needs?'needs_input':working?'working':resolved?'resolved':failed?'failed':'ready_for_review';
+  const status=taskStatus({needsInput:needs,working,resolved,failed:!!failed});
   const task={...base,status,resolvedAt:resolved?row.resolved_at:null,deliveryPhase:pending||snap.phase==='uncertain'?'uncertain':c.phase,pendingNodeIDs:needs?snap.surface.nodes.filter(n=>['askChoice','askApproval','askForm','sourceComposition'].includes(n.kind)).map(n=>n.id):[],failure:failed?(turn.status==='cancelled'?'The task was stopped.':hasReply?'The task could not finish.':'The task ended without a saved reply.'):null};
   return{task,turn,history};
  }

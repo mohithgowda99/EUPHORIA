@@ -47,6 +47,16 @@ export async function reconcileManagedSourceInbox(input: {
       data?: { type?: string; role?: string; status?: string; turn_id?: string; content?: unknown }[];
     }>;
   };
+  /** Source-authoritative proof that this root turn was started by THIS inbox
+   * request, not another input in the same Bot/session. Must be backed by
+   * durable provider-event correlation before this function is mounted.
+   */
+  turnBelongsToInbox(input: {
+    scope: DeliveryScope;
+    inboxId: string;
+    sessionID: string;
+    rootTurnID: string;
+  }): Promise<boolean>;
   authorise(scope: DeliveryScope): Promise<boolean>;
   botAvailable(scope: DeliveryScope): Promise<boolean>;
   recordSourceReply(scope: DeliveryScope, text: string, sourceID: string): Promise<void>;
@@ -74,6 +84,12 @@ export async function reconcileManagedSourceInbox(input: {
   if (!link || link.sourceThreadId !== scope.threadId ||
       link.providerSessionId !== input.sessionID)
     throw new Error("Managed source session is not owned by this original conversation");
+  // A session can contain many turns. Session ownership alone is NOT proof
+  // that an old completed root turn belongs to this particular inbox request.
+  if (!(await input.turnBelongsToInbox({
+    scope, inboxId: input.inboxId, sessionID: input.sessionID,
+    rootTurnID: input.rootTurnID,
+  }))) throw new Error("Managed root turn is not bound to this original inbox");
 
   const permitted = async () => await input.authorise(scope) && await input.botAvailable(scope);
   if (!(await permitted())) return "revoked";

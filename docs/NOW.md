@@ -46,3 +46,16 @@ New actual implementation (not yet live-mounted):
 **Validation:** performed remote structural checks only, without a full checkout; Bun/Node24 original suites, Xcode and real provider execution still pending. Manual Drizzle 0068 snapshot must be checked against `drizzle-kit` on the Mac before applying migrations. No paid API calls or production DB changes.
 
 **Mac first commands:** preserve uncommitted work; inspect branch head and `git status`, run `cd openbot && bun install --frozen-lockfile && bun run --filter server typecheck && bun test server/tests/managed-source-definition.test.ts`, run `cd gateway && node --test tests/source-managed-*.test.mjs`, then `cd ios/VisualRuntimeCore && swift test`, and `EUPHORIA_SIMULATOR_ID=<available-UDID> bash ios/scripts/verify-xcode.sh` at repo root. No paid provider test until this baseline passes.
+
+## Managed Agents API execution scope extension (2026-10-28)
+
+Additional **provider-transport support**, not product activation:
+
+- Existing `gateway/agents-client.mjs` now accepts **opt-in** `environment:{type:"openai_hosted",network:{access:"disabled"}}`, normalized to a small, network-isolated OpenAI sandbox. No shell, browser, MCP, plugins, arbitrary environment files or device access is exposed to source Bots automatically. Current source Bot adapter still runs with no external tools and is not mounted.
+- Optional bounded `agent.multi_agent` turns on OpenAI-hosted Codex harness subagents (1–3 concurrent), not new independently configurable OpenDuet Bot identities. Any provider-inherited capabilities must still satisfy original product grants before enabling.
+- Read-only `listArtifacts` and `retrieveArtifact` use the documented Agents session Artifacts API; original PageStore remains the product owner and there is no new gallery database. Product routes must authorize source owner/Bot/channel before surfacing artifacts.
+- Existing per-session managed spend control retained. Updated offline HTTP contract tests, and exercised fetched transport logic in isolated V8 (safe sandbox, delegation, spend, artifact paths and fail-closed inputs). Full Node tests, provider calls and Mac/iOS checks still not executed.
+
+**Remaining full capability gaps:** source CopilotKit cutover/turn projection and webhook recovery, original PluginStore-to-managed MCP grants, vault credential scope and revocation, trusted hosted browser/computer approvals, managed Automations mapping to OpenDuet routine ownership and notifications, managed plugin/skill upload and policy, hosted artifacts to source PageStore, full native A2UI. Do not claim functional GrokBot/Dots/Codex product parity from provider APIs alone.
+
+Official contracts: https://developers.openai.com/api/docs/guides/agents-api/architecture and /environments/openai-hosted and /multi-agent.

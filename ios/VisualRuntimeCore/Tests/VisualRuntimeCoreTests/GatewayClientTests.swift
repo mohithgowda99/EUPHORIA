@@ -107,6 +107,24 @@ final class GatewayClientTests: XCTestCase, @unchecked Sendable {
         catch { }
     }
 
+    func testRealTaskReportUsesSameOwnedTaskIdentityAndExistingHistoryWire() async throws {
+        let item = #""id":"task_report","title":"Prepare report","instruction":"Summarize actual work","sessionID":"session_report","status":"ready_for_review","resolvedAt":null,"createdAt":"2026-10-28T00:00:00Z","updatedAt":"2026-10-28T00:00:00Z","deliveryPhase":"accepted","pendingNodeIDs":[],"failure":null"#
+        let body = #"{"report":{"task":{\#(item)},"messages":[{"id":"message1","kind":"message","status":"completed","text":"Result saved","role":"assistant","turnID":"root1"}],"historyHasMore":false,"historyCursor":null,"decisions":[],"decisionsHasMore":false,"decisionsCursor":null}}"#
+        let box = RequestBox()
+        GatewayTestProtocol.box.set { req in
+            box.record(req)
+            return (200, Data(body.utf8))
+        }
+        let result = try await client().taskReport(id: "task_report")
+        XCTAssertEqual(result.report.task.id, "task_report")
+        XCTAssertEqual(result.report.messages.first?.text, "Result saved")
+        XCTAssertEqual(box.last?.url?.path, "/v1/tasks/task_report/report")
+        _ = try await client().taskReport(id: "task_report", after: "message1")
+        XCTAssertEqual(box.last?.url?.query, "historyAfter=message1")
+        do { _ = try await client().taskReport(id: "../foreign"); XCTFail("Invalid task ID sent") }
+        catch { }
+    }
+
     func testTaskServiceRejectsMalformedStatusesAndCursorBeforeRendering() throws {
         let item = #""id":"task_one","title":"Work","instruction":"Do real work","sessionID":"session_one","status":"working","resolvedAt":null,"createdAt":"2026-10-28T00:00:00Z","updatedAt":"2026-10-28T00:00:00Z","deliveryPhase":"accepted","pendingNodeIDs":[],"failure":null"#
         let good = #"{"tasks":[{\#(item)}],"hasMore":true,"nextCursor":"task_one"}"#

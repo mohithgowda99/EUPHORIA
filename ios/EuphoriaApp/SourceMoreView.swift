@@ -22,6 +22,13 @@ struct SourceMoreView: View {
                     Label("Routines and responsibilities", systemImage: "calendar.badge.clock")
                 }
             }
+            Section("External services") {
+                NavigationLink {
+                    SourceConnectionsView()
+                } label: {
+                    Label("Connections", systemImage: "point.3.connected.trianglepath.dotted")
+                }
+            }
             Section("Create") {
                 NavigationLink {
                     SourceGalleryView()

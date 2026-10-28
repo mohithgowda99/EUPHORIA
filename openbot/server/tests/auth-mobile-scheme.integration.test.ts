@@ -33,6 +33,7 @@ async function sendsSessionTo(auth: ReturnType<typeof createAuth>) {
 }
 afterEach(() => {
   delete process.env.EXPO_PROJECT_ID;
+  delete process.env.EUPHORIA_NATIVE_IOS_AUTH;
 });
 afterAll(async () => {
   await database.$client.end({ timeout: 5 });
@@ -44,4 +45,13 @@ test("without the native app, no sign-in redirect carries a session to the app's
 test("a deployment that runs the native app still lets it sign in", async () => {
   process.env.EXPO_PROJECT_ID = "0b6c3a0e-2a5e-4a4c-9d5a-2f3b8f0c1d2e";
   expect(await sendsSessionTo(createAuth(config, database))).toBe(true);
+});
+
+test("a deployment that explicitly enables native SwiftUI OAuth reuses source Better Auth without Expo", async () => {
+  process.env.EUPHORIA_NATIVE_IOS_AUTH = "1";
+  expect(await sendsSessionTo(createAuth(config, database))).toBe(true);
+});
+test("an arbitrary native authentication setting never widens the trusted callback", async () => {
+  process.env.EUPHORIA_NATIVE_IOS_AUTH = "yes";
+  expect(await sendsSessionTo(createAuth(config, database))).toBe(false);
 });

@@ -77,6 +77,8 @@ export function createDeliveryRouter(deps: {
     replyText: string;
     components?: DrawnComponent[];
     waiting?: boolean;
+    /** Managed provider accepted an asynchronous turn; no verified reply exists yet. */
+    pending?: boolean;
   }>;
   providers: {
     /** Slack and Teams both reach people through the OpenTag pairing's proactive delivery. */
@@ -261,15 +263,15 @@ export function createDeliveryRouter(deps: {
         text: input.text,
         signal: input.signal,
       });
-      await deps.store.setInbox(row.id, "sent");
+      await deps.store.setInbox(row.id, result.pending ? "accepted" : "sent");
       await deps.audit?.({
         ...scope,
         id: row.id,
         kind: "inbound",
-        state: "sent",
+        state: result.pending ? "accepted" : "sent",
       });
       return {
-        kind: extras.approvals.length || result.waiting ? "waiting" : "replied",
+        kind: extras.approvals.length || result.waiting || result.pending ? "waiting" : "replied",
         binding,
         inboxId: row.id,
         replyText: result.replyText,
@@ -387,6 +389,13 @@ export function createDeliveryRouter(deps: {
           signal,
         });
         if (!(await owns())) return;
+        if (result.pending) {
+          // Provider HTTP 202/accepted is not a completed turn. The existing
+          // source inbox remains accepted until a verified reconciliation path
+          // records the reply. No notification or success audit is fabricated.
+          await deps.store.setInbox(row.id, "accepted");
+          return;
+        }
         if (result.replyText)
           await notify(row, {
             id: row.id,

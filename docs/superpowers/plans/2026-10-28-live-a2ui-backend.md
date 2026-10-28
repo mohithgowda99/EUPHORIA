@@ -28,11 +28,11 @@ Shared binding alias forgery; partial update authority and cross-surface changes
 - [x] Provide versioned request/response/stream/recovery/permission fixtures and remaining backend roadmap.
 - [x] Fresh independent Terra/medium review; one TDD important-fix pass.
 - [x] Final gateway tests; coordinated native compatibility only without edits or competing executor.
-- [ ] Record exact offline/live limits and unresolved historic uncertainty; commit/push assigned branch. Goal remains active for remaining services.
+- [x] Record exact offline/live limits and unresolved historic uncertainty; commit/push assigned branch. Goal remains active for remaining services.
 
 ## Execution evidence
 
-Baseline d66c5e0. Graph normalizer RED missing admission; loop RED embedded revision/pending argument mutation; recovery RED JSON string args and missing failure metadata; source RED root path default; review RED false200/204 acceptance and pre-fingerprint deep-tail access. All fixed; final118/118 gateway tests,71/71 unchanged Swift core tests. Temporary Swift consumer decoded versioned backend fixture, generated exact native submission from shared edits and restored one pending action. No Simulator/iOS implementation edits, no paid calls. Full provider/native graph acceptance stays unverified.
+Baseline d66c5e0. Graph normalizer RED missing admission; loop RED embedded revision/pending argument mutation; recovery RED JSON string args and missing failure metadata; source RED root path default; review RED false200/204 acceptance and pre-fingerprint deep-tail access. All fixed; final119/119 gateway tests,71/71 unchanged Swift core tests. Temporary Swift consumer decoded versioned backend fixture, generated exact native submission from shared edits and restored one pending action. No Simulator/iOS implementation edits, no paid calls. Full provider/native graph acceptance stays unverified.
 
 Final review: Terra/medium reviewed d66c5e0..cf1d150. Both Important findings fixed in one regression pass; no minor or declined source-behavior findings. Live provider acceptance was not judged and remains open.
 

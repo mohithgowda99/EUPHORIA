@@ -1,5 +1,13 @@
 # Current verification evidence — 2026-10-28
 
+## Backend-only graph milestone —7c9d765
+
+119 gateway/71 unchanged Swift core tests pass. Actual HTTP/disk SQLite and real AgentsClient serialization against offline transport cover graph admission, authoritative revisions, partial updates, ownership, exact source context, cancellation, restart/deduplication, safe certainty, unknown-effect blocking, malformed successful provider replies and bounded fingerprinting. Temporary Swift executable decoded versioned fixture, edited shared text/boolean, generated exact native action and restored one pending action. No ios implementation edits or new native executor/build run. Prior25 iOS/Debug/Release evidence below is historical. No paid calls or real-provider graph acceptance.
+
+Retained local journal aggregate: accepted1/refused1/refusal_uncertain1; old uncertain failure diagnostics absent. Cannot reclassify old outcome without stronger provider evidence; never replay. Contracts: docs/contracts/a2ui-graph-v1.md and adjacent input/exchange schemas/fixtures. Final logs: /private/tmp/euphoria-graph-final-node.log, /private/tmp/euphoria-backend-graph-core.log, /private/tmp/euphoria-backend-contract-proof.log. Independent Terra/medium review2 Important findings fixed with failing regressions; full suite green.
+
+The sections below are previous native/live milestone evidence.
+
 Latest implementation `61566f4`, following `1fcb1e7`, branch `feature/agents-native-visual-contract-spike`. User configured a private server-side key. Bounded real GPT-6 Luna requests executed; no real external effect. Main and OpenBot are untouched. Phase one is incomplete.
 
 | Layer | Executed | Result | Limit |

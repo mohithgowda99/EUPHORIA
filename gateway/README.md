@@ -1,3 +1,7 @@
+# Latest backend graph capability
+
+Explicit `a2uiGraph` source operations now normalize into the existing native sourceComposition contract and execute exact authorized events through the current owner/session/action journal. Legacy native and a2ui-form inputs remain compatible. Versioned schemas/fixtures and limitations: [graph contract](../docs/contracts/a2ui-graph-v1.md).119 gateway tests pass offline; real provider/native graph acceptance not yet run. Provider event acceptance requires202; unknown effects never replay. No second store/executor. Older setup sections below remain development-only; production identity/hosting/background services are not implemented.
+
 # EUPHORIA Agents gateway
 
 Native phase-one connection proof, not complete OpenDuet parity or production infrastructure. Node24+ (`node:sqlite`), AJV over the existing native JSON Schema, and built-in HTTP/fetch. Existing OpenBot remains untouched.

@@ -1,15 +1,28 @@
 # Current state — 2026-10-28
 
-Project:EUPHORIA; branch `feature/agents-native-visual-contract-spike`; implementation `61566f4`. Inspect Git for documentation HEAD. Main unchanged.
+Project:EUPHORIA. Branch `feature/agents-native-visual-contract-spike`. Backend implementation `7c9d765` plus cancellation acceptance regression in the following context commit. Main unchanged. Full backend objective and phase one remain active and unfinished. Native implementation belongs to the second workstream; no `ios/` changes in this batch.
 
-Implementation `61566f4` merges source branch `29e80e0` after offline workflow checkpoint `1fcb1e7`. Eight-component nested native A2UI study is registered in the actual app, using existing canonical values/pending/SwiftData. No second store or event runtime. Incoming compilation, validation and identity issues fixed with regressions and independent review. **85 gateway /71 core /25 iOS XCTest**, Debug/Release/plist pass. Simulator shared text edit, one queued confirmation, locked controls and termination/relaunch restoration verified. Deployment-choice fixture has automated coverage; separate manual trace not run. **No paid API calls/key use.** Live graph gateway admission remains deliberately gated; existing live source-form path and artifact isolation unchanged. Full phase one remains unfinished.
+## Backend graph milestone
 
-The native Tasks browser, owned pagination, cached reopening and conservative failure classification from the previous batch remain integrated. Native and agent operations use the existing canonical contract, action journal and snapshots. A model proposal or local fixture tap is not a completed external action.
+Existing render tool now accepts explicit bounded `a2uiGraph` v0.9 operation packets. Eight supported native types, nested/shared bindings, catalog/identity/references/resource bounds, component upserts and revision-checked model subtree updates validate before publication. Existing native/source-form inputs remain compatible. Source graph output uses existing canonical surface/SQLite versions; human submitForm events validate exact button/context/literals/shared paths against saved graph and actual pending call. Existing ownership/session locks/action IDs/journal are reused. No parallel executor/store.
 
-Historical provider evidence: one gateway-created Luna session completed native choice/reply/relaunch. A second native-created session's render-refusal delivery remains uncertain and must not replay. Offline tests do not retrospectively resolve it. Real gateway remains stopped.
+Current implementation distinguishes safe not_sent/rejected/uncertain failures, preserves immutable action payloads, rejects changed pending arguments and never replays unknown effects. Provider event acceptance requires HTTP202; invalid successful statuses stay uncertain. Already-decoded function arguments are bounded before recursive fingerprinting. Independent Terra/medium review found2 important issues; both reproduced RED then fixed.
 
-Evidence: /private/tmp/euphoria-a2ui-integration-core.log, /private/tmp/euphoria-a2ui-integration-gateway.log, /private/tmp/euphoria-a2ui-integration-native-final.log and /private/tmp/euphoria-a2ui-integration-verified. Incoming recursive-view compiler failure and review collision RED evidence retained locally. Raw dumps/secrets excluded from Git.
+Executed: **119 gateway tests,71 unchanged Swift core tests**, zero failures/skips; actual HTTP/SQLite plus actual AgentsClient serialization against offline provider transport. Temporary Swift consumer decoded versioned backend fixture, applied shared text/boolean edits, produced exact gateway action and preserved one pending event across Codable reopening. No fresh Simulator/Debug/Release run in this backend-only batch: previous25 iOS/Debug/Release evidence is historical, not a new acceptance claim.
 
-**Single next step:** implement server-side bounded source-graph normalization/validation and authorized event continuation through the existing gateway journal, with offline failing conformance tests first. Use paid provider verification only when essential.
+No paid provider calls, no key use, no secret reads. Real-provider graph generation/continuation and coordinated native execution remain unverified. HTTP202 means event accepted, not turn completion or external execution. Real gateway remains stopped.
 
-Still open: source streaming protocol/full catalog/grants/pages; full task/bot/skills/memory/channels/media/routines/admin workflows; real integration/computer/files/commands/approval executors; production identity/deployment/background work; full native-created provider/device/failure acceptance. Phase one is still substantial implementation.
+## Retained uncertainty investigation
+
+Read-only aggregate committed SQLite evidence:1 accepted action,1 refused render,1 refusal_uncertain. The old uncertain row has no saved failure kind/stage/status. Existing evidence cannot prove whether it was never sent, rejected or accepted with a lost response. It remains uncertain and unreplayed; new diagnostics are not retroactive proof. Read-only immutable inspection was used after normal readonly opening failed; no database content modified.
+
+## Contracts and exact changed areas
+
+Implementation: gateway/a2ui-graph.mjs, a2ui-form.mjs, visual-contract.mjs, gateway.mjs, agents-client.mjs, provider-arguments.mjs.
+Tests: gateway/tests/a2ui-graph.test.mjs, a2ui-graph-gateway.test.mjs, agents-client.test.mjs; two source-derived graph JSON fixtures.
+Versioned coordination: docs/contracts/a2ui-graph-v1.md, a2ui-graph-input-v1.schema.json, a2ui-graph-exchange-v1.schema.json, fixtures/a2ui-graph-v1.json. These include request/publication/action/result/stream/auth/recovery semantics.
+Evidence: /private/tmp/euphoria-graph-{red,loop-red,recovery-red,source-red,review-red,bounds-red,schema-red,final-node}.log; /private/tmp/euphoria-backend-graph-core.log; /private/tmp/euphoria-backend-contract-proof.log. Raw evidence/private data not committed.
+
+**Next:** close coordinated real-provider graph acceptance and revision-feedback gaps against the versioned contract, then implement source-backed task lifecycle/execution/report service through the existing owned session and journal. Source task-store/tasks/task-threads/task-report and routines are located under openbot/server/src/openduet and shared; do not substitute ordinary session browsing for completed task parity.
+
+Remaining: full A2UI catalog/streaming/dynamic component removal and deletion/grants/pages; tasks/questions/reports/schedules/routines; memory provenance/edit/delete; bots/handoffs/skills/scoped grants; channels/groups/attachments/integrations/OAuth/MCP/permissions/audit; hosted browser/files/computer execution; production identity/hosting/durable background/webhooks/APNs/rate/spend/privacy/retention/deletion/rollback. Laptop-independent product and full source acceptance are NOT achieved.

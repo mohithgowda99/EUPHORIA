@@ -69,3 +69,12 @@ test('owned HTTP graph loop uses the actual AgentsClient event serialization and
  const output=JSON.parse(event.output);assert.deepEqual(output.userAction.context,{destination:'Kyoto',notify:true,source:'native'});
  await reopen();await request(path,{method:'POST',body:answer(s)});assert.equal(posts.length,1);
 });
+
+test('cancelled provider turn revokes graph response authority and stale partial operations cannot publish',async t=>{
+ const {p,request,reopen}=await setup(t),s=(await request('/v1/sessions/session')).body;
+ p.cancelTurn=async()=>{p.current.required_actions=[];p.current.status='idle';};
+ assert.equal((await request('/v1/sessions/session/cancel',{method:'POST',body:{id:'cancel'}})).body.phase,'accepted');
+ const path=`/v1/surfaces/${s.surface.surfaceID}/actions`;assert.equal((await request(path,{method:'POST',body:answer(s)})).status,409);assert.equal(p.writes.length,0);
+ await reopen();p.current.required_actions=[{type:'function_call',name:'euphoria_render_surface',turn_id:'newturn',call_id:'newcall',arguments:{expectedRevision:0,a2uiGraph:[{version:'v0.9',updateDataModel:{surfaceId:'trip',path:'/trip/destination',value:'bad'}}]}}];
+ assert.equal((await request('/v1/sessions/session')).status,409);const listed=await request('/v1/sessions');assert.equal(listed.body.sessions[0].surface.nodes[0].composition.dataModel.trip.destination,'Paris');assert.equal(listed.body.sessions[0].surface.revision,1);
+});

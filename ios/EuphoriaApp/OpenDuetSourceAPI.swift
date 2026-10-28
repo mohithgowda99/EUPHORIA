@@ -220,11 +220,20 @@ struct OpenDuetSourceAPI: Sendable {
         guard ["google","microsoft","okta"].contains(provider) else { throw SourceAPIError.invalidInput }
         let response: SourceSignInLaunch = try await request("api/auth/sign-in/social", method: "POST",
             body: SourceSocialInput(provider: provider, callbackURL: "openbotmobile://"))
-        guard let raw = response.url, let url = URL(string: raw),
-              url.scheme?.lowercased() == "https", url.user == nil,
-              url.password == nil
+        guard let raw = response.url, let target = URL(string: raw),
+              target.scheme?.lowercased() == "https", target.user == nil,
+              target.password == nil, target.fragment == nil
         else { throw SourceAPIError.invalidResponse }
-        return url
+        // The source @better-auth/expo client does NOT open the provider URL
+        // directly. Its same-origin proxy transfers the OAuth state cookie into
+        // the system browser before redirecting. Without that, native sign-in
+        // silently fails state verification after the provider comes back.
+        var proxy = URLComponents(url: endpoint.baseURL
+            .appendingPathComponent("api/auth/expo-authorization-proxy"),
+            resolvingAgainstBaseURL: false)
+        proxy?.queryItems = [URLQueryItem(name: "authorizationURL", value: raw)]
+        guard let proxyURL = proxy?.url else { throw SourceAPIError.invalidResponse }
+        return proxyURL
     }
 
     private func checkedID(_ value: String) throws -> String {

@@ -221,6 +221,33 @@ test("managed asynchronous 202 remains accepted, not a completed source reply", 
   expect(f.statuses.at(-1)).toMatchObject({ state: "accepted" });
 });
 
+test("uncertain managed source write stays accepted without fake reply or failure notification", async () => {
+  const f = fixture();
+  const unknown = Object.assign(new Error("Provider response lost"), {
+    outcomeUnknown: true, failureStage: "submission",
+  });
+  const router = createDeliveryRouter({
+    store: f.store, queue: f.queue, owner: "worker",
+    authoriseScope: async () => true,
+    runTurn: async () => { throw unknown; },
+    providers: {
+      slack: {
+        send: async () => { throw Error("No notification before verified completion"); },
+      },
+    },
+  });
+  await router.sweep("delivery.inbound");
+  expect(f.statuses.at(-1)).toMatchObject({state:"accepted"});
+  expect(f.statuses.some((value)=> (value as {state?:string}).state==="failed")).toBe(false);
+  expect(f.offered).toHaveLength(0);
+  const result=await router.converse({
+    transport:"slack",realm:"T",identity:"U",externalId:"uncertain",
+    text:"Do safe work",signal:new AbortController().signal,
+  });
+  expect(result).toMatchObject({kind:"waiting",replyText:""});
+  expect(f.statuses.at(-1)).toMatchObject({state:"accepted"});
+});
+
 test("revoked source ownership and lost lease cannot execute turns or sends", async () => {
   const f = fixture();
   f.revoke();

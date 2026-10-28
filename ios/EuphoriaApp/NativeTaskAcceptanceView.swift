@@ -289,7 +289,7 @@ private struct NativeTaskEvidenceView: View {
             // be silently created when an older task conversation is opened.
             let envelope = try await client.refresh(sessionID: sessionID)
             guard envelope.sessionID == sessionID else { throw GatewayClientError.invalidResponse }
-            let model = try GatewaySessionModel.configured(context: context)
+            let model = try GatewaySessionModel.configured(context: context, namespace: "task_" + taskID)
             await model.selectSession(envelope)
             guard model.liveSessionID == sessionID else { throw GatewayClientError.invalidResponse }
             conversationModel = model

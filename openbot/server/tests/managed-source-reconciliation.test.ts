@@ -28,6 +28,7 @@ function fixture() {
   let providerReads = 0;
   let root = { ...turn };
   let items = [item];
+  let nextPage: typeof items | null = null;
   let requirements: unknown[] = [];
   let linked = "session";
   let correctTurn = true;
@@ -57,8 +58,12 @@ function fixture() {
         providerReads++;
         return { ...response, required_actions: requirements };
       },
-      listTurns: async () => ({data: [root]}),
-      listItems: async () => ({data: items}),
+      retrieveTurn: async () => ({...root, session_id: "session"}),
+      listTurnItems: async (_sessionID: string, _turnID: string,
+        options: {after?: string}) => options.after
+          ? {data: nextPage ?? [], has_more:false}
+          : {data:items, has_more:nextPage !== null,
+              ...(nextPage !== null ? {last_id:"cursor_first"} : {})},
     },
     turnBelongsToInbox: async (request: { inboxId: string; sessionID: string; rootTurnID: string }) =>
       correctTurn && request.inboxId === "inbox" &&
@@ -83,6 +88,7 @@ function fixture() {
     setTurnBinding(value: boolean) { correctTurn = value; },
     setRoot(value: typeof turn) { root = value; },
     setItems(value: typeof items) { items = value; },
+    setNextPage(value: typeof items | null) { nextPage = value; },
     setActions(value: unknown[]) { requirements = value; },
     setStatus(value: string) { status = value; },
   };
@@ -162,4 +168,13 @@ test("inbox not yet accepted is refused before provider read", async () => {
   f.setStatus("queued");
   await expect(reconcileManagedSourceInbox(f.deps)).rejects.toThrow(/not accepted/);
   expect(f.providerReads).toBe(0);
+});
+
+test("turn-specific pagination includes late output and never settles a partial page", async () => {
+  const f = fixture();
+  f.setItems([]);
+  f.setNextPage([item]);
+  expect(await reconcileManagedSourceInbox(f.deps)).toBe("completed");
+  expect(f.replies).toHaveLength(1);
+  expect(f.replies[0]?.text).toBe("Verified output");
 });

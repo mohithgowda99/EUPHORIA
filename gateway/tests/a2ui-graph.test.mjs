@@ -69,3 +69,11 @@ test('versioned exchange schemas accept native-compatible synthetic surface acti
  const ajv=new Ajv({strict:false});ajv.addSchema(load('a2ui-graph-input-v1.schema.json'));const validate=ajv.compile(load('a2ui-graph-exchange-v1.schema.json'));
  const f=load('fixtures/a2ui-graph-v1.json');for(const v of [f.surface,f.action,f.toolResult])assert.equal(validate(v),true,JSON.stringify(validate.errors));
 });
+
+test('v2 provider envelope preserves exact v1 event and exposes explicit revision metadata without changing v1 schema',async()=>{
+ const {default:Ajv}=await import('ajv/dist/2020.js');const load=name=>JSON.parse(readFileSync(new URL('../../docs/contracts/'+name,import.meta.url)));
+ const ajv=new Ajv({strict:false});ajv.addSchema(load('a2ui-graph-input-v1.schema.json'));ajv.addSchema(load('a2ui-graph-exchange-v1.schema.json'));
+ const valid=ajv.compile(load('a2ui-graph-result-v2.schema.json')),f=load('fixtures/a2ui-graph-result-v2.json');assert.equal(valid(f.toolResult),true,JSON.stringify(valid.errors));
+ assert.deepEqual(f.toolResult.userAction,load('fixtures/a2ui-graph-v1.json').toolResult.userAction);assert.equal(f.nextPartialUpdate.expectedRevision,f.toolResult.euphoria.revision);
+ assert.equal(valid({...f.toolResult,euphoria:{...f.toolResult.euphoria,revision:0}}),false);
+});

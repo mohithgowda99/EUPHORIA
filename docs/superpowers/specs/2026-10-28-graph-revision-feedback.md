@@ -1,0 +1,7 @@
+# Graph revision feedback and exact delivery evidence
+
+Authorized backend continuation after51064b8. Current agent receives exact userAction but not gateway-assigned revision, making expectedRevision updates unreliable. Add graph-only namespaced euphoria metadata beside userAction: {contractVersion:1,surfaceID,revision,sourceSurfaceID}. Preserve userAction shape and all legacy outputs. A dedicated inspection tool would require extra model cycles and handler state; no need for it when each accepted graph result already has an authoritative revision. Versioned result envelope v2 documents additive compatibility; native APIs unchanged.
+
+Journal the exact outgoing tool result (timestamp/context/metadata) before delivery in additive actions.result column, with immutable action input retained separately. Duplicate/restart IDs never resend. No migration of old absent result to guessed evidence. Guard malformed-refusal delivery with the same argument fingerprint protection as human results. Stale source revision returns bounded error feedback containing current revision and explicit no-approval language only for an unpublished call; an already published/mutated call fails without submitting feedback. Exact pending identity checked at transport before error writes. Existing SQLite/actions/session lock/one render executor retained.
+
+No paid tests needed for implementation; real provider/native acceptance remains separate. No ios changes. Larger backend/service/cloud scope remains active.

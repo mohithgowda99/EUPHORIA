@@ -93,7 +93,7 @@ export class AgentsClient {
     }]}, submissionKey);
   }
 
-  async rejectToolCall(sessionID,{turnID,callID,name,error},submissionKey){
+  async rejectToolCall(sessionID,{turnID,callID,name,error},submissionKey,{expectedArguments}={}){
     try{
       identifier(turnID);identifier(callID);key(submissionKey);requireText(name,'tool name');
       if(typeof error!=='string'||!error||error.length>2000)throw Error('Invalid tool error');
@@ -102,7 +102,7 @@ export class AgentsClient {
     try{
       const session=await this.retrieveSession(sessionID);
       pending=session.required_actions?.find(a=>a.type==='function_call'&&a.turn_id===turnID&&a.call_id===callID&&a.name===name);
-      if(!pending)throw Error('Tool call is not currently pending');
+      if(!pending||expectedArguments!==undefined&&argumentFingerprint(pending.arguments)!==argumentFingerprint(expectedArguments))throw Error('Tool call is not currently pending');
     }catch(error){
       const e=Error('Could not verify pending render call; nothing was submitted');
       e.outcomeUnknown=false;e.failureStage='pending_lookup';

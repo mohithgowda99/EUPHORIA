@@ -13,7 +13,7 @@ async function setup(t){
  async function reopen(){if(server)await new Promise(r=>server.close(r));server=createGateway({provider:p,databasePath:join(dir,'db.sqlite'),model:'test',authenticate:async req=>req.headers.authorization==='Bearer alice'?'alice':req.headers.authorization==='Bearer bob'?'bob':null});await new Promise(r=>server.listen(0,'127.0.0.1',r));origin=`http://127.0.0.1:${server.address().port}`;}
  await reopen();t.after(async()=>{await new Promise(r=>server.close(r));await rm(dir,{recursive:true,force:true});});
  async function request(path,{method='GET',body,user='alice'}={}){const r=await fetch(origin+path,{method,headers:{authorization:'Bearer '+user,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return{status:r.status,body:await r.json()};}
- await request('/v1/sessions',{method:'POST',body:{id:'create',message:'Plan a trip'}});return{p,request,reopen};
+ await request('/v1/sessions',{method:'POST',body:{id:'create',message:'Plan a trip'}});return{p,request,reopen,databasePath:join(dir,'db.sqlite')};
 }
 const answer=s=>({id:'answer',surfaceID:s.surface.surfaceID,expectedRevision:s.surface.revision,nodeID:'composition',kind:'submitForm',values:{'$button':'submit','context:destination':'Kyoto','context:notify':true,'context:source':'native'}});
 test('real gateway admits pending function graph, owns identity, authorizes exactly one event and restores receipt',async t=>{
@@ -77,4 +77,30 @@ test('cancelled provider turn revokes graph response authority and stale partial
  const path=`/v1/surfaces/${s.surface.surfaceID}/actions`;assert.equal((await request(path,{method:'POST',body:answer(s)})).status,409);assert.equal(p.writes.length,0);
  await reopen();p.current.required_actions=[{type:'function_call',name:'euphoria_render_surface',turn_id:'newturn',call_id:'newcall',arguments:{expectedRevision:0,a2uiGraph:[{version:'v0.9',updateDataModel:{surfaceId:'trip',path:'/trip/destination',value:'bad'}}]}}];
  assert.equal((await request('/v1/sessions/session')).status,409);const listed=await request('/v1/sessions');assert.equal(listed.body.sessions[0].surface.nodes[0].composition.dataModel.trip.destination,'Paris');assert.equal(listed.body.sessions[0].surface.revision,1);
+});
+
+test('graph result returns authoritative revision beside unchanged event and journals exact bytes before delivery',async t=>{
+ const {DatabaseSync}=await import('node:sqlite');const {p,request,reopen,databasePath}=await setup(t);const s=(await request('/v1/sessions/session')).body;
+ let stored;
+ p.submitToolResult=async(id,result,key)=>{const db=new DatabaseSync(databasePath,{readOnly:true});stored=JSON.parse(db.prepare('SELECT result FROM actions WHERE session_id=? AND action_id=?').get('session','answer').result);db.close();p.writes.push({id,result,key});assert.deepEqual(stored,result.output);};
+ const path=`/v1/surfaces/${s.surface.surfaceID}/actions`;const r=await request(path,{method:'POST',body:answer(s)});assert.equal(r.body.phase,'accepted');
+ assert.deepEqual(stored.euphoria,{contractVersion:1,surfaceID:s.surface.surfaceID,revision:1,sourceSurfaceID:'trip'});
+ assert.equal(stored.userAction.name,'confirm_trip');assert.ok(Number.isFinite(Date.parse(stored.userAction.timestamp)));
+ await reopen();await request(path,{method:'POST',body:answer(s)});assert.equal(p.writes.length,1);
+ p.current.required_actions=[{...p.current.required_actions[0],call_id:'partial',arguments:{expectedRevision:stored.euphoria.revision,a2uiGraph:[{version:'v0.9',updateDataModel:{surfaceId:stored.euphoria.sourceSurfaceID,path:'/trip/destination',value:'Kyoto'}}]}}];
+ const next=await request('/v1/sessions/session');assert.equal(next.status,200);assert.equal(next.body.surface.revision,2);
+});
+test('unpublished stale graph call receives durable revision correction without human approval or graph replacement',async t=>{
+ const {p,request,reopen}=await setup(t);const s=(await request('/v1/sessions/session')).body;const calls=[];p.rejectToolCall=async(...args)=>calls.push(args);
+ p.current.required_actions=[{...p.current.required_actions[0],call_id:'stale',arguments:{expectedRevision:0,a2uiGraph:[{version:'v0.9',updateDataModel:{surfaceId:'trip',path:'/trip/destination',value:'Wrong'}}]}}];
+ const r=await request('/v1/sessions/session');assert.equal(r.status,200);assert.equal(r.body.surface.revision,1);assert.equal(r.body.surface.nodes[0].composition.dataModel.trip.destination,'Paris');assert.equal(calls.length,1);assert.match(calls[0][1].error,/expectedRevision.*1/);assert.deepEqual(r.body.acknowledgedActionIDs,[]);
+ await reopen();await request('/v1/sessions/session');assert.equal(calls.length,1);assert.equal(p.writes.length,0);
+});
+
+test('missing graph correction asks for creation and journals the exact refusal before sending',async t=>{
+ const {DatabaseSync}=await import('node:sqlite');const {p,request,reopen,databasePath}=await setup(t);let record;
+ p.current.required_actions[0].arguments={expectedRevision:0,a2uiGraph:[{version:'v0.9',updateDataModel:{surfaceId:'trip',path:'/trip/destination',value:'Kyoto'}}]};
+ p.rejectToolCall=async(id,result)=>{const db=new DatabaseSync(databasePath,{readOnly:true});record=db.prepare("SELECT result FROM actions WHERE phase='refusing'").get();db.close();assert.deepEqual(JSON.parse(record.result),{success:false,error:result.error});assert.match(result.error,/createSurface/);assert.doesNotMatch(result.error,/with expectedRevision/);};
+ const r=await request('/v1/sessions/session');assert.equal(r.status,200);assert.equal(r.body.phase,'in_progress');assert.ok(record.result);assert.deepEqual(r.body.acknowledgedActionIDs,[]);
+ await reopen();const db=new DatabaseSync(databasePath,{readOnly:true});assert.deepEqual(db.prepare('SELECT result FROM actions').get(),record);db.close();
 });

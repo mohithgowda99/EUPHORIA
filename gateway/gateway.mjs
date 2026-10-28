@@ -26,6 +26,7 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
   if(!db.prepare('PRAGMA table_info(sessions)').all().some(c=>c.name==='title'))db.exec('ALTER TABLE sessions ADD COLUMN title TEXT');
   if(!db.prepare('PRAGMA table_info(sessions)').all().some(c=>c.name==='publication'))db.exec('ALTER TABLE sessions ADD COLUMN publication INTEGER NOT NULL DEFAULT 0');
   if(!db.prepare('PRAGMA table_info(actions)').all().some(c=>c.name==='failure'))db.exec('ALTER TABLE actions ADD COLUMN failure TEXT');
+  if(!db.prepare('PRAGMA table_info(actions)').all().some(c=>c.name==='result'))db.exec('ALTER TABLE actions ADD COLUMN result TEXT');
   const locks=new Map();
   async function locked(id,fn){
     const prior=locks.get(id)||Promise.resolve();let release;
@@ -77,8 +78,8 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
       try{
         let args=call.arguments;if(typeof args==='string'){if(Buffer.byteLength(args)>128*1024)fail(502,'Render arguments too large');try{args=JSON.parse(args);}catch{fail(502,'Invalid render JSON');}}
         normalized=row.call_id===call.call_id&&row.turn_id===call.turn_id?JSON.parse(row.surface):normalizeRenderInput(args,row.surface?JSON.parse(row.surface):undefined);}catch(error){
-        if(!(error instanceof GatewayError)||error.status!==502||typeof provider.rejectToolCall!=='function')throw error;
-        return refuseRender(row,call,owner);
+        if(!(error instanceof GatewayError)||![409,502].includes(error.status)||typeof provider.rejectToolCall!=='function')throw error;
+        return refuseRender(row,call,owner,error.status===409?(row.surface&&JSON.parse(row.surface).nodes.some(n=>n.kind==='sourceComposition')?`Source revision changed; nothing was rendered or approved. Use a new call with expectedRevision ${row.revision} for the current source surface.`:'No current source graph exists; nothing was rendered or approved. Use a new call with createSurface, complete updateComponents and updateDataModel, without expectedRevision.'):undefined);
       }
       if(row.call_id===call.call_id&&row.turn_id===call.turn_id){
         if(row.call_payload!==fingerprint)fail(502,'Provider mutated a published call');
@@ -95,7 +96,7 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     if(row.surface)db.prepare('INSERT OR IGNORE INTO surface_versions VALUES(?,?,?,?,?)').run(row.id,row.revision,row.surface,row.turn_id,row.call_id);
     return snapshot(row);
   }
-  async function refuseRender(row,call,owner){
+  async function refuseRender(row,call,owner,correction){
     const records=db.prepare('SELECT * FROM actions WHERE session_id=?').all(row.id);
     const previous=records.find(a=>a.call_id===call.call_id);
     if(previous){
@@ -104,10 +105,10 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
       if(records.length>=500||records.filter(a=>a.phase.startsWith('refus')&&JSON.parse(a.payload).turnID===call.turn_id).length>=3)fail(502,'Unsupported render correction limit reached');
       const actionID='refusal-'+createHash('sha256').update(row.id+'\0'+call.turn_id+'\0'+call.call_id).digest('hex');
       const payload=stable({turnID:call.turn_id,fingerprint:argumentFingerprint(call.arguments)});
-      db.prepare('INSERT INTO actions(session_id,action_id,payload,phase,node_id,call_id) VALUES(?,?,?,?,?,?)').run(row.id,actionID,payload,'refusing',null,call.call_id);
+      const refusal={success:false,error:correction??'Unsupported UI contract; nothing was rendered or approved. Use canonical native JSON, not a mixture of A2UI and native formats. Example: {"schemaVersion":1,"surfaceID":"temporary","revision":0,"nodes":[{"id":"choice","kind":"askChoice","title":"Choose","options":[{"id":"first","label":"First"}]}]}. Use a new tool call with valid arguments.'};
+      db.prepare('INSERT INTO actions(session_id,action_id,payload,phase,node_id,call_id,result) VALUES(?,?,?,?,?,?,?)').run(row.id,actionID,payload,'refusing',null,call.call_id,JSON.stringify(refusal));
       try{
-        await provider.rejectToolCall(row.id,{turnID:call.turn_id,callID:call.call_id,name:'euphoria_render_surface',
-          error:'Unsupported UI contract; nothing was rendered or approved. Use canonical native JSON, not a mixture of A2UI and native formats. Example: {"schemaVersion":1,"surfaceID":"temporary","revision":0,"nodes":[{"id":"choice","kind":"askChoice","title":"Choose","options":[{"id":"first","label":"First"}]}]}. Use a new tool call with valid arguments.'},actionID);
+        await provider.rejectToolCall(row.id,{turnID:call.turn_id,callID:call.call_id,name:'euphoria_render_surface',error:refusal.error},actionID,{expectedArguments:call.arguments});
         db.prepare("UPDATE actions SET phase='refused' WHERE session_id=? AND action_id=?").run(row.id,actionID);
       }catch(error){
         const stage=['validation','pending_lookup','submission','response','read'].includes(error?.failureStage)?error.failureStage:'unknown';
@@ -145,7 +146,7 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     let session;
     try{
       session=await provider.createSession({model,input:input.message,
-        instructions:'Use euphoria_render_surface to present native gallery results, isolated htmlArtifact content, or one askChoice/askForm/askApproval decision. Prefer canonical native JSON for decisions. An askChoice call uses {"schemaVersion":1,"surfaceID":"temporary","revision":0,"nodes":[{"id":"choice","kind":"askChoice","title":"Choose","options":[{"id":"first","label":"First"}]}]}. Do not put native node definitions inside createSurface. A2UI bound forms and explicit nested a2uiGraph operations are supported alternatives, not a mixture with native nodes. Use schemaVersion2 for gallery/htmlArtifact nodes. Do not invent a question when showing a result; display-only surfaces receive a native display receipt. Generated HTML has no external network, file, form submission, media permission or native tool authority. Follow its native JSON schema. Alternatively submit {a2ui:[...]} with v0.9 createSurface/updateComponents/updateDataModel messages using the basic catalog. Supported source shape only: Card root, Column, one Text heading,1-8 bound TextField/CheckBox/ChoicePicker controls, one Button with Text label and event action. Values use distinct absolute model paths with up to8 safe named segments: strings for TextField, booleans for CheckBox, arrays of supported strings for ChoicePicker. Choice variants mutuallyExclusive or multipleSelection are supported. Filters/chip layouts are not supported. No other components, functions or attributes. A source form returns a userAction event with current bound context. Supply a temporary surfaceID and revision 0; the gateway assigns authoritative identity and revisions. For nested native graphs use {a2uiGraph:[v0.9 createSurface/updateComponents/updateDataModel messages]}; supported components are Column, Row, Card, Text, TextField, CheckBox, ChoicePicker and Button with event-only action. Static child references must form one tree rooted at root. Shared absolute object bindings are supported; text/boolean/choice controls only. No layout attributes beyond those described by the supported component contract, functions, scripts or dynamic lists. Every graph must include a Button. Subsequent partial updates use {expectedRevision:current_revision,a2uiGraph:[updateComponents upserts or updateDataModel subtree replacements]}; source surfaceId stays fixed and the gateway assigns outer identity/revision. No client localEdits or approval actions. After the human answers, continue the task and use a fresh tool call for another decision. Do not execute external effects or claim an approval executed anything.',
+        instructions:'Use euphoria_render_surface to present native gallery results, isolated htmlArtifact content, or one askChoice/askForm/askApproval decision. Prefer canonical native JSON for decisions. An askChoice call uses {"schemaVersion":1,"surfaceID":"temporary","revision":0,"nodes":[{"id":"choice","kind":"askChoice","title":"Choose","options":[{"id":"first","label":"First"}]}]}. Do not put native node definitions inside createSurface. A2UI bound forms and explicit nested a2uiGraph operations are supported alternatives, not a mixture with native nodes. Use schemaVersion2 for gallery/htmlArtifact nodes. Do not invent a question when showing a result; display-only surfaces receive a native display receipt. Generated HTML has no external network, file, form submission, media permission or native tool authority. Follow its native JSON schema. Alternatively submit {a2ui:[...]} with v0.9 createSurface/updateComponents/updateDataModel messages using the basic catalog. Supported source shape only: Card root, Column, one Text heading,1-8 bound TextField/CheckBox/ChoicePicker controls, one Button with Text label and event action. Values use distinct absolute model paths with up to8 safe named segments: strings for TextField, booleans for CheckBox, arrays of supported strings for ChoicePicker. Choice variants mutuallyExclusive or multipleSelection are supported. Filters/chip layouts are not supported. No other components, functions or attributes. A source form returns a userAction event with current bound context. Supply a temporary surfaceID and revision 0; the gateway assigns authoritative identity and revisions. For nested native graphs use {a2uiGraph:[v0.9 createSurface/updateComponents/updateDataModel messages]}; supported components are Column, Row, Card, Text, TextField, CheckBox, ChoicePicker and Button with event-only action. Static child references must form one tree rooted at root. Shared absolute object bindings are supported; text/boolean/choice controls only. No layout attributes beyond those described by the supported component contract, functions, scripts or dynamic lists. Every graph must include a Button. Subsequent partial updates use {expectedRevision:current_revision,a2uiGraph:[updateComponents upserts or updateDataModel subtree replacements]}; source surfaceId stays fixed and the gateway assigns outer identity/revision. No client localEdits or approval actions. A graph result preserves the exact userAction and includes sibling euphoria metadata with surfaceID, revision, and sourceSurfaceID; use its revision as expectedRevision on the next partial update. After the human answers, continue the task and use a fresh tool call for another decision. Do not execute external effects or claim an approval executed anything.',
         tools:[{type:'function',name:'euphoria_render_surface',description:'Present a native choice, form or approval and wait for the human response.',parameters:renderInputSchema}]},submissionKey);
       identifier(session.id);
       db.exec('BEGIN IMMEDIATE');
@@ -175,8 +176,10 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     if(current?.id!==row.id||!(current.required_actions??[]).some(c=>c.type==='function_call'&&c.name==='euphoria_render_surface'&&c.turn_id===row.turn_id&&c.call_id===row.call_id&&argumentFingerprint(c.arguments)===row.call_payload))fail(409,'Pending call changed; nothing was submitted');
     // Assigned once before journalling/sending. Repeated action IDs return the existing receipt, never a new event.
     if(output.userAction)output.userAction.timestamp=new Date().toISOString();
+    const graph=JSON.parse(row.surface).nodes.find(n=>n.id===action.nodeID&&n.kind==='sourceComposition');
+    if(graph)output.euphoria={contractVersion:1,surfaceID:row.surface_id,revision:row.revision,sourceSurfaceID:graph.composition.surfaceId};
     if(db.prepare('SELECT 1 FROM actions WHERE session_id=? AND call_id=?').get(row.id,row.call_id))fail(409,'Decision already submitted');
-    db.prepare('INSERT INTO actions(session_id,action_id,payload,phase,node_id,call_id) VALUES(?,?,?,?,?,?)').run(row.id,action.id,payload,'submitting',action.nodeID,row.call_id);
+    db.prepare('INSERT INTO actions(session_id,action_id,payload,phase,node_id,call_id,result) VALUES(?,?,?,?,?,?,?)').run(row.id,action.id,payload,'submitting',action.nodeID,row.call_id,JSON.stringify(output));
     try{
       await provider.submitToolResult(row.id,{turnID:row.turn_id,callID:row.call_id,name:'euphoria_render_surface',output},
         'action-'+createHash('sha256').update(row.id+'\0'+action.id).digest('hex'),{expectedArguments:JSON.parse(row.call_payload)});

@@ -188,3 +188,8 @@ for(const [status,value] of [[200,{}],[200,null],[200,{session_id:'foreign',call
  const client=new AgentsClient({apiKey:'secret',fetchImpl:async(url,options)=>options.method==='GET'?Response.json({id:'sess_test',required_actions:[pending]}):status===204?new Response(null,{status}):Response.json(value,{status})});
  await assert.rejects(client.submitToolResult('sess_test',{turnID:'turn_test',callID:'call_test',name:'askChoice',output:{choice:'stage'}},'event-key'),e=>e.outcomeUnknown===true&&e.failureStage==='response');
 });
+
+test('render rejection checks exact pending arguments and never sends errors to a mutated call',async()=>{
+ let posts=0;const client=new AgentsClient({apiKey:'offline',fetchImpl:async(url,options)=>{if(options.method==='POST')posts++;return Response.json({id:'sess_test',required_actions:[pending]});}});
+ await assert.rejects(client.rejectToolCall('sess_test',{turnID:'turn_test',callID:'call_test',name:'askChoice',error:'bad'},'reject-key',{expectedArguments:{different:true}}),e=>e.outcomeUnknown===false&&e.failureStage==='pending_lookup');assert.equal(posts,0);
+});

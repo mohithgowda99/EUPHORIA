@@ -1,0 +1,35 @@
+{
+  "contractVersion": "a2ui-graph-result-v2",
+  "toolResult": {
+    "userAction": {
+      "name": "confirm_trip",
+      "surfaceId": "trip",
+      "sourceComponentId": "submit",
+      "timestamp": "2026-10-28T00:00:00.000Z",
+      "context": {
+        "destination": "Kyoto",
+        "notify": true,
+        "source": "native"
+      }
+    },
+    "euphoria": {
+      "contractVersion": 1,
+      "surfaceID": "synthetic-gateway-surface",
+      "revision": 1,
+      "sourceSurfaceID": "trip"
+    }
+  },
+  "nextPartialUpdate": {
+    "expectedRevision": 1,
+    "a2uiGraph": [
+      {
+        "version": "v0.9",
+        "updateDataModel": {
+          "surfaceId": "trip",
+          "path": "/trip/destination",
+          "value": "Kyoto"
+        }
+      }
+    ]
+  }
+}

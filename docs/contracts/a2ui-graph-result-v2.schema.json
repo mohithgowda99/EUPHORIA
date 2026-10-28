@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://euphoria.example/contracts/a2ui-graph-tool-result/v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "userAction",
+    "euphoria"
+  ],
+  "properties": {
+    "userAction": {
+      "$ref": "https://euphoria.example/contracts/a2ui-graph-exchange/v1#/$defs/toolResult/properties/userAction"
+    },
+    "euphoria": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "surfaceID",
+        "revision",
+        "sourceSurfaceID"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": 1
+        },
+        "surfaceID": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sourceSurfaceID": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

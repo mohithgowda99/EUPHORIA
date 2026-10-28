@@ -1,16 +1,22 @@
 # Current verification evidence — 2026-10-28
 
-Latest implementation `1fcb1e7`, following `aeb65d3`, branch `feature/agents-native-visual-contract-spike`. User configured a private server-side key. Bounded real GPT-6 Luna requests executed; no real external effect. Main and OpenBot are untouched. Phase one is incomplete.
+Latest implementation `61566f4`, following `1fcb1e7`, branch `feature/agents-native-visual-contract-spike`. User configured a private server-side key. Bounded real GPT-6 Luna requests executed; no real external effect. Main and OpenBot are untouched. Phase one is incomplete.
 
 | Layer | Executed | Result | Limit |
 |---|---|---|---|
-| Gateway/provider adapter | `node --test gateway/tests/*.test.mjs` | 84 passed, zero failed/skipped | Local HTTP/provider fixtures |
-| Swift core | `swift test --package-path ios/VisualRuntimeCore --scratch-path /private/tmp/euphoria-core-build --disable-sandbox` with temporary module caches | 51 XCTest passed, zero failures | Contracts/state/client on macOS |
-| Native | `EUPHORIA_BUILD_LOG_DIR=/private/tmp/euphoria-workflows-verified EUPHORIA_SIMULATOR_ID=<installed iOS27 UDID> bash ios/scripts/verify-xcode.sh` | Debug/Release + plist checks; 24 XCTest passed, no failures/skips; xcresult Passed | No physical device/signing or actual provider |
+| Gateway/provider adapter | `node --test gateway/tests/*.test.mjs` | 85 passed, zero failed/skipped | Local HTTP/provider fixtures |
+| Swift core | `swift test --package-path ios/VisualRuntimeCore --scratch-path /private/tmp/euphoria-core-build --disable-sandbox` with temporary module caches | 71 XCTest passed, zero failures | Contracts/state/client on macOS |
+| Native | `EUPHORIA_BUILD_LOG_DIR=/private/tmp/euphoria-a2ui-integration-verified EUPHORIA_SIMULATOR_ID=<installed iOS27 UDID> bash ios/scripts/verify-xcode.sh` | Debug/Release + plist checks; 25 XCTest passed, no failures/skips; xcresult Passed | No physical device/signing or actual provider |
 | Shared gallery fixture | Passed gateway schema/semantic validator and Swift fixture test | All nine supported gallery kinds plus HTML; 10 nodes | Fixture validation is not live generation or manual visual QA |
 | Current real-provider/native QA | Gateway-created synthetic Luna session → malformed render refused once → corrected native choice → Staging tap → real completed response → idle/locked/live relaunch restore | One accepted human tool result, one internal refusal; native history showed “You chose Staging.” | Initial request created by HTTP script, not native composer; no external actions |
 | Native-created negative case | Native composer created a second actual Luna session; malformed-render error delivery became uncertain | App eventually showed uncertainty and did not replay | Full native-created journey not accepted; preserve failure and investigate |
 | Prior native trace, base ccc37ca | Request → choice → form → decline → idle; form draft survived terminate/relaunch | Three source-equivalent results once each | Prior milestone evidence, not a fresh expanded-catalog trace |
+
+## Integrated A2UI study
+
+Implementation `61566f4` merges source branch `29e80e0` after offline workflow checkpoint `1fcb1e7`. Eight-component nested native A2UI study is registered in the actual app, using existing canonical values/pending/SwiftData. No second store or event runtime. Incoming compilation, validation and identity issues fixed with regressions and independent review. **85 gateway /71 core /25 iOS XCTest**, Debug/Release/plist pass. Simulator shared text edit, one queued confirmation, locked controls and termination/relaunch restoration verified. Deployment-choice fixture has automated coverage; separate manual trace not run. **No paid API calls/key use.** Live graph gateway admission remains deliberately gated; existing live source-form path and artifact isolation unchanged. Full phase one remains unfinished.
+
+Live graph delivery is not enabled. Exact source protocol parser and real graph tool continuation remain unverified. Native final log: /private/tmp/euphoria-a2ui-integration-native-final.log.
 
 ## Live snapshot milestone
 
@@ -67,7 +73,7 @@ No production identity, streaming, cloud restoration, webhooks/APNs, scheduled w
 
 Terra/medium review resumed after user reported restored capacity. It found an Important Swift/JS Unicode identity mismatch and Minor explicit-null label coercion. Both were verified with failing tests; related null event context was also covered. Native selection equality, uniqueness, membership, toggling and SwiftUI row identity now preserve distinct UTF-16 sequences, including composed/decomposed Unicode options. Scalar string/list and option metadata equality retain exact wire identity. Null label/context are rejected rather than treated as absent.
 
-Fresh checks:52 gateway tests,45 Swift core tests,18 iOS tests passed, Debug/Release/plist passed; native script exited0. Logs `/private/tmp/euphoria-workflows-verified-node.log`, `/private/tmp/euphoria-workflows-verified-core.log`, `/private/tmp/euphoria-workflows-verified-native.log`; native xcresult `/private/tmp/euphoria-workflows-verified/Debug-tests-20261028T123358-38900.xcresult`. RED logs use the same prefix with `red-node`, `red-core` and `null-context-red`. The earlier independent-review-pending statements describe the prior milestone and are superseded by this completed review/fix pass. No second review claimed; no live provider or external execution qualified.
+Fresh checks:52 gateway tests,45 Swift core tests,18 iOS tests passed, Debug/Release/plist passed; native script exited0. Logs `/private/tmp/euphoria-a2ui-integration-verified-node.log`, `/private/tmp/euphoria-a2ui-integration-verified-core.log`, `/private/tmp/euphoria-a2ui-integration-verified-native.log`; native xcresult `/private/tmp/euphoria-a2ui-integration-verified/Debug-tests-20261028T123358-38900.xcresult`. RED logs use the same prefix with `red-node`, `red-core` and `null-context-red`. The earlier independent-review-pending statements describe the prior milestone and are superseded by this completed review/fix pass. No second review claimed; no live provider or external execution qualified.
 
 ## Nested bindings and measured render-recovery blocker
 
@@ -75,7 +81,7 @@ The77 gateway suite includes nested typed defaults/context, subtree/root replace
 
 Real request1: actual gpt-6-luna and secure gateway were used; first malformed mixed native/A2UI payload rejected, provider accepted error feedback and generated a fresh supported call. Native selected the correct restored conversation, Staging tap reached the provider, completed response appeared via stream, and relaunch did not duplicate the accepted result. Real request2: fully native-created but render-error delivery uncertain, same provider call still pending on read-only inspection. This negative case is retained and blocks full acceptance. A clarified canonical example was added for future sessions; do not claim its live reliability is measured.
 
-Local private .env is ignored0600; temporary raw synthetic probes are outside Git. No key, raw provider dump or personal content is committed. Native verification log/xcresult: /private/tmp/euphoria-nested-final-native.log and /private/tmp/euphoria-workflows-verified. API/session IDs remain local.
+Local private .env is ignored0600; temporary raw synthetic probes are outside Git. No key, raw provider dump or personal content is committed. Native verification log/xcresult: /private/tmp/euphoria-nested-final-native.log and /private/tmp/euphoria-a2ui-integration-verified. API/session IDs remain local.
 
 ## Offline native workflows —1fcb1e7
 

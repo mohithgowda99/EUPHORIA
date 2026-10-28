@@ -1,5 +1,11 @@
 # EUPHORIA phase-one handoff
 
+## Latest integrated checkpoint
+
+Implementation `61566f4` merges source branch `29e80e0` after offline workflow checkpoint `1fcb1e7`. Eight-component nested native A2UI study is registered in the actual app, using existing canonical values/pending/SwiftData. No second store or event runtime. Incoming compilation, validation and identity issues fixed with regressions and independent review. **85 gateway /71 core /25 iOS XCTest**, Debug/Release/plist pass. Simulator shared text edit, one queued confirmation, locked controls and termination/relaunch restoration verified. Deployment-choice fixture has automated coverage; separate manual trace not run. **No paid API calls/key use.** Live graph gateway admission remains deliberately gated; existing live source-form path and artifact isolation unchanged. Full phase one remains unfinished.
+
+Earlier milestone sections below retain historical evidence; use docs/NOW.md for the next step.
+
 Updated 2026-10-28. Branch `feature/agents-native-visual-contract-spike`, latest implementation `1fcb1e7`, following `aeb65d3`. Main and OpenBot/CopilotKit are untouched.
 
 Phase one ports OpenDuet functionality to iOS with OpenAI Agents API behind an authenticated gateway. Phase two applies ETERNAL's visual experience. **Phase one remains unfinished.** User approved isolated generated HTML artifacts on 2026-10-28; the shell and standard interface remain native SwiftUI.

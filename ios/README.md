@@ -1,6 +1,8 @@
 # Current native workflow checkpoint
 
-Implementation1fcb1e7 opens a Tasks browser over existing gateway sessions. Search loaded pages, load more, open exact work, New and Resume share the existing detail/model/SwiftData archives. Development fixtures are behind Development tools. Native gate now requires24 XCTest, plus Debug/Release/plist; gateway84/core51. No paid calls/key use in this batch. Full task lifecycle, production accounts and retained actual-provider uncertainty remain open. Current evidence is in docs/NOW.md and docs/agents/TEST_EVIDENCE.md; older milestone notes below are historical.
+Implementation `61566f4` merges source branch `29e80e0` after offline workflow checkpoint `1fcb1e7`. Eight-component nested native A2UI study is registered in the actual app, using existing canonical values/pending/SwiftData. No second store or event runtime. Incoming compilation, validation and identity issues fixed with regressions and independent review. **85 gateway /71 core /25 iOS XCTest**, Debug/Release/plist pass. Simulator shared text edit, one queued confirmation, locked controls and termination/relaunch restoration verified. Deployment-choice fixture has automated coverage; separate manual trace not run. **No paid API calls/key use.** Live graph gateway admission remains deliberately gated; existing live source-form path and artifact isolation unchanged. Full phase one remains unfinished.
+
+Historical checkpoints follow; current next step is in docs/NOW.md.
 
 # Current Agents API native validation
 

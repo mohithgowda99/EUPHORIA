@@ -214,7 +214,14 @@ export function createAuth(
    * a deployment that runs the native app (EXPO_PROJECT_ID, as for push). Elsewhere a sign-in can
    * never be sent there.
    */
-  const nativeApp = Boolean(process.env.EXPO_PROJECT_ID?.trim());
+  // The original Expo app and EUPHORIA's native SwiftUI client both reuse
+  // the EXISTING Better Auth expo() redirect/cookie protocol. Neither a browser
+  // shell nor an Expo client runtime is required on the iPhone. The custom
+  // scheme remains untrusted unless the deployment explicitly opts into it.
+  const nativeApp = Boolean(
+    process.env.EXPO_PROJECT_ID?.trim() ||
+      process.env.EUPHORIA_NATIVE_IOS_AUTH === "1",
+  );
   const plugins = [
     ...(nativeApp ? [expo()] : []),
     /*

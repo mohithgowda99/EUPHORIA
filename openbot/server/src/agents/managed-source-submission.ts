@@ -21,6 +21,15 @@ export async function submitManagedSourceInput(input: {
     >;
     bind(scope: ManagedSourceScope, key: string, sessionID: string): Promise<string>;
   };
+  /** Original Inbox's immutable, source-owned receipt. Never resend a
+   * possibly accepted provider input after a worker crash or lease expiry.
+   */
+  turns: {
+    read(inboxId:string):Promise<{providerSessionId:string}|null>;
+    reserve(inboxId:string, scope:{
+      ownerUserId:string; channelId:string; agentId:string; threadId:string;
+    },sessionID:string):Promise<"reserved"|"existing">;
+  };
   provider: {
     createSession(
       initial: { model: string; instructions: string; tools: []; input: string },
@@ -33,7 +42,22 @@ export async function submitManagedSourceInput(input: {
       !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(input.runId)) {
     throw new Error("Invalid original source delivery request");
   }
+  const originalScope = {
+    ownerUserId: input.scope.ownerUserId, channelId: input.scope.channelId,
+    agentId: input.scope.botId, threadId: input.scope.threadId,
+  };
   const creationKey = "source_create_" + input.runId;
+  // Same original inbox on a second worker must not turn an initial create
+  // into a second provider follow-up. Return ONLY provider-accepted, never done.
+  const previous = await input.turns.read(input.runId);
+  if (previous) {
+    const linked = await input.links.reserve(input.scope, creationKey);
+    if (linked.create || linked.providerSessionId !== previous.providerSessionId)
+      throw new Error("Original Inbox/provider session correlation changed");
+    const result = await input.turns.reserve(input.runId, originalScope, previous.providerSessionId);
+    if (result !== "existing") throw new Error("Original managed receipt unexpectedly disappeared");
+    return {sessionID:previous.providerSessionId,phase:"accepted"};
+  }
   const link = await input.links.reserve(input.scope, creationKey);
   if (link.create) {
     // The reservation precedes the network call. If that call times out,
@@ -48,13 +72,19 @@ export async function submitManagedSourceInput(input: {
       throw new Error("Managed session outcome unknown; reconciliation required");
     }
     await input.links.bind(input.scope, creationKey, session.id);
+    await input.turns.reserve(input.runId, originalScope, session.id);
     return { sessionID: session.id, phase: "accepted" };
   }
   // Each original DeliveryStore inbox row has a distinct immutable runId.
   // The Agents session continues its own context; old Chat history is not
   // repackaged as a competing local context window.
-  await input.provider.sendMessage(
-    link.providerSessionId, input.message, "source_input_" + input.runId,
-  );
+  // Claim before POST. Unknown replies remain blocked, not automatically
+  // replayed. An "existing" receipt means another worker might have sent it.
+  const reserved = await input.turns.reserve(input.runId, originalScope, link.providerSessionId);
+  if (reserved === "reserved") {
+    await input.provider.sendMessage(
+      link.providerSessionId, input.message, "source_input_" + input.runId,
+    );
+  }
   return { sessionID: link.providerSessionId, phase: "accepted" };
 }

@@ -151,12 +151,14 @@ struct SourcePageBlockView: View {
             case "text":
                 Text(block.text ?? "").textSelection(.enabled)
             case "bullets":
-                ForEach(Array((block.items ?? []).enumerated()), id: \.offset) { _, item in
+                ForEach(Array((block.items ?? []).enumerated()), id: \.offset) { entry in
+                    let item = entry.element
                     Label(item.text ?? "", systemImage: "circle.fill")
                 }
             case "list", "metrics", "bars", "timeline":
                 if let title = block.title { Text(title).font(.headline) }
-                ForEach(Array((block.items ?? []).enumerated()), id: \.offset) { _, item in
+                ForEach(Array((block.items ?? []).enumerated()), id: \.offset) { entry in
+                    let item = entry.element
                     VStack(alignment: .leading, spacing: 3) {
                         Text(item.text ?? item.title ?? item.label ?? "Item")
                         if let number = item.value { Text(number).font(.headline) }
@@ -165,7 +167,8 @@ struct SourcePageBlockView: View {
                     }
                 }
             case "checklist":
-                ForEach(Array((block.items ?? []).enumerated()), id: \.offset) { _, item in
+                ForEach(Array((block.items ?? []).enumerated()), id: \.offset) { entry in
+                    let item = entry.element
                     Toggle(item.text ?? "Checklist item", isOn: Binding(
                         get: { item.checked ?? false },
                         set: { value in if let id = item.id { onCheck(id, value) } }
@@ -183,7 +186,8 @@ struct SourcePageBlockView: View {
                 }
             case "decision":
                 Text(block.question ?? "Decision").font(.headline)
-                ForEach(Array((block.options ?? []).enumerated()), id: \.offset) { _, option in
+                ForEach(Array((block.options ?? []).enumerated()), id: \.offset) { entry in
+                    let option = entry.element
                     VStack(alignment: .leading, spacing: 3) {
                         Text(option.title)
                         ForEach(option.pros, id: \.self) { value in Text("+ " + value).font(.caption) }

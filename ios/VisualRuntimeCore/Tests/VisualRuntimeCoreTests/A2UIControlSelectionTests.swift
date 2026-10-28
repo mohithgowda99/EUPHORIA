@@ -11,7 +11,7 @@ final class A2UIControlSelectionTests: XCTestCase {
         XCTAssertEqual(A2UIControlSelection.resolvedChild(
             selected: selectionByComponentID["tabsB"], available: second), "settings")
         XCTAssertEqual(A2UIControlSelection.resolvedChild(
-            selected: selectionByComponentID["tabsA"], available: first.reversed()), "history")
+            selected: selectionByComponentID["tabsA"], available: Array(first.reversed())), "history")
         selectionByComponentID["tabsA"] = "overview"
         XCTAssertEqual(A2UIControlSelection.resolvedChild(
             selected: selectionByComponentID["tabsB"], available: second), "settings")

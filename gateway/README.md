@@ -71,3 +71,7 @@ The user-requested `gateway/.env` is Git-ignored with mode0600. Set OPENAI_API_K
 Nested bindings permit1–8 safe named segments and object data bounded at32 entries/object,128 total/depth8. Root/subtree updates replace previous values. Relative paths, array indexing, escaped/prototype keys, shared aliases and arbitrary functions are unsupported.
 
 Invalid euphoria_render_surface arguments can receive a once-only provider error, journaled before submission. Cap3 corrections per turn/500 actions per session; uncertain error delivery is never retried automatically. Published/refused call identities cannot mutate into a new decision. No accepted human action receipt is fabricated for a refusal. Actual test1 corrected and completed through native selection; test2's error delivery is uncertain, so full acceptance stays open. Official wire semantics: https://developers.openai.com/api/docs/guides/agents-api/tools/functions
+
+## Session discovery and failure certainty
+
+GET/v1/sessions accepts limit1–50 (default50) and after=<owned-session-ID>, returns sessions/hasMore/nextCursor in newest-first order. Lists use last-known journal state and do not call the model. Foreign/unknown cursors fail404. Failure projections contain only kind(not_sent/rejected/uncertain), fixed stage and optional400–599 status. Definite rejection requires a verified submission4xx other than408; unknown metadata remains uncertain. Existing unknown records are not upgraded or resent by this change.

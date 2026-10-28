@@ -1,3 +1,7 @@
+# Current native workflow checkpoint
+
+Implementation1fcb1e7 opens a Tasks browser over existing gateway sessions. Search loaded pages, load more, open exact work, New and Resume share the existing detail/model/SwiftData archives. Development fixtures are behind Development tools. Native gate now requires24 XCTest, plus Debug/Release/plist; gateway84/core51. No paid calls/key use in this batch. Full task lifecycle, production accounts and retained actual-provider uncertainty remain open. Current evidence is in docs/NOW.md and docs/agents/TEST_EVIDENCE.md; older milestone notes below are historical.
+
 # Current Agents API native validation
 
 On `feature/agents-native-visual-contract-spike`, implementation `5e5d6e0` adds foreground live canonical snapshots/reconnection to the Debug gateway session proof. `ios/scripts/verify-xcode.sh` now requires **20 XCTest passes**, Debug/Release builds and built-plist checks. Core suite:49; gateway suite:77. Bounded real Luna choice/continuation and relaunch are verified. A fully native-created request hit uncertain error delivery, so full acceptance remains open. Native local QA confirms automatic choice-to-form plus relaunch restoration; keyboard automation did not establish a full form flow. The sections below describe earlier archived milestones; use `docs/NOW.md` and `docs/agents/TEST_EVIDENCE.md` for current status.

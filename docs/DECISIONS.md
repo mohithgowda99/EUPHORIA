@@ -10,3 +10,6 @@ These record explicit user choices from the project conversation, not proposed a
 - **Source control, 2026-10-28:** push implementation and context to the EUPHORIA repository, then continue the next work. This authorizes feature-branch pushes, not an implicit main merge.
 
 - **Live testing, 2026-10-28:** user selected GPT-6 Luna (`gpt-6-luna`) and requested a local environment file for entering the server-side API key. Do not put the key in app code or Git.
+
+- **API usage,2026-10-28:** user requires using the paid key only when absolutely necessary; default implementation, validation and regression work to offline fixtures.
+- **Integration,2026-10-28:** finish the current workflow batch, then validate and integrate the newer A2UI branch into the working feature branch. No implicit main merge.

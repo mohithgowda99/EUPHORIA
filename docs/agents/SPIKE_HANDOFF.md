@@ -1,8 +1,14 @@
 # EUPHORIA phase-one handoff
 
-Updated 2026-10-28. Branch `feature/agents-native-visual-contract-spike`, latest implementation `5e5d6e0`, following `a81d2cb`. Main and OpenBot/CopilotKit are untouched.
+Updated 2026-10-28. Branch `feature/agents-native-visual-contract-spike`, latest implementation `1fcb1e7`, following `aeb65d3`. Main and OpenBot/CopilotKit are untouched.
 
 Phase one ports OpenDuet functionality to iOS with OpenAI Agents API behind an authenticated gateway. Phase two applies ETERNAL's visual experience. **Phase one remains unfinished.** User approved isolated generated HTML artifacts on 2026-10-28; the shell and standard interface remain native SwiftUI.
+
+## Current offline workflow milestone
+
+Native Tasks browser is the first screen; owned session pagination and existing model/detail/archive are reused. Cached draft/surface loads before failed refresh, roster errors retain pages, pending creation has Resume protection. No source task completion is inferred from idle. Failure certainty is sanitized/persisted conservatively and unknown history is never replayed.84 gateway/51 core/24 native plus Debug/Release/plist pass; local no-inference browser/switch/choice→form QA passed. No paid calls/key use. Historical live failure still open.
+
+Next user request: inspect and validate newer A2UI branch, then integrate into this working feature branch after this checkpoint. Keep canonical operations/store/renderer unified. Main remains untouched. Paid API calls only when absolutely necessary by explicit user instruction.
 
 ## Current nested/live milestone
 

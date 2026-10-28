@@ -54,6 +54,51 @@ test('managed spending limits are bounded before any API request', async () => {
   assert.equal(calls,1);
 });
 
+test('hosted compute is opt-in, small, with network access disabled', async t => {
+  const {client, requests} = await provider(t, (_,res) => json(res,{id:'sess_hosted'}));
+  const reply = await client.createSession({
+    model:'test-model', instructions:'Produce offline results', input:'Create a local summary',
+    environment:{type:'openai_hosted',container_size:'small',network:{access:'disabled'}},
+  }, 'create-hosted-1');
+  assert.equal(reply.id,'sess_hosted');
+  assert.deepEqual(requests[0].body.environment,
+    {type:'openai_hosted',container_size:'small',network:{access:'disabled'}});
+  assert.deepEqual(requests[0].body.agent.tools, []);
+});
+
+test('managed subagent delegation is opt-in, capped, and not a second Bot registry', async t => {
+  const {client,requests} = await provider(t, (_,res)=>json(res,{id:'sess_delegated'}));
+  await client.createSession({model:'test-model',instructions:'Review independent sections',
+    input:'Summarize documents',multiAgent:{enabled:true,max_concurrent_subagents:2}}, 'delegate-1');
+  assert.deepEqual(requests[0].body.agent.multi_agent,{enabled:true,max_concurrent_subagents:2});
+  assert.deepEqual(requests[0].body.environment,{type:'none'});
+});
+
+test('unsafe sandbox or delegation options fail closed without a provider request', async () => {
+  let calls=0;
+  const client=new AgentsClient({apiKey:'test-only-key',
+    fetchImpl:async()=>{calls++;throw Error('unexpected provider call');}});
+  const unsafe = [
+    {environment:{type:'openai_hosted'}},
+    {environment:{type:'openai_hosted',network:{access:'enabled'}}},
+    {environment:{type:'openai_hosted',network:{access:'restricted',allowed_domains:['example.com']}}},
+    {environment:{type:'openai_hosted',network:{access:'disabled'},container_size:'large'}},
+    {environment:{type:'openai_hosted',network:{access:'disabled'},files:[]}},
+    {environment:{type:'self_hosted',workspace_directory:'/workspace'}},
+    {environment:{type:'none',tools:[]}},
+    {multiAgent:{enabled:true,max_concurrent_subagents:12}},
+    {multiAgent:{enabled:true}},
+    {multiAgent:{enabled:false,max_concurrent_subagents:2}},
+    {multiAgent:{enabled:true,max_concurrent_subagents:2,tools:['secret']}},
+  ];
+  for (const options of unsafe) {
+    await assert.rejects(client.createSession({
+      model:'test-model',instructions:'Follow product permissions',input:'Hello',...options,
+    },'stable-1'));
+  }
+  assert.equal(calls,0,'Invalid options must never incur a model call or hosted environment charge');
+});
+
 test('user messages retain exact content and caller submission key', async t => {
   const {client,requests} = await provider(t, (_,res)=>{res.writeHead(202);res.end();});
   await client.sendMessage('sess_test','Keep my text exactly.','message-1');

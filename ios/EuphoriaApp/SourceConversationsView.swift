@@ -142,6 +142,7 @@ struct SourceConversationDetailView: View {
     let client: OpenDuetSourceAPI
     let ownerScope: String
     let conversation: SourceConversation
+    var allowsSending = true
     @State private var selectedBotID = ""
     @State private var messages: [SourceConversationText] = []
     @State private var draft = ""
@@ -203,12 +204,19 @@ struct SourceConversationDetailView: View {
                     }
                 }
             }
-            Section("Message") {
-                TextField("Ask this Bot", text: $draft, axis: .vertical)
-                    .lineLimit(2...7)
-                Button("Send") { Task { await send() } }
-                    .disabled(busy || !pending.isEmpty || selectedBotID.isEmpty ||
-                              draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            if allowsSending {
+                Section("Message") {
+                    TextField("Ask this Bot", text: $draft, axis: .vertical)
+                        .lineLimit(2...7)
+                    Button("Send") { Task { await send() } }
+                        .disabled(busy || !pending.isEmpty || selectedBotID.isEmpty ||
+                                  draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            } else {
+                Section {
+                    Text("Use the Task reply action to continue this work. It preserves the original TaskStore lifecycle and reply semantics.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             if busy { ProgressView("Contacting the original OpenDuet service…") }
         }

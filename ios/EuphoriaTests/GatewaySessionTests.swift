@@ -157,6 +157,52 @@ final class GatewaySessionTests: XCTestCase {
         XCTAssertEqual(model.state?.formFieldValue(nodeID: "brief", fieldID: "team"), "Offline draft")
         XCTAssertNotNil(model.errorMessage)
     }
+    func testTaskArchiveScopeDoesNotOverwriteChatOrOtherTaskConversations() async throws {
+        let suite = "euphoria.tests." + UUID().uuidString
+        let prefs = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { prefs.removePersistentDomain(forName: suite) }
+        let container = try ModelContainer(for: VisualSnapshot.self, ConversationSnapshot.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [SessionTestProtocol.self]
+        let client = GatewayClient(connection: try GatewayConnection(url: "https://gateway.example", token: "test-token"),
+            session: URLSession(configuration: config))
+        let context = ModelContext(container)
+        let chat = GatewaySessionModel(client: client, context: context, storageKey: "user", preferences: prefs)
+        let taskA = GatewaySessionModel(client: client, context: context, storageKey: "user.task_alpha", preferences: prefs)
+        let taskB = GatewaySessionModel(client: client, context: context, storageKey: "user.task_beta", preferences: prefs)
+        SessionTestProtocol.responses.set([
+            ("/v1/sessions", try reply(session: "chat_session", phase: "in_progress")),
+            ("/v1/sessions/chat_session", try reply(session: "chat_session", phase: "in_progress")),
+            ("/v1/sessions", try reply(session: "task_session", phase: "in_progress")),
+            ("/v1/sessions/task_session", try reply(session: "task_session", phase: "in_progress"))
+        ])
+        await chat.start(message: "Hello Chat")
+        await taskA.start(message: "Work in task A")
+        XCTAssertEqual(chat.liveSessionID, "chat_session")
+        XCTAssertEqual(taskA.liveSessionID, "task_session")
+        XCTAssertFalse(taskB.hasSession)
+        let reopenedChat = GatewaySessionModel(client: client, context: context, storageKey: "user", preferences: prefs)
+        let reopenedTask = GatewaySessionModel(client: client, context: context, storageKey: "user.task_alpha", preferences: prefs)
+        XCTAssertEqual(reopenedChat.liveSessionID, "chat_session")
+        XCTAssertEqual(reopenedTask.liveSessionID, "task_session")
+        XCTAssertEqual(SessionTestProtocol.responses.paths.count, 4, "Separating local archives must never replay a provider write")
+    }
+
+    func testTaskCreationIntentSurvivesProcessLikeModelContextReopen() throws {
+        let container = try ModelContainer(for: TaskCreationSnapshot.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let first = ModelContext(container)
+        let intent = TaskCreationSnapshot(scope: "user", requestID: "persist_once",
+            title: "Find information", instruction: "Look up safe information")
+        first.insert(intent)
+        try first.save()
+        let recovered = try ModelContext(container).fetch(FetchDescriptor<TaskCreationSnapshot>())
+        XCTAssertEqual(recovered.count, 1)
+        XCTAssertEqual(recovered.first?.requestID, "persist_once")
+        XCTAssertEqual(recovered.first?.instruction, "Look up safe information")
+    }
+
     private func makeModel() throws -> (GatewaySessionModel, UserDefaults, String, ModelContainer) {
         let suite = "euphoria.tests." + UUID().uuidString
         let prefs = try XCTUnwrap(UserDefaults(suiteName: suite))

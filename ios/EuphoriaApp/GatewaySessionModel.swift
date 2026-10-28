@@ -51,13 +51,18 @@ final class GatewaySessionModel {
         self.prefix = "euphoria.gateway." + storageKey; self.preferences = preferences
         liveSessionID = preferences.string(forKey: prefix + ".session")
     }
-    static func configured(context: ModelContext) throws -> GatewaySessionModel {
+    /// Separate task-chat archives from the person's Chat without changing the
+    /// existing Chat archive key (migration compatibility for installed builds).
+    /// This is local presentation partitioning, not a replacement for server
+    /// ownership, session authorization or original source task relationships.
+    static func configured(context: ModelContext, namespace: String = "chat") throws -> GatewaySessionModel {
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
         guard let url = environment["EUPHORIA_GATEWAY_URL"], let token = environment["EUPHORIA_GATEWAY_TOKEN"] else { throw GatewayClientError.invalidConnection }
         let connection = try GatewayConnection(url: url, token: token, allowLoopback: true)
         let key = SHA256.hash(data: Data((url + "\0" + token).utf8)).map { String(format: "%02x", $0) }.joined()
-        return GatewaySessionModel(client: GatewayClient(connection: connection), context: context, storageKey: key)
+        let scoped = namespace == "chat" ? key : key + "." + namespace
+        return GatewaySessionModel(client: GatewayClient(connection: connection), context: context, storageKey: scoped)
         #else
         throw GatewayClientError.invalidConnection
         #endif

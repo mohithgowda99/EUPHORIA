@@ -1,5 +1,9 @@
 # Current verification evidence — 2026-10-28
 
+## Task service —aa12d31
+
+138 gateway tests pass offline. Local HTTP/disk SQLite cover actual provider-session start, creation ownership/idempotency/uncertainty, canonical needs_input, exact-root saved reply readiness, cancellation, reply-before-turn checkpoint, human resolution/reopen/supersession, bounded history search and owner-scoped paginated decision reports. Existing generic session input routes for tasks reuse same journal. Two alias collisions reproduced then fixed; source explicit resolve of failed work retains failure. Terra/medium review completed; no paid calls, no native edits/build or task UI/provider acceptance claimed. Final:/private/tmp/euphoria-tasks-final.log. Task contract/schema/fixture in docs/contracts/tasks-v1*. Full service/cloud goal remains open.
+
 ## Revision feedback —8888428
 
 124 gateway tests pass offline. Exact success/refusal result is present in SQLite before provider boundary and survives reopen; successful graph metadata drives next authoritative partial update. Invalid initial partial calls receive creation guidance; mutated refusal arguments cannot receive a tool error. Namespaced provider-only metadata preserves exact userAction and legacy outputs. Terra/medium review2 important findings fixed RED→GREEN. No paid calls, native edits or fresh native/Swift suite claim. Final log:/private/tmp/euphoria-feedback-final.log. Full provider/native graph acceptance and broader service/cloud objective stay open.

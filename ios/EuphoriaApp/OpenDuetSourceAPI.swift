@@ -39,6 +39,32 @@ struct SourceUser: Decodable, Sendable {
     let email: String
     let name: String?
 }
+struct SourceMemory: Decodable, Identifiable, Sendable {
+    let id: String
+    let content: String
+    let provenance: String
+    let enabled: Bool
+    let reviewState: String
+    let formedBy: String
+}
+struct SourceMemoriesResponse: Decodable, Sendable { let memories: [SourceMemory] }
+struct SourceMemoryResponse: Decodable, Sendable { let memory: SourceMemory }
+private struct SourceNewMemoryInput: Encodable { let content: String }
+private struct SourceMemoryContentPatch: Encodable { let content: String }
+private struct SourceMemoryEnabledPatch: Encodable { let enabled: Bool }
+private struct SourceMemoryReviewPatch: Encodable { let reviewState: String }
+
+/// One authenticated account boundary for every original OpenDuet product tab.
+enum SavedOpenDuetAccount {
+    static func client() throws -> OpenDuetSourceAPI {
+        guard let raw = UserDefaults.standard.string(forKey: "euphoria.openduet.origin")
+        else { throw SourceAPIError.unauthenticated }
+        let endpoint = try OpenBotEndpoint(raw)
+        guard let cookie = SourceSessionKeychain.load(origin: endpoint.baseURL)
+        else { throw SourceAPIError.unauthenticated }
+        return OpenDuetSourceAPI(endpoint: endpoint, cookie: cookie)
+    }
+}
 struct SourceSignInLaunch: Decodable, Sendable {
     let url: String?
 }
@@ -213,6 +239,60 @@ struct OpenDuetSourceAPI: Sendable {
         let response: SourceBotResponse = try await request(
             "api/agents/" + checkedID(id) + "/duplicate", method: "POST")
         return response.agent
+    }
+
+    /// User-editable memory remains in original OpenDuet MemoryStore, not an
+    /// Agents session's context. Every mutation is authorized by requireUser.
+    func memories() async throws -> [SourceMemory] {
+        let response: SourceMemoriesResponse = try await get("api/memory")
+        guard response.memories.count <= 2000,
+              Set(response.memories.map(\.id)).count == response.memories.count
+        else { throw SourceAPIError.invalidResponse }
+        return response.memories
+    }
+    func remember(_ content: String) async throws -> SourceMemory {
+        let safe = try checkedMemoryContent(content)
+        let response: SourceMemoryResponse = try await request(
+            "api/memory", method: "POST", body: SourceNewMemoryInput(content: safe))
+        return response.memory
+    }
+    func editMemory(id: String, content: String) async throws -> SourceMemory {
+        let safe = try checkedMemoryContent(content)
+        let response: SourceMemoryResponse = try await request(
+            "api/memory/" + checkedMemoryID(id), method: "PATCH",
+            body: SourceMemoryContentPatch(content: safe))
+        guard response.memory.id == id else { throw SourceAPIError.invalidResponse }
+        return response.memory
+    }
+    func setMemoryEnabled(id: String, enabled: Bool) async throws -> SourceMemory {
+        let response: SourceMemoryResponse = try await request(
+            "api/memory/" + checkedMemoryID(id), method: "PATCH",
+            body: SourceMemoryEnabledPatch(enabled: enabled))
+        guard response.memory.id == id else { throw SourceAPIError.invalidResponse }
+        return response.memory
+    }
+    func confirmMemory(id: String) async throws -> SourceMemory {
+        let response: SourceMemoryResponse = try await request(
+            "api/memory/" + checkedMemoryID(id), method: "PATCH",
+            body: SourceMemoryReviewPatch(reviewState: "confirmed"))
+        guard response.memory.id == id else { throw SourceAPIError.invalidResponse }
+        return response.memory
+    }
+    func deleteMemory(id: String) async throws {
+        let _: SourceVoidResponse = try await request("api/memory/" + checkedMemoryID(id), method: "DELETE")
+    }
+    private func checkedMemoryContent(_ content: String) throws -> String {
+        let safe = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (1...6000).contains(safe.count) else { throw SourceAPIError.invalidInput }
+        return safe
+    }
+    private func checkedMemoryID(_ id: String) throws -> String {
+        // Source records can be prefixed "intelligence:"; do not invent new IDs
+        // or strip that provenance when addressing their original route.
+        guard (1...180).contains(id.count),
+              id.range(of: "^[A-Za-z0-9][A-Za-z0-9:_-]{0,179}$", options: .regularExpression) != nil
+        else { throw SourceAPIError.invalidInput }
+        return id
     }
 
     /// Uses the ORIGINAL Better Auth provider initiation, not an EUPHORIA auth server.

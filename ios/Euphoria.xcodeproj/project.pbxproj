@@ -7,6 +7,8 @@
     objects = {
 
 /* Begin PBXBuildFile section */
+        0000000000000000000000EF /* SourceTasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000EE /* SourceTasksView.swift */; };
+        0000000000000000000000F1 /* SourceTaskCreationIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000F0 /* SourceTaskCreationIntent.swift */; };
         0000000000000000000000ED /* SourceOpenDuetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000EC /* SourceOpenDuetTests.swift */; };
         0000000000000000000000E9 /* SourceMessageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000E8 /* SourceMessageIntent.swift */; };
         0000000000000000000000EB /* SourceConversationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000EA /* SourceConversationsView.swift */; };
@@ -60,6 +62,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+        0000000000000000000000EE /* SourceTasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceTasksView.swift; sourceTree = "<group>"; };
+        0000000000000000000000F0 /* SourceTaskCreationIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceTaskCreationIntent.swift; sourceTree = "<group>"; };
         0000000000000000000000EC /* SourceOpenDuetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceOpenDuetTests.swift; sourceTree = "<group>"; };
         0000000000000000000000E8 /* SourceMessageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceMessageIntent.swift; sourceTree = "<group>"; };
         0000000000000000000000EA /* SourceConversationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceConversationsView.swift; sourceTree = "<group>"; };
@@ -132,6 +136,8 @@
                 0000000000000000000000E6 /* SourceApprovalsView.swift */,
                 0000000000000000000000E8 /* SourceMessageIntent.swift */,
                 0000000000000000000000EA /* SourceConversationsView.swift */,
+                0000000000000000000000EE /* SourceTasksView.swift */,
+                0000000000000000000000F0 /* SourceTaskCreationIntent.swift */,
                 000000000000000000000010 /* OpenBotEndpoint.swift */,
                 000000000000000000000024 /* VisualContract.swift */,
                 000000000000000000000025 /* VisualState.swift */,
@@ -258,6 +264,8 @@
                 0000000000000000000000E7 /* SourceApprovalsView.swift in Sources */,
                 0000000000000000000000E9 /* SourceMessageIntent.swift in Sources */,
                 0000000000000000000000EB /* SourceConversationsView.swift in Sources */,
+                0000000000000000000000EF /* SourceTasksView.swift in Sources */,
+                0000000000000000000000F1 /* SourceTaskCreationIntent.swift in Sources */,
                 000000000000000000000016 /* OpenBotEndpoint.swift in Sources */,
                 000000000000000000000030 /* VisualContract.swift in Sources */,
                 000000000000000000000031 /* VisualState.swift in Sources */,

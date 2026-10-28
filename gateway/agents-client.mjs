@@ -55,6 +55,19 @@ export class AgentsClient {
     if (after !== undefined) query.set('after', identifier(after));
     return this.#request('GET', '/' + identifier(sessionID) + '/items?' + query,undefined,undefined,signal);
   }
+  /** Read only the saved items for ONE specific root turn, not the last
+   * 100 messages from an unrelated later turn in this persistent session.
+   * A cursor is supplied verbatim from OpenAI's last_id, not inferred from
+   * the last data element. The caller must read all pages before settling.
+   */
+  async listTurnItems(sessionID,turnID,{after,limit=100,order='asc',signal}={}) {
+    if(!Number.isInteger(limit)||limit<1||limit>100||!['asc','desc'].includes(order))
+      throw Error('Invalid turn items page');
+    const query=new URLSearchParams({order,limit:String(limit)});
+    if(after!==undefined)query.set('after',identifier(after));
+    return this.#request('GET','/'+identifier(sessionID)+'/turns/'+identifier(turnID)+'/items?'+query,
+      undefined,undefined,signal);
+  }
   async listTurns(sessionID,{after,limit=20,order='desc'}={}) {
     if(!Number.isInteger(limit)||limit<1||limit>100||!['asc','desc'].includes(order))throw Error('Invalid turn page');
     const query=new URLSearchParams({order,limit:String(limit)});if(after!==undefined)query.set('after',identifier(after));

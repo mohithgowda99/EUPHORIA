@@ -484,6 +484,13 @@
       "when": 1793205000000,
       "tag": "0068_managed_agent_session_links",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1793206000000,
+      "tag": "0069_managed_inbox_turn_receipt",
+      "breakpoints": true
     }
   ]
 }

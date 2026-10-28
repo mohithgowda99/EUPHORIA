@@ -64,6 +64,72 @@ final class SourceFixtureComparisonTests: XCTestCase {
         XCTAssertNil(engine.model.getSurface(document.surfaceId))
     }
 
+    func testActionSerializationPreservesTheSourceEventWithoutGrantingEffects() throws {
+        let document = try fixture("a2ui-nested-trip-v09.json")
+        let intent = try document.makeEvent(
+            buttonID: "submit", timestamp: "2026-10-28T12:00:00Z",
+            idempotencyKey: "offline-source-event-1")
+        let context = try intent.context.mapValues { value in
+            try JSONDecoder().decode(AnyCodable.self, from: JSONEncoder().encode(value))
+        }
+        let action = A2uiClientAction(
+            name: intent.name, surfaceId: intent.surfaceId,
+            sourceComponentId: intent.sourceComponentId,
+            timestamp: intent.timestamp, context: context)
+        let wire = try JSONEncoder().encode(A2uiClientMessage.action(action))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: wire) as? [String: Any])
+        let publishedAction = try XCTUnwrap(object["action"] as? [String: Any])
+        XCTAssertEqual(object["version"] as? String, "v0.9")
+        XCTAssertEqual(publishedAction["name"] as? String, "confirm_trip")
+        XCTAssertEqual(publishedAction["sourceComponentId"] as? String, "submit")
+        XCTAssertEqual(publishedAction["surfaceId"] as? String, "trip")
+        let receivedContext = try XCTUnwrap(publishedAction["context"] as? [String: Any])
+        XCTAssertEqual(receivedContext["destination"] as? String, "Paris")
+        XCTAssertEqual(receivedContext["notify"] as? Bool, false)
+        // Idempotency ID and revision belong to EUPHORIA's outer action envelope,
+        // never fields secretly appended to the standard A2UI event.
+        XCTAssertNil(publishedAction["idempotencyKey"])
+        XCTAssertNil(publishedAction["expectedRevision"])
+    }
+
+    func testCommunityRendererTemplateExpandsWhileLegacySubsetRejectsIt() throws {
+        // Ported from BBC6BAE9/a2ui-swift's source
+        // Tests/A2UISwiftUITests/SurfaceViewModelTests.swift (reconcile suite).
+        let id = "template"
+        let viewModel = SurfaceViewModel(surface: SurfaceModel(id: id, catalog: basicCatalog))
+        try viewModel.processMessage(.createSurface(
+            CreateSurfacePayload(surfaceId: id, catalogId: basicCatalogId)))
+        try viewModel.processMessage(.updateComponents(UpdateComponentsPayload(
+            surfaceId: id, components: [
+                RawComponent(id: "root", component: "Column", properties: [
+                    "children": .dictionary([
+                        "componentId": .string("row"), "path": .string("/items")
+                    ])
+                ]),
+                RawComponent(id: "row", component: "Text", properties: [
+                    "text": .dictionary(["path": .string("label")])
+                ])
+            ])))
+        XCTAssertEqual(viewModel.componentTree?.children.count, 0)
+        try viewModel.processMessage(.updateDataModel(UpdateDataModelPayload(
+            surfaceId: id, path: "/items", value: .array([
+                .dictionary(["label": .string("one")]),
+                .dictionary(["label": .string("two")])
+            ]))))
+        XCTAssertEqual(viewModel.componentTree?.children.count, 2)
+        try viewModel.processMessage(.updateDataModel(UpdateDataModelPayload(
+            surfaceId: id, path: "/items/2",
+            value: .dictionary(["label": .string("three")]))))
+        XCTAssertEqual(viewModel.componentTree?.children.count, 3)
+        XCTAssertThrowsError(try A2UIDocument(
+            surfaceId: id, catalogId: basicCatalogId,
+            components: [A2UIComponent(id: "root", component: "Column", properties: [
+                "children": .object(["componentId": .string("row"), "path": .string("/items")])
+            ])], dataModel: .object(["items": .array([])])))
+        // Explicit comparative result: EUPHORIA rejects, candidate accepts.
+        // Still requires source WebCore check for reorder/state/event identity.
+    }
+
     func testProtocolVersionIsDecodedAndNotSilentlyDowngraded() throws {
         let data = Data(#"{"version":"v0.9.1","deleteSurface":{"surfaceId":"old"}}"#.utf8)
         let message = try JSONDecoder().decode(A2uiMessage.self, from: data)

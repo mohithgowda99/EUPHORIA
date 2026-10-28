@@ -34,6 +34,7 @@ final class GatewaySessionModel {
     private let repository: VisualSnapshotRepository
     private let conversationRepository: ConversationSnapshotRepository
     private let scope: String
+    var storageScope: String { scope }
     private let preferences: UserDefaults
     private let prefix: String
     private var sessionID: String? {

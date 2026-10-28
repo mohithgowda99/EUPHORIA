@@ -39,6 +39,45 @@ struct SourceUser: Decodable, Sendable {
     let email: String
     let name: String?
 }
+struct SourceRoutine: Decodable, Identifiable, Sendable {
+    let id: String
+    let agentId: String
+    let schedule: String
+    let timezone: String
+    let instruction: String
+    let channel: SourceRoutineChannel
+    let enabled: Bool
+    let nextRunAt: String
+    let lastRun: SourceRoutineOutcome?
+}
+struct SourceRoutineChannel: Decodable, Sendable {
+    let id: String
+    let name: String?
+    let gone: Bool
+}
+struct SourceRoutineOutcome: Decodable, Sendable {
+    let status: String?
+    let at: String?
+}
+struct SourceRoutinesResponse: Decodable, Sendable {
+    let routines: [SourceRoutine]
+    let sweep: SourceRoutineSweep
+}
+struct SourceRoutineSweep: Decodable, Sendable {
+    let lastSweptAt: String?
+    let working: Bool
+}
+struct SourceRoutineRun: Decodable, Identifiable, Sendable {
+    let id: String
+    let status: String
+    let startedAt: String
+    let finishedAt: String?
+    let error: String?
+}
+struct SourceRoutineRunsResponse: Decodable, Sendable { let runs: [SourceRoutineRun] }
+private struct SourceRoutineEnabledInput: Encodable { let enabled: Bool }
+private struct SourceRoutineEnabledResult: Decodable { let enabled: Bool }
+
 struct SourceTask: Decodable, Identifiable, Sendable {
     let id: String
     let botId: String
@@ -378,6 +417,23 @@ struct OpenDuetSourceAPI: Sendable {
         let response: SourceBotResponse = try await request(
             "api/agents/" + checkedID(id) + "/duplicate", method: "POST")
         return response.agent
+    }
+
+    /// Existing OpenDuet routine metadata, run history and pause controls.
+    /// Managed Agents Automations has not been wired yet: do not create a
+    /// competing scheduler or imply that original sweeps are managed dispatch.
+    func sourceRoutines() async throws -> SourceRoutinesResponse {
+        try await get("api/routines")
+    }
+    func sourceRoutineRuns(id: String) async throws -> [SourceRoutineRun] {
+        let page: SourceRoutineRunsResponse = try await get("api/routines/" + checkedID(id) + "/runs")
+        return page.runs
+    }
+    func pauseSourceRoutine(id: String) async throws {
+        let response: SourceRoutineEnabledResult = try await request(
+            "api/routines/" + checkedID(id) + "/enabled", method: "PUT",
+            body: SourceRoutineEnabledInput(enabled: false))
+        guard response.enabled == false else { throw SourceAPIError.invalidResponse }
     }
 
     /// This endpoint uses the ORIGINAL OpenDuet TaskStore/TaskThreads.

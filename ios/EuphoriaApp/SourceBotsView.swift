@@ -294,6 +294,11 @@ private struct SourceBotDetailView: View {
                     LabeledContent("Visibility", value: bot.visibility)
                     if bot.systemOwned { Text("Managed by your OpenDuet deployment").font(.caption) }
                 }
+                Section("Skills and connected tools") {
+                    NavigationLink("Manage this Bot's skills and grants") {
+                        SourceBotPermissionsView(client: client, botID: botID)
+                    }
+                }
                 Section("Manage") {
                     Button(bot.pinned ? "Unpin" : "Pin") { Task { await mutate { try await client.pinBot(id: botID, pinned: !bot.pinned) } } }
                     Button(bot.hidden ? "Show" : "Hide") { Task { await mutate { try await client.hideBot(id: botID, hidden: !bot.hidden) } } }

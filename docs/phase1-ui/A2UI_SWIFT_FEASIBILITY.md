@@ -39,7 +39,7 @@ The isolated, non-shipping `ios/Spikes/A2UIRendererComparison/` package:
 
 ## Tests executed, NOT executed, and commands for Mac
 
-**Executed here:** Linux Swift 6.2.1 `swiftc /tmp/euphoria_a2ui_control_selection.swift /tmp/main.swift` then the test binary, **5 deterministic assertions passed** for selection/reorder/fallback/modal isolation. This validates helper logic, not iOS view compilation or complete XCTest. The committed unit test suite has not been executed. Environment: Linux x86_64, `swift` available, **no Xcode/xcodebuild**, GitHub clone DNS unavailable in container; cannot run community SPM package or simulator. No paid API/provider calls.
+**Executed here:** Linux Swift 6.2.1 `swiftc /tmp/euphoria_a2ui_control_selection.swift /tmp/main.swift` then the test binary, **5 deterministic assertions passed**. In a separate lightweight SwiftPM harness with equivalent committed `A2UIControlSelection.swift` and XCTest source, `swift test -j 2` passed **3 XCTest cases, 0 failures** (selection/reorder/removed child/modal identity). This tests isolated helper semantics, **not the checked-out iOS package or the iOS view**. The full repository's committed XCTest suite has not been executed. Environment: Linux x86_64, `swift` available, **no Xcode/xcodebuild**, GitHub clone DNS unavailable in container; cannot run community SPM package or simulator. No paid API/provider calls.
 
 **Mac to execute in isolated Agent B checkout:**
 

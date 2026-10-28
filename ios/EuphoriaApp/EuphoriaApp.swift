@@ -7,6 +7,6 @@ struct EuphoriaApp: App {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(for: [VisualSnapshot.self, ConversationSnapshot.self, TaskCreationSnapshot.self, SourceMessageIntent.self])
+        .modelContainer(for: [VisualSnapshot.self, ConversationSnapshot.self, TaskCreationSnapshot.self, SourceMessageIntent.self, SourceTaskCreationIntent.self])
     }
 }

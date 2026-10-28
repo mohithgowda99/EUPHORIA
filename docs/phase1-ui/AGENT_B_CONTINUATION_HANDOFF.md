@@ -25,6 +25,8 @@ Phase 1 = reproduce OpenDuet **as-is on iPhone** with native SwiftUI screens and
 - A2UI-Swift `v0.3.5` is MIT-root prerelease, source includes Google Apache-2.0 headers, and pinned release also has `swift-foundation-icu` dependency. Newer exact spike commit drops that transitive ICU dependency. Full dependency license and release readiness is a gate.
 - **P0 product deviation:** current iOS `ContentView` still opens a WorkList of gateway session envelopes labeled Tasks. OpenDuet source home actually opens `ChatScreen`, and Tasks uses actual Task records/questions/reports. Do not claim these native screens source-equivalent until Agent A exposes real contracts and Agent B ports the actual mobile flows.
 
+**Fresh Agent A task service (verify before coding):** At `10617b70d573c812d21d383b7388b9a7bce30eb2`, `docs/contracts/tasks-v1.md` specifies real owner-scoped task APIs (`POST /v1/tasks`, `GET /v1/tasks`, `GET /v1/tasks/:id`, reply/cancel/resolve/reopen/report). Use those task identities in the native OpenDuet Tasks port; do not use session envelopes as fake tasks. The service does not yet include Up Next, Bot assignment, full reports or task-specific push. Previous request for basic task CRUD is now partly resolved, while `ChatScreen` home/channel APIs remain a separate fidelity gate.
+
 ## Next milestone (strict sequence)
 
 1. On Mac, `git fetch origin`; inspect branch/worktree `git status` and preserve all uncommitted changes. Fast-forward or reconcile the remote feature branch without losing Mac edits. Read `AGENTS.md`, `docs/DECISIONS.md`, `docs/NOW.md`; follow Superpowers TDD and code review.

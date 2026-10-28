@@ -1,5 +1,6 @@
 import { pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { agents, channels, users } from "./core";
+import { deliveryInbox } from "./delivery";
 
 /**
  * Provider session identity associated with one original source conversation and
@@ -28,5 +29,27 @@ export const managedAgentSessionLinks = pgTable(
   (table) => [
     primaryKey({ columns: [table.ownerUserId, table.channelId, table.botId] }),
     uniqueIndex("managed_agent_session_links_provider_idx").on(table.providerSessionId),
+  ],
+);
+
+/**
+ * Exact delivery-to-provider root-turn correlation; one immutable receipt
+ * per ORIGINAL delivery inbox row. This is NOT another conversation journal.
+ * Neither an idle session nor a later root turn can impersonate the message.
+ */
+export const managedAgentInboxTurns = pgTable(
+  "managed_agent_inbox_turns",
+  {
+    inboxId: text("inbox_id").primaryKey()
+      .references(() => deliveryInbox.id, { onDelete: "cascade" }),
+    providerSessionId: text("provider_session_id").notNull(),
+    rootTurnId: text("root_turn_id"),
+    createdEventId: text("created_event_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("managed_agent_inbox_turns_root_idx").on(
+      table.providerSessionId, table.rootTurnId),
+    uniqueIndex("managed_agent_inbox_turns_event_idx").on(table.createdEventId),
   ],
 );

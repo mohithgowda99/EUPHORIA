@@ -1,0 +1,12 @@
+{
+  "routine": {
+    "id": "synthetic-routine",
+    "title": "Morning summary",
+    "instruction": "Summarize current work every run",
+    "cron": "*/15 * * * *",
+    "timezone": "UTC",
+    "enabled": true,
+    "revision": 1,
+    "nextRunAt": "2026-10-28T08:15:00.000Z"
+  }
+}

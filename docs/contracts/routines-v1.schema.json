@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://euphoria.example/contracts/routines/v1",
+  "$defs": {
+    "routine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "instruction",
+        "cron",
+        "timezone",
+        "enabled",
+        "revision",
+        "nextRunAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 3500
+        },
+        "cron": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "timezone": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "nextRunAt": {
+          "type": "string"
+        }
+      }
+    },
+    "createRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "instruction",
+        "cron",
+        "timezone",
+        "enabled"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 3500
+        },
+        "cron": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "timezone": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "patchRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expectedRevision"
+      ],
+      "properties": {
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 3500
+        },
+        "cron": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "timezone": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "type": "object",
+  "required": [
+    "routine"
+  ],
+  "properties": {
+    "routine": {
+      "$ref": "#/$defs/routine"
+    }
+  }
+}

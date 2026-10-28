@@ -16,3 +16,9 @@ const server=createGateway({provider:new AgentsClient({apiKey:OPENAI_API_KEY}),m
     timingSafeEqual(expected,hash(req.headers.authorization||''))?'development-owner':null});
 server.listen(Number(process.env.EUPHORIA_PORT||8787),'127.0.0.1',()=>console.log('Development gateway listening on loopback. No production login configured.'));
 for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server.close(()=>process.exit(0)));
+
+// Explicit opt-in only; managed deployment must keep a worker alive independently of any client.
+if(process.env.EUPHORIA_ROUTINES_ENABLED==='1'){
+ let active=false;const sweep=async()=>{if(active)return;active=true;try{await server.sweepRoutines();}catch{console.error('Routine sweep failed; inspect durable run state.');}finally{active=false;}};
+ const timer=setInterval(sweep,60_000);timer.unref();server.on('close',()=>clearInterval(timer));
+}

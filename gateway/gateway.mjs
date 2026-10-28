@@ -1,3 +1,4 @@
+import {routineServices} from './routines.mjs';
 import {taskServices} from './tasks.mjs';
 import {argumentFingerprint} from './provider-arguments.mjs';
 import {liveSnapshots} from './live-snapshots.mjs';
@@ -10,7 +11,7 @@ import {chmodSync} from 'node:fs';
 import {GatewayError,fail,identifier,stable,decisionResult} from './visual-contract.mjs';
 
 /** Single-process gateway. Authentication is mandatory and injected, never inferred from a client owner field. */
-export function createGateway({provider,authenticate,databasePath,model,verificationMode="unverified"}){
+export function createGateway({provider,authenticate,databasePath,model,verificationMode="unverified",clock=()=>Date.now()}){
   if(typeof authenticate!=='function'||!model||!databasePath)throw Error('Gateway configuration required');
   const db=new DatabaseSync(databasePath);
   if(databasePath!==':memory:')chmodSync(databasePath,0o600);
@@ -193,6 +194,8 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     return snapshot(owned(row.id,owner));
   }
   const tasks=taskServices({db,provider,create,refresh,conversation,locked});
+  let closing=false;const background=new Set();
+  const routines=routineServices({db,tasks,locked,clock,shouldStop:()=>closing});
   const live=liveSnapshots({provider,owned,authenticate,
     readProjection:(id,owner,signal)=>locked(id,async()=>{
       const snapshot=await refresh(id,owner,{signal});
@@ -205,7 +208,17 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
       if(typeof owner!=='string'||!owner||owner.length>256)fail(401,'Authentication required');
       const path=new URL(req.url,'http://localhost').pathname;
       let result,status=200;
-      if(path==='/v1/tasks'&&req.method==='POST'){
+      if(path==='/v1/routines'&&req.method==='POST'){
+        [status,result]=await routines.create(owner,await body(req));
+      }else if(path==='/v1/routines'&&req.method==='GET'){
+        result=routines.list(owner);
+      }else if(/^\/v1\/routines\/[A-Za-z0-9_-]+\/runs$/.test(path)&&req.method==='GET'){
+        result=routines.runs(owner,path.split('/')[3],new URL(req.url,'http://localhost'));
+      }else if(/^\/v1\/routines\/[A-Za-z0-9_-]+$/.test(path)&&req.method==='GET'){
+        result=routines.get(owner,path.split('/')[3]);
+      }else if(/^\/v1\/routines\/[A-Za-z0-9_-]+$/.test(path)&&['PATCH','DELETE'].includes(req.method)){
+        result=await routines.change(owner,path.split('/')[3],await body(req),req.method==='DELETE');
+      }else if(path==='/v1/tasks'&&req.method==='POST'){
         [status,result]=await tasks.start(owner,await body(req));
       }else if(path==='/v1/tasks'&&req.method==='GET'){
         result=await tasks.list(owner,new URL(req.url,'http://localhost'));
@@ -284,9 +297,17 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
       res.end(JSON.stringify({error:error instanceof GatewayError?error.message:'Gateway could not complete the request'}));
     }
   });
+  server.sweepRoutines=()=>{if(closing)return Promise.reject(Error('Gateway is closing'));const run=routines.sweep();background.add(run);run.then(()=>background.delete(run),()=>background.delete(run));return run;};
   server.requestTimeout=35_000;server.headersTimeout=10_000;
-  const close=server.close.bind(server);server.close=(...args)=>{live.closeAll();return close(...args);};
-  server.on('close',()=>db.close());
+  const close=server.close.bind(server);let shutdown;
+  server.close=(callback)=>{
+    if(!shutdown){closing=true;live.closeAll();shutdown=new Promise(resolve=>close(async()=>{
+      let timer;await Promise.race([Promise.allSettled([...background]),new Promise(r=>timer=setTimeout(r,120000))]);clearTimeout(timer);
+      // If drain timed out, durable submitting/dispatching intents stay unknown; restart never replays them.
+      db.close();resolve();
+    }));}
+    shutdown.then(()=>callback?.());return server;
+  };
   return server;
 }
 

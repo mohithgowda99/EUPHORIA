@@ -3,6 +3,18 @@ import Foundation
 /// Transcribed from actual OpenDuet component previews, not synthetic agent output.
 /// See: components/gallery/decisions.tsx, form.tsx and cards.tsx; page-view.tsx.
 public enum SourceFixtures {
+    public static func gallerySurface() throws -> VisualSurface {
+        #if SWIFT_PACKAGE
+        let bundle = Bundle.module
+        #else
+        let bundle = Bundle.main
+        #endif
+        guard let url = bundle.url(forResource: "gallery-v2", withExtension: "json") else { throw VisualContractError.invalidSurface }
+        let surface = try JSONDecoder().decode(VisualSurface.self, from: Data(contentsOf: url))
+        try surface.validate()
+        return surface
+    }
+
     public static func surface() throws -> VisualSurface {
         try VisualSurface(surfaceID: "openduet-reference-fixture", revision: 1, nodes: [
             VisualNode(id: "deployment", kind: .askChoice,

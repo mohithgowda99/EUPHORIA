@@ -162,3 +162,78 @@ test('resolve unrecorded action tombstones its ID before allowing another decisi
   assert.equal((await request(path+'/actions',{method:'POST',body:answer(s,'fresh')})).status,202);
   assert.equal(provider.results.length,1);
 });
+
+
+test('follow-up messages and cancellation are owner scoped and durable exactly-once intents',async t=>{
+  const p=sourceProvider();p.messages=[];p.cancelled=[];
+  p.sendMessage=async function(id,text,key){this.messages.push({id,text,key});};
+  p.cancelTurn=async function(id,key){this.cancelled.push({id,key});};
+  const {start,request,reopen}=await setup(t,p);await start();
+  const path='/v1/sessions/sess_test/messages',body={id:'followup-1',message:'Use an earlier time'};
+  assert.equal((await request(path,{user:'bob',method:'POST',body})).status,404);
+  assert.equal((await request(path,{method:'POST',body})).body.phase,'accepted');
+  await reopen();await request(path,{method:'POST',body});assert.equal(p.messages.length,1);
+  assert.equal(p.messages[0].text,'Use an earlier time');
+  assert.equal((await request(path,{method:'POST',body:{...body,message:'Different'}})).status,409);
+  assert.equal((await request('/v1/sessions/sess_test/cancel',{method:'POST',body:{id:'cancel-1'}})).body.phase,'accepted');
+  assert.equal(p.cancelled.length,1);
+  assert.equal((await request('/v1/sessions/sess_test/inputs')).body.operations.length,2);
+});
+
+test('uncertain follow-up survives restart and cancelled absent input blocks late delivery',async t=>{
+  const p=sourceProvider();let writes=0;p.sendMessage=async()=>{writes++;throw Error('lost');};
+  const {start,request,reopen}=await setup(t,p);await start();
+  const path='/v1/sessions/sess_test/messages',body={id:'lost-1',message:'A real follow-up'};
+  assert.equal((await request(path,{method:'POST',body})).body.phase,'uncertain');
+  await reopen();assert.equal((await request(path,{method:'POST',body})).body.phase,'uncertain');
+  assert.equal(writes,1);
+  const recovered=await request('/v1/sessions/sess_test/inputs/reconcile',{method:'POST',body:{ids:['never-delivered','lost-1']}});
+  assert.equal(recovered.body.operations.find(o=>o.id==='never-delivered').phase,'cancelled');
+  assert.equal(recovered.body.operations.find(o=>o.id==='lost-1').phase,'uncertain');
+  assert.equal((await request(path,{method:'POST',body:{id:'never-delivered',message:'Late'}})).body.phase,'cancelled');
+  assert.equal(writes,1);
+});
+
+test('history normalizes messages and tools, preserves unsupported metadata and pagination without leaking arguments',async t=>{
+  const p=sourceProvider();p.listItems=async(id,query)=>{
+    assert.equal(query.limit,10);return {data:[
+      {id:'item_1',type:'message',turn_id:'turn_test',role:'user',status:'completed',content:[{type:'input_text',text:'Hello'}]},
+      {id:'item_2',type:'function_call',turn_id:'turn_test',call_id:'other_call',name:'private_tool',status:'completed',arguments:{secret:'do-not-leak'}},
+      {id:'item_3',type:'future_type',status:'completed',payload:'do-not-leak'}].reverse(),has_more:true,last_id:'item_3'};
+  };
+  const {start,request}=await setup(t,p);await start();
+  assert.equal((await request('/v1/sessions/sess_test/items',{user:'bob'})).status,404);
+  const page=await request('/v1/sessions/sess_test/items?limit=10');
+  assert.equal(page.status,200);assert.equal(page.body.entries[0].text,'Hello');
+  assert.equal(page.body.entries[1].kind,'function_call');assert.equal(page.body.entries[2].kind,'unsupported');
+  assert.equal(page.body.hasMore,true);assert.equal(page.body.nextCursor,'item_3');
+  assert.ok(!JSON.stringify(page.body).includes('do-not-leak'));
+});
+
+test('unavailable history fails distinctly rather than pretending the conversation is empty',async t=>{
+  const p=sourceProvider();p.listItems=async()=>{throw Error('private upstream error');};
+  const {start,request}=await setup(t,p);await start();
+  const result=await request('/v1/sessions/sess_test/items');assert.equal(result.status,502);
+  assert.ok(!JSON.stringify(result.body).includes('private upstream'));
+});
+
+test('read-only gallery and isolated HTML surfaces continue only after a native display receipt',async t=>{
+  const s={...choice(),schemaVersion:2,nodes:[{id:'result',kind:'gallery',title:'Result',gallery:{kind:'table',columns:['Count'],rows:[{cells:[2]}]}},
+    {id:'artifact',kind:'htmlArtifact',title:'Interactive result',html:'<button onclick="this.textContent=\'Done\'">Try</button>'}]};
+  const {start,request,provider}=await setup(t,sourceProvider(s));const snapshot=await start();
+  assert.equal(provider.results.length,0);
+  const result=await request(`/v1/surfaces/${snapshot.surface.surfaceID}/actions`,{method:'POST',body:{
+    id:'display-1',surfaceID:snapshot.surface.surfaceID,expectedRevision:1,nodeID:'result',kind:'displayed',values:{}}});
+  assert.equal(result.status,202);assert.deepEqual(provider.results[0].result.output,{status:'shown'});
+  assert.deepEqual(result.body.resolvedNodeIDs,[],'Read-only widgets must stay usable after display acknowledgment');
+});
+
+
+test('definitive provider rejections are terminal and do not strand future input',async t=>{
+  const p=sourceProvider();let writes=0;p.sendMessage=async()=>{writes++;const e=Error('safe status only');e.outcomeUnknown=false;throw e;};
+  const {start,request}=await setup(t,p);await start();
+  const path='/v1/sessions/sess_test/messages';
+  assert.equal((await request(path,{method:'POST',body:{id:'rejected-1',message:'Try'}})).body.phase,'rejected');
+  await request(path,{method:'POST',body:{id:'rejected-1',message:'Try'}});assert.equal(writes,1);
+  await request(path,{method:'POST',body:{id:'rejected-2',message:'A corrected input'}});assert.equal(writes,2);
+});

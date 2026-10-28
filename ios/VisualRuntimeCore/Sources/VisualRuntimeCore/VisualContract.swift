@@ -2,7 +2,7 @@ import Foundation
 
 /// EUPHORIA native visual contract v1. No executable markup, scripts, URLs or credentials.
 public enum VisualKind: String, Codable, Sendable {
-    case askChoice, askForm, askApproval, showChecklist, pageChecklist
+    case askChoice, askForm, askApproval, showChecklist, pageChecklist, gallery, htmlArtifact
 }
 
 public enum VisualFieldKind: String, Codable, Sendable {
@@ -74,11 +74,13 @@ public struct VisualNode: Codable, Equatable, Sendable, Identifiable {
     public let options: [VisualOption]?
     public let fields: [VisualField]?
     public let items: [VisualChecklistItem]?
+    public let gallery: VisualGallery?
+    public let html: String?
     public init(id: String, kind: VisualKind, title: String, summary: String? = nil,
                 options: [VisualOption]? = nil, fields: [VisualField]? = nil,
-                items: [VisualChecklistItem]? = nil) {
+                items: [VisualChecklistItem]? = nil, gallery: VisualGallery? = nil, html: String? = nil) {
         self.id = id; self.kind = kind; self.title = title; self.summary = summary
-        self.options = options; self.fields = fields; self.items = items
+        self.options = options; self.fields = fields; self.items = items; self.gallery = gallery; self.html = html
     }
 }
 
@@ -104,7 +106,7 @@ public struct VisualSurface: Codable, Equatable, Sendable {
             schemaVersion: c.decode(Int.self, forKey: .schemaVersion))
     }
     public func validate() throws {
-        guard schemaVersion == 1 else { throw VisualContractError.unsupportedVersion }
+        guard [1,2].contains(schemaVersion) else { throw VisualContractError.unsupportedVersion }
         guard !surfaceID.isEmpty, surfaceID.count <= 128, revision >= 0,
               !nodes.isEmpty, nodes.count <= 32 else { throw VisualContractError.invalidSurface }
         var nodeIDs = Set<String>()
@@ -141,6 +143,11 @@ public struct VisualSurface: Codable, Equatable, Sendable {
                       items.allSatisfy({ !$0.id.isEmpty && !$0.text.isEmpty }) else {
                     throw VisualContractError.invalidNode
                 }
+            case .gallery:
+                guard schemaVersion == 2, let gallery = node.gallery else { throw VisualContractError.invalidNode }
+                try gallery.validate()
+            case .htmlArtifact:
+                guard schemaVersion == 2, let html = node.html, !html.isEmpty, html.count <= 64000, html.utf8.count <= 128000 else { throw VisualContractError.invalidNode }
             case .askApproval: break
             }
         }
@@ -148,7 +155,7 @@ public struct VisualSurface: Codable, Equatable, Sendable {
 }
 
 public enum VisualActionKind: String, Codable, Sendable {
-    case setField, submitForm, choose, decide, toggle
+    case setField, submitForm, choose, decide, toggle, displayed
 }
 
 /// Revision is the last *server acknowledged* surface revision, never an optimistic guess.

@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.iOS("27.0")],
     products: [.library(name: "VisualRuntimeCore", targets: ["VisualRuntimeCore"])],
     targets: [
-        .target(name: "VisualRuntimeCore"),
+        .target(name: "VisualRuntimeCore", resources: [.process("Fixtures")]),
         .testTarget(name: "VisualRuntimeCoreTests", dependencies: ["VisualRuntimeCore"]),
     ]
 )

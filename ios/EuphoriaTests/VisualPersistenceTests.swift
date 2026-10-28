@@ -50,6 +50,9 @@ final class VisualPersistenceTests: XCTestCase {
             expectedRevision: original.surface.revision, nodeID: "deployment", kind: .choose,
             values: ["choice": .text("staging"), "label": .text("Staging")]))
 
+        try original.apply(VisualAction(id: "disk-note", surfaceID: original.surface.surfaceID,
+            expectedRevision: original.surface.revision, nodeID: "refund", kind: .setField,
+            values: ["note": .text("Review duplicate charge")]))
         try autoreleasepool {
             let container = try ModelContainer(for: VisualSnapshot.self,
                 configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
@@ -63,6 +66,24 @@ final class VisualPersistenceTests: XCTestCase {
         XCTAssertEqual(restored, original)
         XCTAssertEqual(restored?.values["brief.team"], .text("Saved locally"))
         XCTAssertEqual(restored?.pending.map(\.id), ["disk-choice"])
+        XCTAssertEqual(restored?.approvalNote(nodeID: "refund"), "Review duplicate charge")
+    }
+
+    func testConversationIntentsSurviveDiskReopenAndAreAccountScoped() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("conversation.store")
+        var archive = ConversationArchive(sessionID: "sess_test")
+        try archive.enqueue(GatewayInputIntent(id: "message-1", kind: .message, message: "Keep my follow-up"))
+        try autoreleasepool {
+            let container = try ModelContainer(for: ConversationSnapshot.self, configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+            try ConversationSnapshotRepository(context: ModelContext(container)).save(archive, scope: "account-a")
+        }
+        let reopened = try ModelContainer(for: ConversationSnapshot.self, configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+        let repository = ConversationSnapshotRepository(context: ModelContext(reopened))
+        XCTAssertEqual(try repository.load(scope: "account-a", sessionID: "sess_test")?.operations.first?.message, "Keep my follow-up")
+        XCTAssertNil(try repository.load(scope: "account-b", sessionID: "sess_test"))
     }
 
 }

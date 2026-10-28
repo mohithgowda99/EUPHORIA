@@ -31,6 +31,18 @@ export class AgentsClient {
     }]}, submissionKey);
   }
 
+  async listItems(sessionID, {after, limit = 10, order = 'asc'} = {}) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid item limit');
+    if (!['asc','desc'].includes(order)) throw new Error('Invalid item order');
+    const query = new URLSearchParams({order, limit: String(limit)});
+    if (after !== undefined) query.set('after', identifier(after));
+    return this.#request('GET', '/' + identifier(sessionID) + '/items?' + query);
+  }
+  async cancelTurn(sessionID, submissionKey) {
+    return this.#request('POST', '/' + identifier(sessionID) + '/events',
+      {events: [{type: 'agent.session.input.cancel'}]}, submissionKey);
+  }
+
   /** A pending action, not a history item, authorizes this provider-level result. */
   async submitToolResult(sessionID, {turnID, callID, name, output}, submissionKey) {
     identifier(turnID); identifier(callID); key(submissionKey);

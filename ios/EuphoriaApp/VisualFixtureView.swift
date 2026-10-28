@@ -3,6 +3,7 @@ import SwiftData
 
 /// Native-only source fixture viewer. No simulated model, server, or approval execution.
 struct VisualFixtureView: View {
+    var gallery = false
     @Environment(\.modelContext) private var modelContext
     @State private var state: VisualState?
     @State private var errorMessage: String?
@@ -47,7 +48,7 @@ struct VisualFixtureView: View {
 
     private func loadSnapshot() {
         do {
-            let fixture = try SourceFixtures.surface()
+            let fixture = try gallery ? SourceFixtures.gallerySurface() : SourceFixtures.surface()
             let repo = VisualSnapshotRepository(context: modelContext)
             let restored = try repo.load(surfaceID: fixture.surfaceID)
             let loaded = restored ?? VisualState(surface: fixture)

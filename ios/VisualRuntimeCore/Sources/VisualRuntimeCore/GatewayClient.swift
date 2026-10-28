@@ -28,17 +28,21 @@ public struct GatewayConnection: Sendable {
 public struct GatewayEnvelope: Decodable, Sendable {
     public let sessionID: String?
     public let phase: String
+    public let title: String?
     public let surface: VisualSurface?
     public let acknowledgedActionIDs: Set<String>
     public let rejectedActionIDs: Set<String>
     public let verificationMode: String
+    public let displayAcknowledged: Bool
     public let resolvedNodeIDs: Set<String>
-    private enum CodingKeys: String, CodingKey { case sessionID, phase, surface, acknowledgedActionIDs, resolvedNodeIDs, rejectedActionIDs, verificationMode }
+    private enum CodingKeys: String, CodingKey { case sessionID, phase, title, surface, acknowledgedActionIDs, resolvedNodeIDs, rejectedActionIDs, verificationMode, displayAcknowledged }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         sessionID = try c.decodeIfPresent(String.self, forKey: .sessionID)
         phase = try c.decode(String.self, forKey: .phase)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
         verificationMode = try c.decodeIfPresent(String.self, forKey: .verificationMode) ?? "unverified"
+        displayAcknowledged = try c.decodeIfPresent(Bool.self, forKey: .displayAcknowledged) ?? false
         rejectedActionIDs = try c.decodeIfPresent(Set<String>.self, forKey: .rejectedActionIDs) ?? []
         surface = try c.decodeIfPresent(VisualSurface.self, forKey: .surface)
         acknowledgedActionIDs = try c.decode(Set<String>.self, forKey: .acknowledgedActionIDs)
@@ -65,6 +69,27 @@ public struct GatewayClient: Sendable {
     public func recover(requestID: String) async throws -> GatewayEnvelope {
         try await request("v1/requests/" + validatedID(requestID))
     }
+    public func listSessions() async throws -> GatewaySessionList { try await request("v1/sessions") }
+    public func sendMessage(sessionID: String, message: String, id: String) async throws -> GatewayInputReceipt {
+        struct Input: Encodable { let id: String; let message: String }
+        return try await request("v1/sessions/" + validatedID(sessionID) + "/messages", method: "POST",
+            data: JSONEncoder().encode(Input(id: id, message: message)))
+    }
+    public func cancel(sessionID: String, id: String) async throws -> GatewayInputReceipt {
+        struct Input: Encodable { let id: String }
+        return try await request("v1/sessions/" + validatedID(sessionID) + "/cancel", method: "POST", data: JSONEncoder().encode(Input(id: id)))
+    }
+    public func history(sessionID: String, after: String? = nil) async throws -> GatewayHistoryPage {
+        var path = "v1/sessions/" + (try validatedID(sessionID)) + "/items?limit=10"
+        if let after { path += "&after=" + (try validatedID(after)) }
+        return try await request(path)
+    }
+    public func inputReceipts(sessionID: String, resolving ids: [String]? = nil) async throws -> GatewayInputReceipts {
+        struct Input: Encodable { let ids: [String] }
+        let path = "v1/sessions/" + (try validatedID(sessionID)) + "/inputs"
+        if let ids { return try await request(path + "/reconcile", method: "POST", data: JSONEncoder().encode(Input(ids: ids))) }
+        return try await request(path)
+    }
     public func cancelCreation(requestID: String) async throws -> GatewayEnvelope {
         try await request("v1/requests/" + validatedID(requestID), method: "DELETE")
     }
@@ -80,8 +105,11 @@ public struct GatewayClient: Sendable {
         guard id.range(of: "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", options: .regularExpression) != nil else { throw GatewayClientError.invalidConnection }
         return id
     }
-    private func request(_ path: String, method: String = "GET", data: Data? = nil) async throws -> GatewayEnvelope {
-        var req = URLRequest(url: connection.url.appendingPathComponent(path), timeoutInterval: 35)
+    private func request<T: Decodable>(_ path: String, method: String = "GET", data: Data? = nil) async throws -> T {
+        let parts = path.split(separator: "?", maxSplits: 1).map(String.init)
+        var url = URLComponents(url: connection.url.appendingPathComponent(parts[0]), resolvingAgainstBaseURL: false)!
+        if parts.count == 2 { url.percentEncodedQuery = parts[1] }
+        var req = URLRequest(url: url.url!, timeoutInterval: 35)
         req.httpMethod = method; req.httpBody = data
         req.setValue("Bearer " + connection.token, forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -91,7 +119,7 @@ public struct GatewayClient: Sendable {
         guard let response = result.1 as? HTTPURLResponse else { throw GatewayClientError.invalidResponse }
         guard (200..<300).contains(response.statusCode) else { throw GatewayClientError.httpStatus(response.statusCode) }
         guard result.0.count <= 1_048_576 else { throw GatewayClientError.invalidResponse }
-        do { return try JSONDecoder().decode(GatewayEnvelope.self, from: result.0) }
+        do { return try JSONDecoder().decode(T.self, from: result.0) }
         catch { throw GatewayClientError.invalidResponse }
     }
 }

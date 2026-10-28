@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 2,
+  "surfaceID": "source-gallery-reference-v2",
+  "revision": 1,
+  "nodes": [
+    {
+      "id": "record",
+      "kind": "gallery",
+      "title": "QA record",
+      "gallery": {
+        "kind": "record",
+        "fields": [
+          {
+            "label": "Environment",
+            "value": "Local fixture"
+          }
+        ],
+        "status": "Preview"
+      }
+    },
+    {
+      "id": "metrics",
+      "kind": "gallery",
+      "title": "QA metrics",
+      "gallery": {
+        "kind": "metrics",
+        "metrics": [
+          {
+            "label": "Completed",
+            "value": "12",
+            "change": "+3",
+            "changeTone": "positive"
+          },
+          {
+            "label": "Pending",
+            "value": "2"
+          }
+        ]
+      }
+    },
+    {
+      "id": "notice",
+      "kind": "gallery",
+      "title": "QA notice",
+      "gallery": {
+        "kind": "notice",
+        "body": "Source-derived gallery test data. No live task is running.",
+        "bullets": [
+          "Native controls",
+          "Saved visual contract"
+        ],
+        "tone": "neutral"
+      }
+    },
+    {
+      "id": "table",
+      "kind": "gallery",
+      "title": "QA table",
+      "gallery": {
+        "kind": "table",
+        "columns": [
+          "Task",
+          "Count"
+        ],
+        "rows": [
+          {
+            "cells": [
+              "Alpha",
+              12
+            ]
+          },
+          {
+            "cells": [
+              "Beta",
+              2
+            ]
+          },
+          {
+            "cells": [
+              "Gamma",
+              8
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "bar",
+      "kind": "gallery",
+      "title": "QA bar",
+      "gallery": {
+        "kind": "bar",
+        "points": [
+          {
+            "label": "Mon",
+            "value": 3
+          },
+          {
+            "label": "Tue",
+            "value": -1
+          },
+          {
+            "label": "Wed",
+            "value": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "pie",
+      "kind": "gallery",
+      "title": "QA pie",
+      "gallery": {
+        "kind": "pie",
+        "points": [
+          {
+            "label": "Complete",
+            "value": 7
+          },
+          {
+            "label": "Remaining",
+            "value": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "line",
+      "kind": "gallery",
+      "title": "QA line",
+      "gallery": {
+        "kind": "line",
+        "labels": [
+          "Mon",
+          "Tue",
+          "Wed"
+        ],
+        "series": [
+          {
+            "name": "Sample",
+            "values": [
+              3,
+              1,
+              5
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "area",
+      "kind": "gallery",
+      "title": "QA area",
+      "gallery": {
+        "kind": "area",
+        "labels": [
+          "Mon",
+          "Tue",
+          "Wed"
+        ],
+        "series": [
+          {
+            "name": "Sample",
+            "values": [
+              3,
+              1,
+              5
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "progress",
+      "kind": "gallery",
+      "title": "QA progress",
+      "gallery": {
+        "kind": "progress",
+        "points": [
+          {
+            "label": "Review",
+            "value": 3,
+            "target": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "html",
+      "kind": "htmlArtifact",
+      "title": "QA isolated interactive artifact",
+      "html": "<style>body{font:18px system-ui;padding:24px;color:#222}button{font:inherit;padding:16px;border-radius:16px}</style><h2>Local counter</h2><p>No network or native access.</p><button id=\"counter\" onclick=\"this.textContent='Count: '+(++window.count)\">Count: 0</button><script>window.count=0</script>"
+    }
+  ]
+}

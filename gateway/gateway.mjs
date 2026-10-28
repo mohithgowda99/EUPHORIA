@@ -1,3 +1,4 @@
+import {conversations} from './conversations.mjs';
 import {createServer} from 'node:http';
 import {DatabaseSync} from 'node:sqlite';
 import {createHash,randomUUID} from 'node:crypto';
@@ -18,6 +19,7 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     UPDATE creations SET phase='uncertain' WHERE phase='creating';
     UPDATE actions SET phase='uncertain' WHERE phase='submitting';`);
   if(!db.prepare('PRAGMA table_info(sessions)').all().some(c=>c.name==='active')) db.exec('ALTER TABLE sessions ADD COLUMN active INTEGER NOT NULL DEFAULT 0');
+  if(!db.prepare('PRAGMA table_info(sessions)').all().some(c=>c.name==='title'))db.exec('ALTER TABLE sessions ADD COLUMN title TEXT');
   const locks=new Map();
   async function locked(id,fn){
     const prior=locks.get(id)||Promise.resolve();let release;
@@ -28,15 +30,17 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     const row=db.prepare('SELECT * FROM sessions WHERE id=? AND owner=?').get(id,owner);
     if(!row)fail(404,'Session not found');return row;
   };
+  const conversation=conversations({db,provider,owned});
   function snapshot(row){
     const actions=db.prepare('SELECT * FROM actions WHERE session_id=? ORDER BY rowid').all(row.id);
     let phase=row.active?'waiting':row.provider_phase||'unknown';
     if(row.active&&actions.some(a=>a.call_id===row.call_id&&a.phase==='accepted'))phase='accepted';
     if(actions.some(a=>['uncertain','submitting'].includes(a.phase)))phase='uncertain';
-    return {sessionID:row.id,phase,verificationMode,surface:row.surface?JSON.parse(row.surface):null,
+    return {sessionID:row.id,title:row.title,phase,verificationMode,surface:row.surface?JSON.parse(row.surface):null,
       acknowledgedActionIDs:actions.filter(a=>a.phase==='accepted').map(a=>a.action_id),
       rejectedActionIDs:actions.filter(a=>a.phase==='cancelled').map(a=>a.action_id),
-      resolvedNodeIDs:row.active?actions.filter(a=>a.call_id===row.call_id&&a.phase==='accepted').map(a=>a.node_id):
+      displayAcknowledged:!row.active||actions.some(a=>a.call_id===row.call_id&&a.phase==='accepted'),
+      resolvedNodeIDs:row.active?actions.filter(a=>a.call_id===row.call_id&&a.phase==='accepted'&&JSON.parse(row.surface).nodes.some(n=>n.id===a.node_id&&['askChoice','askForm','askApproval'].includes(n.kind))).map(a=>a.node_id):
         (row.surface?JSON.parse(row.surface).nodes.filter(n=>['askChoice','askForm','askApproval'].includes(n.kind)).map(n=>n.id):[])};
   }
   async function refresh(id,owner){
@@ -59,7 +63,9 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
       }
     }
     db.prepare('UPDATE sessions SET provider_phase=?,active=? WHERE id=?').run(typeof current.status==='string'?current.status:'unknown',calls.length?1:0,id);
-    row=owned(id,owner);return snapshot(row);
+    row=owned(id,owner);
+    if(row.surface)db.prepare('INSERT OR IGNORE INTO surface_versions VALUES(?,?,?,?,?)').run(row.id,row.revision,row.surface,row.turn_id,row.call_id);
+    return snapshot(row);
   }
   async function body(req){
     let size=0,chunks=[];
@@ -81,12 +87,12 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     let session;
     try{
       session=await provider.createSession({model,input:input.message,
-        instructions:'Use euphoria_render_surface to present exactly one askChoice, askForm, or askApproval decision with optional showChecklist context. Follow its native JSON schema. Supply a temporary surfaceID and revision 0; the gateway assigns authoritative identity and revisions. After the human answers, continue the task and use a fresh tool call for another decision. Do not execute external effects or claim an approval executed anything.',
+        instructions:'Use euphoria_render_surface to present native gallery results, isolated htmlArtifact content, or one askChoice/askForm/askApproval decision. Use schemaVersion2 for gallery/htmlArtifact nodes. Do not invent a question when showing a result; display-only surfaces receive a native display receipt. Generated HTML has no external network, file, form submission, media permission or native tool authority. Follow its native JSON schema. Supply a temporary surfaceID and revision 0; the gateway assigns authoritative identity and revisions. After the human answers, continue the task and use a fresh tool call for another decision. Do not execute external effects or claim an approval executed anything.',
         tools:[{type:'function',name:'euphoria_render_surface',description:'Present a native choice, form or approval and wait for the human response.',parameters:surfaceSchema}]},submissionKey);
       identifier(session.id);
       db.exec('BEGIN IMMEDIATE');
       try{
-        db.prepare('INSERT INTO sessions(id,owner,surface_id,provider_phase) VALUES(?,?,?,?)').run(session.id,owner,randomUUID(),'in_progress');
+        db.prepare('INSERT INTO sessions(id,owner,surface_id,provider_phase,title) VALUES(?,?,?,?,?)').run(session.id,owner,randomUUID(),'in_progress',input.message.slice(0,120));
         db.prepare("UPDATE creations SET phase='accepted',session_id=? WHERE owner=? AND request_id=?").run(session.id,owner,input.id);
         db.exec('COMMIT');
       }catch(error){db.exec('ROLLBACK');throw error;}
@@ -131,6 +137,18 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
         result={sessions:db.prepare('SELECT * FROM sessions WHERE owner=? ORDER BY rowid DESC LIMIT 50').all(owner).map(snapshot)};
       }else if(/^\/v1\/sessions\/[A-Za-z0-9_-]+$/.test(path)&&req.method==='GET'){
         const id=path.split('/')[3];result=await locked(id,()=>refresh(id,owner));
+      }else if(/^\/v1\/sessions\/[A-Za-z0-9_-]+\/(messages|cancel)$/.test(path)&&req.method==='POST'){
+        const id=path.split('/')[3];owned(id,owner);const input=await body(req);
+        result=await locked(id,()=>conversation.submit(id,owner,path.endsWith('/messages')?'message':'cancel',input));status=202;
+      }else if(/^\/v1\/sessions\/[A-Za-z0-9_-]+\/inputs$/.test(path)&&req.method==='GET'){
+        result=conversation.receipts(path.split('/')[3],owner);
+      }else if(/^\/v1\/sessions\/[A-Za-z0-9_-]+\/inputs\/reconcile$/.test(path)&&req.method==='POST'){
+        const id=path.split('/')[3];owned(id,owner);const input=await body(req);
+        result=await locked(id,()=>conversation.resolve(id,owner,input));
+      }else if(/^\/v1\/sessions\/[A-Za-z0-9_-]+\/items$/.test(path)&&req.method==='GET'){
+        const url=new URL(req.url,'http://localhost');
+        result=await conversation.history(path.split('/')[3],owner,{after:url.searchParams.get('after')??undefined,
+          limit:url.searchParams.has('limit')?Number(url.searchParams.get('limit')):10});
       }else if(/^\/v1\/requests\/[A-Za-z0-9_-]+$/.test(path)&&req.method==='DELETE'){
         const requestID=identifier(path.split('/')[3]);
         result=await locked('create:'+owner,async()=>{

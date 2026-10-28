@@ -22,6 +22,14 @@
         000000000000000000000052 /* GatewaySessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000042 /* GatewaySessionModel.swift */; };
         000000000000000000000053 /* GatewaySessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000043 /* GatewaySessionView.swift */; };
         000000000000000000000054 /* GatewaySessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000044 /* GatewaySessionTests.swift */; };
+        000000000000000000000070 /* ConversationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000060 /* ConversationState.swift */; };
+        000000000000000000000071 /* ConversationHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000061 /* ConversationHistoryView.swift */; };
+        000000000000000000000074 /* ArtifactIsolationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000064 /* ArtifactIsolationTests.swift */; };
+        000000000000000000000075 /* VisualGallery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000065 /* VisualGallery.swift */; };
+        000000000000000000000076 /* ArtifactPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000066 /* ArtifactPolicy.swift */; };
+        000000000000000000000077 /* VisualGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000067 /* VisualGalleryView.swift */; };
+        000000000000000000000078 /* GeneratedArtifactView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000068 /* GeneratedArtifactView.swift */; };
+        000000000000000000000090 /* gallery-v2.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000080; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -52,6 +60,14 @@
         000000000000000000000042 /* GatewaySessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GatewaySessionModel.swift"; sourceTree = "<group>"; };
         000000000000000000000043 /* GatewaySessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GatewaySessionView.swift"; sourceTree = "<group>"; };
         000000000000000000000044 /* GatewaySessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GatewaySessionTests.swift"; sourceTree = "<group>"; };
+        000000000000000000000060 /* ConversationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/ConversationState.swift"; sourceTree = "<group>"; };
+        000000000000000000000061 /* ConversationHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConversationHistoryView.swift"; sourceTree = "<group>"; };
+        000000000000000000000064 /* ArtifactIsolationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArtifactIsolationTests.swift"; sourceTree = "<group>"; };
+        000000000000000000000065 /* VisualGallery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/VisualGallery.swift"; sourceTree = "<group>"; };
+        000000000000000000000066 /* ArtifactPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/ArtifactPolicy.swift"; sourceTree = "<group>"; };
+        000000000000000000000067 /* VisualGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VisualGalleryView.swift"; sourceTree = "<group>"; };
+        000000000000000000000068 /* GeneratedArtifactView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GeneratedArtifactView.swift"; sourceTree = "<group>"; };
+        000000000000000000000080 /* gallery-v2.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/Fixtures/gallery-v2.json"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -83,6 +99,13 @@
                 000000000000000000000041 /* VisualNodesView.swift */,
                 000000000000000000000042 /* GatewaySessionModel.swift */,
                 000000000000000000000043 /* GatewaySessionView.swift */,
+                000000000000000000000060 /* ConversationState.swift */,
+                000000000000000000000061 /* ConversationHistoryView.swift */,
+                000000000000000000000065 /* VisualGallery.swift */,
+                000000000000000000000066 /* ArtifactPolicy.swift */,
+                000000000000000000000067 /* VisualGalleryView.swift */,
+                000000000000000000000068 /* GeneratedArtifactView.swift */,
+                000000000000000000000080 /* gallery-v2.json */,
                 000000000000000000000028 /* VisualSnapshot.swift */,
             );
             path = EuphoriaApp;
@@ -90,7 +113,7 @@
         };
         000000000000000000000004 /* EuphoriaTests */ = {
             isa = PBXGroup;
-            children = (000000000000000000000044 /* GatewaySessionTests.swift */, 000000000000000000000011 /* OpenBotEndpointTests.swift */, 000000000000000000000029 /* VisualPersistenceTests.swift */);
+            children = (000000000000000000000064 /* ArtifactIsolationTests.swift */, 000000000000000000000044 /* GatewaySessionTests.swift */, 000000000000000000000011 /* OpenBotEndpointTests.swift */, 000000000000000000000029 /* VisualPersistenceTests.swift */);
             path = EuphoriaTests;
             sourceTree = "<group>";
         };
@@ -166,7 +189,7 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-        00000000000000000000000A /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        00000000000000000000000A /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000090 /* gallery-v2.json in Resources */); runOnlyForDeploymentPostprocessing = 0; };
         00000000000000000000000D /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
@@ -186,6 +209,12 @@
                 000000000000000000000051 /* VisualNodesView.swift in Sources */,
                 000000000000000000000052 /* GatewaySessionModel.swift in Sources */,
                 000000000000000000000053 /* GatewaySessionView.swift in Sources */,
+                000000000000000000000070 /* ConversationState.swift in Sources */,
+                000000000000000000000071 /* ConversationHistoryView.swift in Sources */,
+                000000000000000000000075 /* VisualGallery.swift in Sources */,
+                000000000000000000000076 /* ArtifactPolicy.swift in Sources */,
+                000000000000000000000077 /* VisualGalleryView.swift in Sources */,
+                000000000000000000000078 /* GeneratedArtifactView.swift in Sources */,
                 000000000000000000000034 /* VisualSnapshot.swift in Sources */,
             );
             runOnlyForDeploymentPostprocessing = 0;
@@ -193,7 +222,7 @@
         00000000000000000000000B /* Sources */ = {
             isa = PBXSourcesBuildPhase;
             buildActionMask = 2147483647;
-            files = (000000000000000000000054 /* GatewaySessionTests.swift in Sources */, 000000000000000000000017 /* OpenBotEndpointTests.swift in Sources */, 000000000000000000000035 /* VisualPersistenceTests.swift in Sources */);
+            files = (000000000000000000000074 /* ArtifactIsolationTests.swift in Sources */, 000000000000000000000054 /* GatewaySessionTests.swift in Sources */, 000000000000000000000017 /* OpenBotEndpointTests.swift in Sources */, 000000000000000000000035 /* VisualPersistenceTests.swift in Sources */);
             runOnlyForDeploymentPostprocessing = 0;
         };
 /* End PBXSourcesBuildPhase section */

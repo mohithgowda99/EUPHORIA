@@ -13,6 +13,7 @@ struct ContentView: View {
                 #if DEBUG
                 Section("Visual contract proof") {
                     NavigationLink("Open gateway session") { GatewaySessionView() }
+                    NavigationLink("Open gallery and artifact fixtures") { VisualFixtureView(gallery: true) }
                     NavigationLink("Open source-derived UI fixtures") {
                         VisualFixtureView()
                     }

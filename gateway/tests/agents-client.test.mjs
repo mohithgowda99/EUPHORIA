@@ -18,7 +18,7 @@ async function provider(t, handler) {
   t.after(() => new Promise(resolve => server.close(resolve)));
   const origin = `http://127.0.0.1:${server.address().port}`;
   const client = new AgentsClient({apiKey: 'test-only-key', fetchImpl: (url, options) => {
-    const path = new URL(url).pathname;
+    const path = new URL(url).pathname + new URL(url).search;
     return fetch(origin + path, options);
   }});
   return {client, requests};
@@ -119,4 +119,13 @@ test('error-body cleanup cannot leak a provider exception or lose write uncertai
   })});
   await assert.rejects(client.sendMessage('sess_test','hi','message-503'),error=>
     error.message==='Agents API request failed (503)' && error.status===503 && error.outcomeUnknown===true);
+});
+
+test('saved items retain pagination and cancellation uses the documented event',async t=>{
+  const {client,requests}=await provider(t,(_,res)=>json(res,{data:[],has_more:false,last_id:null}));
+  await client.listItems('sess_test',{after:'item_before',limit:10});
+  assert.equal(requests[0].path,'/v1/agents/sessions/sess_test/items?order=asc&limit=10&after=item_before');
+  await client.cancelTurn('sess_test','cancel-1');
+  assert.deepEqual(requests[1].body,{events:[{type:'agent.session.input.cancel'}]});
+  assert.equal(requests[1].headers['idempotency-key'],'cancel-1');
 });

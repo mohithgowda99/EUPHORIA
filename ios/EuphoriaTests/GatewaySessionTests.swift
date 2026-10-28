@@ -51,11 +51,25 @@ final class GatewaySessionTests: XCTestCase {
         XCTAssertEqual(SessionTestProtocol.responses.paths.count, 4)
         XCTAssertEqual(model.phase, "in_progress")
     }
+    func testNewConversationClearsPreviousConnectionAndHistoryErrors() async throws {
+        let (model, preferences, key, container) = try makeModel()
+        _ = container
+        defer { preferences.removePersistentDomain(forName: key) }
+        SessionTestProtocol.responses.set([])
+        await model.restore(); await model.loadHistory()
+        XCTAssertNotNil(model.errorMessage)
+        XCTAssertNotNil(model.historyError)
+        model.newConversation()
+        XCTAssertNil(model.errorMessage)
+        XCTAssertNil(model.historyError)
+        XCTAssertNil(model.conversation)
+        XCTAssertFalse(model.hasSession)
+    }
     private func makeModel() throws -> (GatewaySessionModel, UserDefaults, String, ModelContainer) {
         let suite = "euphoria.tests." + UUID().uuidString
         let prefs = try XCTUnwrap(UserDefaults(suiteName: suite))
         prefs.set("sess_old", forKey: "euphoria.gateway.test.session")
-        let container = try ModelContainer(for: VisualSnapshot.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let container = try ModelContainer(for: VisualSnapshot.self, ConversationSnapshot.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [SessionTestProtocol.self]
         let client = GatewayClient(connection: try GatewayConnection(url: "https://gateway.example", token: "test-token"),
             session: URLSession(configuration: config))

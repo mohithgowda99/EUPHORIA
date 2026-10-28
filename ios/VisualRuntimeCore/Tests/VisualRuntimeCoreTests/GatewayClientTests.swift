@@ -51,6 +51,17 @@ final class GatewayClientTests: XCTestCase, @unchecked Sendable {
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: String])
         XCTAssertEqual(body, ["id": "create_native", "message": "Plan my day"])
     }
+
+    func testFollowupUsesSameSessionAndHistoryUsesCursor() async throws {
+        let box = RequestBox()
+        GatewayTestProtocol.box.set { req in box.record(req); return (202, Data(#"{"id":"followup","phase":"accepted"}"#.utf8)) }
+        let receipt = try await client().sendMessage(sessionID: "sess_test", message: "Continue", id: "followup")
+        XCTAssertEqual(receipt.phase, "accepted")
+        XCTAssertEqual(box.last?.url?.path, "/v1/sessions/sess_test/messages")
+        GatewayTestProtocol.box.set { req in box.record(req); return (200, Data(#"{"sessionID":"sess_test","entries":[],"hasMore":false,"nextCursor":null}"#.utf8)) }
+        _ = try await client().history(sessionID: "sess_test", after: "item_previous")
+        XCTAssertEqual(box.last?.url?.query, "limit=10&after=item_previous")
+    }
     private func client() throws -> GatewayClient {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [GatewayTestProtocol.self]

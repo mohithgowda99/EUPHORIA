@@ -6,7 +6,6 @@ struct VisualNodesView: View {
     var fixture = false
     let onAction: (VisualNode, VisualActionKind, [String: VisualScalar]) -> Void
     @State private var errorMessage: String?
-    @State private var approvalNote = ""
     var body: some View {
         if let errorMessage { Section { Text(errorMessage).foregroundStyle(.red) } }
         ForEach(state.surface.nodes) { node in section(for: node) }
@@ -42,7 +41,11 @@ struct VisualNodesView: View {
                 }
                 .disabled(isWaiting(node, kind: .submitForm))
             case .askApproval:
-                TextField("Optional decision note", text: $approvalNote, axis: .vertical)
+                TextField("Optional decision note", text: Binding(
+                    get: { state.approvalNote(nodeID: node.id) },
+                    set: { enact(node, kind: .setField, values: ["note": .text($0)]) }
+                ), axis: .vertical)
+                .disabled(isWaiting(node, kind: .decide))
                 HStack {
                     Button(fixture ? "Approve (fixture)" : "Approve") { decision("approved", node: node) }
                     Spacer()
@@ -51,6 +54,10 @@ struct VisualNodesView: View {
                 .disabled(isWaiting(node, kind: .decide))
                 Text("This queues a response. It cannot authorize a real-world effect.")
                     .font(.caption).foregroundStyle(.secondary)
+            case .gallery:
+                if let gallery = node.gallery { VisualGalleryView(gallery: gallery) }
+            case .htmlArtifact:
+                if let html = node.html { GeneratedArtifactView(html: html) }
             case .showChecklist, .pageChecklist:
                 ForEach(node.items ?? []) { item in
                     if node.kind == .showChecklist {
@@ -96,7 +103,7 @@ struct VisualNodesView: View {
 
     private func decision(_ decision: String, node: VisualNode) {
         enact(node, kind: .decide,
-              values: ["decision": .text(decision), "note": .text(approvalNote)])
+              values: ["decision": .text(decision), "note": .text(state.approvalNote(nodeID: node.id))])
     }
 
     private func isWaiting(_ node: VisualNode, kind: VisualActionKind) -> Bool {

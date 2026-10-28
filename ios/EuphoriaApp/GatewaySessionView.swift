@@ -24,29 +24,50 @@ struct GatewaySessionView: View {
                     }
                     if let error = model.errorMessage { Text(error).foregroundStyle(.red) }
                     if model.isBusy { ProgressView("Connecting…") }
-                    Button("Refresh session") { Task { await model.refresh() } }.disabled(model.isBusy)
+                    Button("Refresh session") { Task { await model.refresh(); await model.loadHistory(); await model.loadSessions() } }.disabled(model.isBusy)
                 }
             }
             if let model {
-                Section("New task") {
+                if !model.sessions.isEmpty {
+                    Section {
+                        DisclosureGroup("Conversations") {
+                            ForEach(model.sessions, id: \.sessionID) { session in
+                                Button(session.title ?? "Conversation") { Task { await model.selectSession(session) } }
+                            }
+                        }
+                    }
+                }
+                Section(model.hasSession ? "Continue the conversation" : "New task") {
                     TextField("Ask Euphoria", text: $message, axis: .vertical)
                         .accessibilityIdentifier("gateway.message")
-                    Button("Send request") {
+                    Button(model.hasSession ? "Send message" : "Send request") {
                         let input = message
-                        Task { await model.start(message: input) }
+                        Task { await model.send(message: input); await model.refresh(); await model.loadHistory(); await model.loadSessions() }
                     }
                     .disabled(model.isBusy || message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                if model.hasSession {
+                    Section {
+                        Button("Stop agent") { Task { await model.cancel(); await model.refresh(); await model.loadHistory() } }.disabled(model.isBusy)
+                        Button("New conversation") { model.newConversation(); message = "" }.disabled(model.isBusy)
+                    }
                 }
                 if let state = model.state {
                     VisualNodesView(state: state) { node, kind, values in model.enact(node, kind: kind, values: values) }
                         .disabled(model.isBusy || model.phase == "uncertain")
                 }
+                ConversationHistoryView(archive: model.conversation, error: model.historyError) {
+                    Task { await model.loadHistory(more: true) }
+                }
             }
         }
         .navigationTitle("Gateway session")
+        .task(id: "\(model?.state?.surface.revision ?? -1):\(model?.isBusy ?? false)") { model?.acknowledgeDisplayedSurface() }
         .task {
             if model == nil { configure() }
             await model?.restore()
+            await model?.loadHistory()
+            await model?.loadSessions()
         }
     }
     private func configure() {

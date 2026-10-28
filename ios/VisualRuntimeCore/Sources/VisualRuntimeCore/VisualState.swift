@@ -28,7 +28,7 @@ public struct VisualState: Codable, Equatable, Sendable {
             throw VisualContractError.invalidAction
         }
         // Decisions are one-shot until explicitly acknowledged, not a toggle that can trigger twice.
-        if [.choose, .decide, .submitForm].contains(action.kind) &&
+        if [.choose, .decide, .submitForm, .displayed].contains(action.kind) &&
             pending.contains(where: { $0.nodeID == action.nodeID && $0.kind == action.kind }) {
             throw VisualContractError.duplicateAction
         }
@@ -38,7 +38,16 @@ public struct VisualState: Codable, Equatable, Sendable {
             pending.contains(where: { $0.nodeID == node.id && $0.kind == .submitForm }) {
             throw VisualContractError.duplicateAction
         }
+        if node.kind == .askApproval && action.kind == .setField && pending.contains(where: { $0.nodeID == node.id && $0.kind == .decide }) {
+            throw VisualContractError.duplicateAction
+        }
         switch (node.kind, action.kind) {
+        case (_, .displayed):
+            guard requiresDisplayReceipt, node.id == surface.nodes.first?.id, action.values.isEmpty else { throw VisualContractError.invalidAction }
+            values["$displayReceipt@" + String(surface.revision)] = .flag(true)
+        case (.askApproval, .setField):
+            guard action.values.count == 1, let note = action.values["note"]?.string, note.count <= 2000 else { throw VisualContractError.invalidAction }
+            values[approvalNoteKey(nodeID: node.id)] = .text(note)
         case (.askForm, .setField):
             guard action.values.count == 1, let (key, value) = action.values.first,
                   let field = node.fields?.first(where: { $0.id == key }),
@@ -84,7 +93,7 @@ public struct VisualState: Codable, Equatable, Sendable {
             guard let decision = action.values["decision"]?.string,
                   ["approved", "declined"].contains(decision),
                   Set(action.values.keys).isSubset(of: ["decision", "note"]),
-                  (action.values["note"]?.string?.count ?? 0) <= 2000 else {
+                  (!action.values.keys.contains("note") || action.values["note"]?.string.map { $0.count <= 2000 } == true) else {
                 throw VisualContractError.invalidAction
             }
             values[node.id] = .text(decision)
@@ -103,7 +112,7 @@ public struct VisualState: Codable, Equatable, Sendable {
     }
 
     /// Only a server response may advance revision or clear delivered actions.
-    public mutating func reconcile(_ next: VisualSurface, acknowledgedActionIDs: Set<String>, resolvedNodeIDs: Set<String> = [], rejectedActionIDs: Set<String> = []) throws {
+    public mutating func reconcile(_ next: VisualSurface, acknowledgedActionIDs: Set<String>, resolvedNodeIDs: Set<String> = [], rejectedActionIDs: Set<String> = [], displayAcknowledged: Bool = false) throws {
         try next.validate()
         guard next.surfaceID == surface.surfaceID, next.revision >= surface.revision,
               next.revision != surface.revision || next == surface else {
@@ -113,6 +122,11 @@ public struct VisualState: Codable, Equatable, Sendable {
         let rejected = pending.filter { rejectedActionIDs.contains($0.id) }
         let acknowledged = pending.filter { acknowledgedActionIDs.contains($0.id) }
         pending.removeAll { acknowledgedActionIDs.contains($0.id) || rejectedActionIDs.contains($0.id) }
+        for action in rejected where action.kind == .displayed {
+            if !pending.contains(where: { $0.kind == .displayed && $0.expectedRevision == action.expectedRevision }) {
+                values.removeValue(forKey: "$displayReceipt@" + String(action.expectedRevision))
+            }
+        }
         for action in rejected where [.choose, .decide].contains(action.kind) {
             if !pending.contains(where: { $0.nodeID == action.nodeID }) { values.removeValue(forKey: action.nodeID) }
         }
@@ -124,6 +138,17 @@ public struct VisualState: Codable, Equatable, Sendable {
 
         self.resolvedNodeIDs = resolvedNodeIDs
         surface = next
+        if displayAcknowledged { values["$displayReceipt@" + String(next.revision)] = .flag(true) }
+    }
+
+    public var requiresDisplayReceipt: Bool {
+        surface.nodes.allSatisfy { [.showChecklist, .gallery, .htmlArtifact].contains($0.kind) } &&
+            values["$displayReceipt@" + String(surface.revision)] != .flag(true)
+    }
+    private func approvalNoteKey(nodeID: String) -> String { nodeID + ".approvalNote@" + String(surface.revision) }
+    public func approvalNote(nodeID: String) -> String {
+        guard surface.nodes.contains(where: { $0.id == nodeID && $0.kind == .askApproval }) else { return "" }
+        return values[approvalNoteKey(nodeID: nodeID)]?.string ?? ""
     }
 
     public func proposedFormValues(nodeID: String) throws -> [String: VisualScalar] {

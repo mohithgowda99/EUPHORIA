@@ -30,9 +30,20 @@ export function validateSurface(surface){
       }
     }
     if(n.items&&!unique(n.items))fail(502,'Duplicate item identity');
+    if(n.kind==='htmlArtifact'&&Buffer.byteLength(n.html)>128000)fail(502,'Artifact too large');
+    if(n.kind==='gallery'){
+      const g=n.gallery;
+      if(!g)fail(502,'Gallery content missing');
+      if(g.kind==='record'&&!Array.isArray(g.fields))fail(502,'Record fields missing');
+      if(g.kind==='metrics'&&!Array.isArray(g.metrics))fail(502,'Metrics missing');
+      if(g.kind==='notice'&&typeof g.body!=='string')fail(502,'Notice body missing');
+      if(g.kind==='table'&&(!g.columns||!g.rows||new Set(g.columns).size!==g.columns.length||g.columns.some(c=>!c.trim())||g.rows.some(r=>r.cells.length!==g.columns.length)))fail(502,'Invalid table');
+      if(['bar','pie','progress'].includes(g.kind)&&(!g.points||g.points.some(p=>(g.kind==='pie'&&p.value<0)||(g.kind==='progress'&&p.target===undefined))))fail(502,'Invalid chart points');
+      if(['line','area'].includes(g.kind)&&(!g.labels||!g.series||new Set(g.series.map(s=>s.name)).size!==g.series.length||g.series.some(s=>s.values.length!==g.labels.length)))fail(502,'Invalid chart series');
+    }
     if(n.kind==='pageChecklist')fail(502,'Editable pages are not supported by this tool yet');
   }
-  if(decisions!==1)fail(502,'This tool requires exactly one active decision');
+  if(decisions>1)fail(502,'This tool supports at most one active decision');
   return surface;
 }
 export function decisionResult(surface,action){
@@ -42,6 +53,10 @@ export function decisionResult(surface,action){
   const node=surface.nodes.find(n=>n.id===action.nodeID),v=action.values;
   if(!node||!v||Array.isArray(v)||typeof v!=='object')fail(422,'Invalid decision');
   const keys=Object.keys(v);
+  if(action.kind==='displayed'&&!surface.nodes.some(n=>['askChoice','askForm','askApproval'].includes(n.kind))){
+    if(action.nodeID!==surface.nodes[0].id||keys.length)fail(422,'Invalid display receipt');
+    return {status:'shown'};
+  }
   const text=x=>typeof x==='string'&&x.length<=2000;
   if(node.kind==='askChoice'&&action.kind==='choose'){
     const option=node.options.find(o=>o.id===v.choice);

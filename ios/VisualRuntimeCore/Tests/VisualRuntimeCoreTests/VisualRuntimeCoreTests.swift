@@ -138,4 +138,27 @@ final class VisualRuntimeCoreTests: XCTestCase {
             values: ["choice": .text("staging"), "label": .text("Staging")], id: "fresh")))
     }
 
+    func testApprovalNoteDraftPersistsWithoutSubmittingAndIsIsolated() throws {
+        var state = VisualState(surface: try fixture())
+        try state.apply(action(state, node: "refund", kind: .setField, values: ["note": .text("Check the duplicate charge")]))
+        XCTAssertTrue(state.pending.isEmpty)
+        let loaded = try JSONDecoder().decode(VisualState.self, from: JSONEncoder().encode(state))
+        XCTAssertEqual(loaded.approvalNote(nodeID: "refund"), "Check the duplicate charge")
+        XCTAssertEqual(loaded.approvalNote(nodeID: "deployment"), "")
+        let next = try VisualSurface(surfaceID: state.surface.surfaceID, revision: 2, nodes: state.surface.nodes)
+        try state.reconcile(next, acknowledgedActionIDs: [])
+        XCTAssertEqual(state.approvalNote(nodeID: "refund"), "", "New revision must not inherit a previous decision's draft")
+    }
+    func testApprovalNoteLocksWhileDecisionPendingAndRejectsNonText() throws {
+        var state = VisualState(surface: try fixture())
+        XCTAssertThrowsError(try state.apply(action(state, node: "refund", kind: .setField, values: ["note": .number(4)])))
+        XCTAssertThrowsError(try state.apply(action(state, node: "refund", kind: .decide,
+            values: ["decision": .text("approved"), "note": .flag(true)])))
+        try state.apply(action(state, node: "refund", kind: .setField, values: ["note": .text("Review")]))
+        try state.apply(action(state, node: "refund", kind: .decide,
+            values: ["decision": .text("declined"), "note": .text(state.approvalNote(nodeID: "refund"))]))
+        XCTAssertEqual(state.pending.last?.values["note"], .text("Review"))
+        XCTAssertThrowsError(try state.apply(action(state, node: "refund", kind: .setField, values: ["note": .text("Changed")])) )
+    }
+
 }

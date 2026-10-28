@@ -17,7 +17,7 @@ export async function submitManagedSourceInput(input: {
   links: {
     reserve(scope: ManagedSourceScope, key: string): Promise<
       { create: true; providerSessionId: null } |
-      { create: false; providerSessionId: string }
+      { create: false; providerSessionId: string; creationKey: string }
     >;
     bind(scope: ManagedSourceScope, key: string, sessionID: string): Promise<string>;
   };
@@ -74,6 +74,14 @@ export async function submitManagedSourceInput(input: {
     await input.links.bind(input.scope, creationKey, session.id);
     await input.turns.reserve(input.runId, originalScope, session.id);
     return { sessionID: session.id, phase: "accepted" };
+  }
+  // Crash window: first session creation succeeded and its link was bound,
+  // but the Inbox receipt had not yet been inserted. The link's immutable
+  // creationKey is still authoritative proof this was the FIRST message.
+  // Never turn the first initial input into a follow-up on recovery.
+  if (link.creationKey === creationKey) {
+    await input.turns.reserve(input.runId, originalScope, link.providerSessionId);
+    return {sessionID:link.providerSessionId,phase:"accepted"};
   }
   // Each original DeliveryStore inbox row has a distinct immutable runId.
   // The Agents session continues its own context; old Chat history is not

@@ -26,6 +26,11 @@ struct ContentView: View {
                 SourceMemoryView()
             }
             .tabItem { Label("Memory", systemImage: "brain.head.profile") }
+
+            NavigationStack {
+                SourceApprovalsView()
+            }
+            .tabItem { Label("Approvals", systemImage: "checkmark.shield") }
         }
     }
 }

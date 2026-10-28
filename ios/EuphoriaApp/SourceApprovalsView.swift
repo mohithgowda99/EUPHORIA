@@ -96,10 +96,10 @@ struct SourceApprovalsView: View {
             _ = try await source.sourceSession()
             inbox = try await source.approvalInbox()
             client = source
-            error = nil
+            self.error = nil
         } catch {
             client = nil
-            error = "The approval inbox is unavailable. Sign in under Bots, then retry."
+            self.error = "The approval inbox is unavailable. Sign in under Bots, then retry."
         }
     }
 
@@ -111,9 +111,9 @@ struct SourceApprovalsView: View {
             let decision = try await client.refuseApproval(id: id)
             guard decision.id == id else { throw SourceAPIError.invalidResponse }
             inbox = try await client.approvalInbox()
-            error = nil
+            self.error = nil
         } catch {
-            error = "The decision could not be confirmed. Refresh the original inbox before acting again."
+            self.error = "The decision could not be confirmed. Refresh the original inbox before acting again."
         }
     }
 
@@ -126,9 +126,9 @@ struct SourceApprovalsView: View {
             try await client.answerQuestion(id: id, response: text)
             inbox = try await client.approvalInbox()
             responses[id] = ""
-            error = nil
+            self.error = nil
         } catch {
-            error = "The answer might have reached the Bot. Refresh the original inbox before sending anything again."
+            self.error = "The answer might have reached the Bot. Refresh the original inbox before sending anything again."
         }
     }
 }

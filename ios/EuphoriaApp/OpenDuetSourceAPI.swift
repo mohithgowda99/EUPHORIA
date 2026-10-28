@@ -405,6 +405,16 @@ private struct SourceMemoryReviewPatch: Encodable { let reviewState: String }
 /// One authenticated account boundary for every original OpenDuet product tab.
 enum SavedOpenDuetAccount {
     static func client() throws -> OpenDuetSourceAPI {
+        #if DEBUG
+        // Explicit local development configuration; provider credentials never enter iOS.
+        if let origin = ProcessInfo.processInfo.environment["EUPHORIA_SOURCE_ORIGIN"],
+           let token = ProcessInfo.processInfo.environment["EUPHORIA_SOURCE_TOKEN"], token.count >= 32 {
+            let endpoint = try OpenBotEndpoint(origin)
+            guard ["localhost", "127.0.0.1", "::1"].contains(endpoint.baseURL.host ?? "")
+            else { throw SourceAPIError.invalidInput }
+            return OpenDuetSourceAPI(endpoint: endpoint, cookie: "euphoria-development=" + token)
+        }
+        #endif
         guard let raw = UserDefaults.standard.string(forKey: "euphoria.openduet.origin")
         else { throw SourceAPIError.unauthenticated }
         let endpoint = try OpenBotEndpoint(raw)
@@ -724,7 +734,7 @@ struct OpenDuetSourceAPI: Sendable {
         let response: SourceSuggestionsResponse = try await get("api/proactive/suggestions")
         guard response.suggestions.count <= 2000,
               Set(response.suggestions.map(\.id)).count == response.suggestions.count,
-              response.suggestions.allSatisfy { ["open","started","dismissed"].contains($0.status) }
+              response.suggestions.allSatisfy({ ["open","started","dismissed"].contains($0.status) })
         else { throw SourceAPIError.invalidResponse }
         return response.suggestions
     }
@@ -749,7 +759,7 @@ struct OpenDuetSourceAPI: Sendable {
         let response: SourceTasksResponse = try await get("api/openduet/tasks")
         guard response.tasks.count <= 2000,
               Set(response.tasks.map(\.id)).count == response.tasks.count,
-              response.tasks.allSatisfy { ["needs_input","working","ready_for_review","failed","resolved"].contains($0.status) }
+              response.tasks.allSatisfy({ ["needs_input","working","ready_for_review","failed","resolved"].contains($0.status) })
         else { throw SourceAPIError.invalidResponse }
         return response.tasks
     }
@@ -1011,4 +1021,23 @@ private struct AnyEncodableSource: Encodable {
     let encodeValue: (Encoder) throws -> Void
     init(_ value: any Encodable) { encodeValue = value.encode }
     func encode(to encoder: Encoder) throws { try encodeValue(encoder) }
+}
+
+struct SourceCompletedVisual: Decodable, Sendable { let afterMessageID: String; let surface: VisualSurface }
+struct SourceVisualResponse: Decodable, Sendable { let completedSurfaces: [SourceCompletedVisual]?; let surface: VisualSurface?; let completed: Bool?; let submissionUncertain: Bool?; let deliveryState: String?; let deliveryError: String? }
+extension OpenDuetSourceAPI {
+    func sourceVisual(channelID: String, agentID: String) async throws -> SourceVisualResponse {
+        let result: SourceVisualResponse = try await request(
+            "api/delivery/conversations/" + checkedID(channelID) + "/visual", method: "GET",
+            queryItems: [URLQueryItem(name: "agentId", value: checkedID(agentID))])
+        try result.surface?.validate()
+        guard (result.completedSurfaces?.count ?? 0) <= 1000 else { throw SourceAPIError.invalidResponse }
+        for saved in result.completedSurfaces ?? [] { try saved.surface.validate() }
+        return result
+    }
+    func sourceVisualAction(channelID: String, agentID: String, action: VisualAction) async throws {
+        let _: SourceReceivedMessage = try await request(
+            "api/delivery/conversations/" + checkedID(channelID) + "/visual/actions", method: "POST",
+            body: action, queryItems: [URLQueryItem(name: "agentId", value: checkedID(agentID))])
+    }
 }

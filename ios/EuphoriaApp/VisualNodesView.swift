@@ -31,6 +31,13 @@ struct VisualNodesView: View {
                     .disabled(isWaiting(node,kind:.submitForm))
                 } else { Text("Composition unavailable").foregroundStyle(.secondary) }
             case .askChoice:
+                if let selectedID = state.values[node.id]?.string,
+                   let selected = node.options?.first(where: { $0.id == selectedID }),
+                   isWaiting(node, kind: .choose) {
+                    Label(selected.label, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.primary)
+                        .accessibilityLabel("Selected: " + selected.label)
+                } else {
                 ForEach(node.options ?? []) { option in
                     Button {
                         enact(node, kind: .choose,
@@ -44,6 +51,7 @@ struct VisualNodesView: View {
                         }
                     }
                     .disabled(isWaiting(node, kind: .choose))
+                }
                 }
             case .askForm:
                 ForEach(node.fields ?? []) { field in

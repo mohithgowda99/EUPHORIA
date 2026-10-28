@@ -239,6 +239,17 @@ final class SourceOpenDuetTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(reopened.first?.externalID, "one")
     }
 
+    func testManagedSourceVisualUsesCanonicalNativeContract() async throws {
+        SourceTestProtocol.box.set { req in
+            XCTAssertEqual(req.url?.path, "/api/delivery/conversations/channel1/visual")
+            return (200, Data(#"{"surface":{"schemaVersion":1,"surfaceID":"call_native","revision":0,"nodes":[{"id":"choice","kind":"askChoice","title":"Choose","options":[{"id":"pull","label":"Pull day"}]}]}}"#.utf8))
+        }
+        let visual = try await client().sourceVisual(channelID: "channel1", agentID: "bot1")
+        let surface = try XCTUnwrap(visual.surface)
+        XCTAssertEqual(surface.surfaceID, "call_native")
+        XCTAssertNoThrow(try surface.validate())
+    }
+
     private func client() throws -> OpenDuetSourceAPI {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [SourceTestProtocol.self]

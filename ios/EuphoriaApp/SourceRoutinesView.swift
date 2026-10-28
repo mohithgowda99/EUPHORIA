@@ -94,10 +94,10 @@ struct SourceRoutinesView: View {
             routines = result.routines
             sweep = result.sweep
             client = source
-            error = nil
+            self.error = nil
         } catch {
             client = nil
-            error = "Routines are unavailable. Sign in through Bots and check your OpenDuet deployment."
+            self.error = "Routines are unavailable. Sign in through Bots and check your OpenDuet deployment."
         }
     }
 
@@ -107,8 +107,8 @@ struct SourceRoutinesView: View {
         defer { busy = false }
         do {
             runs[id] = try await client.sourceRoutineRuns(id: id)
-            error = nil
-        } catch { error = "Routine history could not be loaded." }
+            self.error = nil
+        } catch { self.error = "Routine history could not be loaded." }
     }
     private func pause(_ id: String) async {
         guard !busy, let client else { return }
@@ -119,9 +119,9 @@ struct SourceRoutinesView: View {
             let result = try await client.sourceRoutines()
             routines = result.routines
             sweep = result.sweep
-            error = nil
+            self.error = nil
         } catch {
-            error = "Pause outcome is uncertain. Refresh the source routine before attempting another change."
+            self.error = "Pause outcome is uncertain. Refresh the source routine before attempting another change."
         }
     }
 }

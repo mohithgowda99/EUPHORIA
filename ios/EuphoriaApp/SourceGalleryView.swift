@@ -52,10 +52,10 @@ struct SourceGalleryView: View {
             _ = try await source.sourceSession()
             pages = try await source.sourcePages()
             client = source
-            error = nil
+            self.error = nil
         } catch {
             client = nil
-            error = "Original Make pages cannot be loaded. Sign in through Bots, then retry."
+            self.error = "Original Make pages cannot be loaded. Sign in through Bots, then retry."
         }
     }
 }
@@ -115,9 +115,9 @@ struct SourcePageDetailView: View {
         defer { busy = false }
         do {
             page = try await client.sourcePage(id: pageID)
-            error = nil
+            self.error = nil
         } catch {
-            error = "Could not read the original PageStore record."
+            self.error = "Could not read the original PageStore record."
         }
     }
 
@@ -128,11 +128,11 @@ struct SourcePageDetailView: View {
         do {
             self.page = try await client.setSourceChecklistItem(pageID: pageID, block: block,
                 slide: slide, itemID: itemID, checked: checked, revision: page.checklistRevision)
-            error = nil
+            self.error = nil
         } catch {
             // The source rejects stale checklistRevision with conflict.
             // Refresh instead of blindly replaying a write against new content.
-            error = "This checklist changed or could not be confirmed. Refresh the original page first."
+            self.error = "This checklist changed or could not be confirmed. Refresh the original page first."
         }
     }
 }

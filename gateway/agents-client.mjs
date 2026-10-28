@@ -6,18 +6,19 @@ export class AgentsClient {
   #apiKey;
   #fetch;
   #sessionSpendLimitCents;
-  constructor({ apiKey, fetchImpl = globalThis.fetch, sessionSpendLimitCents = 50 }) {
+  constructor({ apiKey, fetchImpl = globalThis.fetch, sessionSpendLimitCents = 50, allowUncappedSession = false }) {
     requireText(apiKey, 'server API key');
     // Managed Agents API spend_control is per session, in USD cents.
     // This deliberately avoids relying on our own usage-metering loop.
-    if (!Number.isInteger(sessionSpendLimitCents) || sessionSpendLimitCents < 1 ||
-        sessionSpendLimitCents > 500) throw new Error('Invalid per-session spending limit');
+    if (!(sessionSpendLimitCents === null && allowUncappedSession === true) &&
+        (!Number.isInteger(sessionSpendLimitCents) || sessionSpendLimitCents < 1 ||
+        sessionSpendLimitCents > 500)) throw new Error('Invalid per-session spending limit');
     this.#apiKey = apiKey;
     this.#fetch = fetchImpl;
     this.#sessionSpendLimitCents = sessionSpendLimitCents;
   }
 
-  async createSession({model, instructions, input, tools = [], environment, multiAgent}, submissionKey) {
+  async createSession({model, instructions, input, tools = [], environment, multiAgent, reasoningEffort, verbosity}, submissionKey) {
     requireText(model, 'model');
     requireText(instructions, 'instructions');
     requireText(input, 'input');
@@ -27,11 +28,11 @@ export class AgentsClient {
     // credentials, connected apps, unrestricted network, or device controls.
     const sandbox = checkedEnvironment(environment);
     const delegation = checkedDelegation(multiAgent);
-    const agent = {model, instructions, tools};
+    const agent = configuredAgent({model,instructions,tools,reasoningEffort,verbosity});
     if (delegation) agent.multi_agent = delegation;
     return this.#request('POST', '', {agent,
       environment: sandbox, input, stream: false,
-      spend_control: {limit: this.#sessionSpendLimitCents}}, submissionKey);
+      ...(this.#sessionSpendLimitCents === null ? {} : {spend_control: {limit: this.#sessionSpendLimitCents}})}, submissionKey);
   }
 
   /** One authoritative initial submission AND its event stream.
@@ -42,14 +43,14 @@ export class AgentsClient {
    * this method and bind both events before reporting an accepted source run.
    * HTTP interruption is UNCERTAIN; never replay under a new key.
    */
-  async createSessionStream({model,instructions,input,tools=[],environment,multiAgent},submissionKey,{signal}={}) {
+  async createSessionStream({model,instructions,input,tools=[],environment,multiAgent,reasoningEffort,verbosity},submissionKey,{signal}={}) {
     requireText(model,'model');requireText(instructions,'instructions');requireText(input,'input');
     if(!Array.isArray(tools))throw Error('Invalid tools');
-    const agent={model,instructions,tools};
+    const agent=configuredAgent({model,instructions,tools,reasoningEffort,verbosity});
     const delegation=checkedDelegation(multiAgent);
     if(delegation)agent.multi_agent=delegation;
     const body=JSON.stringify({agent,environment:checkedEnvironment(environment),input,
-      stream:true,spend_control:{limit:this.#sessionSpendLimitCents}});
+      stream:true,...(this.#sessionSpendLimitCents === null ? {} : {spend_control:{limit:this.#sessionSpendLimitCents}})});
     const controller=new AbortController();
     let response;
     try {
@@ -64,7 +65,9 @@ export class AgentsClient {
     }catch{
       controller.abort();try{await response?.body?.cancel();}catch{}
       const error=Error('Agents session submission outcome unknown; reconcile original source before retry');
-      error.outcomeUnknown=true;error.failureStage='submission';throw error;
+      error.outcomeUnknown=!response||response.status>=500||response.status===408||response.ok;error.failureStage='submission';
+      if(response&&!response.ok){error.status=response.status;error.message='Agents session request rejected ('+response.status+')';}
+      throw error;
     }
     return {close:()=>controller.abort(),events:(async function*(){
       try{
@@ -94,6 +97,41 @@ export class AgentsClient {
       type: 'agent.session.input.message',
       input: [{role: 'user', content: [{type: 'input_text', text}]}],
     }]}, submissionKey);
+  }
+
+  /** Development single-writer continuation: subscribe BEFORE sending, exclude
+   * every saved turn, and return the actual new root-created event. The source
+   * queue must serialize inputs; this is not a general multi-writer correlator.
+   */
+  async sendMessageAndObserve(sessionID, text, submissionKey, onRoot) {
+    const known=new Set();let after;
+    for(let pageNumber=0;pageNumber<10;pageNumber++) {
+      const page=await this.listTurns(sessionID,{limit:100,order:'desc',after});
+      if(!Array.isArray(page.data))throw Error('Invalid prior turns');
+      for(const turn of page.data){
+        if(turn.subagent_id==null&&!['completed','failed','cancelled'].includes(turn.status))throw Error('Previous root is unresolved');
+        known.add(turn.id);
+      }
+      if(!page.has_more)break;
+      if(pageNumber===9||!page.last_id||page.last_id===after)throw Error('Cannot verify prior turns');
+      after=page.last_id;
+    }
+    const stream=await this.openEventStream(sessionID);
+    let sent=false;
+    const observed=(async()=>{
+      for await(const event of stream.events) {
+        if(event.type==='agent.session.turn.created'&&event.turn?.subagent_id===null&&!known.has(event.turn_id)) {
+          if(!sent)throw Error('Unexpected concurrent root');
+          await onRoot(event);return;
+        }
+      }
+      throw Error('No correlated continuation root');
+    })();
+    // Attach rejection handling immediately while the HTTP write is pending.
+    observed.catch(()=>{});
+    try {sent=true;await this.sendMessage(sessionID,text,submissionKey);await observed;}
+    catch {const error=Error('Continuation outcome unknown; do not replay');error.outcomeUnknown=true;throw error;}
+    finally {stream.close();}
   }
 
   async listItems(sessionID, {after, limit = 10, order = 'asc',signal} = {}) {
@@ -305,4 +343,17 @@ function key(value) {
   if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,255}$/.test(value))
     throw new Error('Invalid submission key');
   return value;
+}
+
+function configuredAgent({model,instructions,tools,reasoningEffort,verbosity}) {
+ const agent={model,instructions,tools};
+ if(reasoningEffort!==undefined){
+  if(!['none','low','medium','high','xhigh','max'].includes(reasoningEffort))throw Error('Unsupported reasoning effort');
+  agent.reasoning={effort:reasoningEffort};
+ }
+ if(verbosity!==undefined){
+  if(!['low','medium','high'].includes(verbosity))throw Error('Unsupported verbosity');
+  agent.text={verbosity};
+ }
+ return agent;
 }

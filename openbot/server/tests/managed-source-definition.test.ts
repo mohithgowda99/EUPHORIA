@@ -45,7 +45,7 @@ function context(overrides: {
     },
     model: "test-model",
     roleMessage: ({ id, name }: AgentStandingProfile) => ({
-      content: overrides.roleContent ?? `Role ${id}: ${name}`,
+      content: overrides.roleContent === undefined ? `Role ${id}: ${name}` : overrides.roleContent,
     }),
     reads: () => ({ profileReads, rosterReads }),
   };

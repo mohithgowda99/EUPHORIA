@@ -151,7 +151,7 @@ struct SourceTasksView: View {
             Button("I verified it in original Tasks", role: .destructive) {
                 for item in uncertain { context.delete(item) }
                 do { try context.save() }
-                catch { error = "Could not save the cleared warning; nothing was sent." }
+                catch { self.error = "Could not save the cleared warning; nothing was sent." }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -188,10 +188,10 @@ struct SourceTasksView: View {
             suggestions = next
             uncertainSuggestionIDs = []
             bots = roster
-            error = nil
+            self.error = nil
         } catch {
             client = nil
-            error = "Original Tasks cannot be loaded. Sign in through Bots or check the OpenDuet server."
+            self.error = "Original Tasks cannot be loaded. Sign in through Bots or check the OpenDuet server."
         }
     }
 
@@ -209,10 +209,10 @@ struct SourceTasksView: View {
             }
             suggestions = try await client.sourceSuggestions()
             tasks = try await client.sourceTasks()
-            error = nil
+            self.error = nil
         } catch {
             uncertainSuggestionIDs.insert(id)
-            error = "Up Next action could not be confirmed. Refresh the original cards before trying again."
+            self.error = "Up Next action could not be confirmed. Refresh the original cards before trying again."
         }
     }
 
@@ -233,9 +233,9 @@ struct SourceTasksView: View {
             try context.save()
             tasks = try await client.sourceTasks()
             title = ""; instruction = ""
-            error = nil
+            self.error = nil
         } catch {
-            error = "Task creation was not confirmed. Review the original Tasks list; the request will not be retransmitted."
+            self.error = "Task creation was not confirmed. Review the original Tasks list; the request will not be retransmitted."
         }
     }
 }
@@ -353,9 +353,9 @@ struct SourceTaskDetailView: View {
             task = actual
             report = summary
             channel = try? await client.sourceConversation(id: actual.channelId)
-            error = nil
+            self.error = nil
         } catch {
-            error = "The original task detail or report could not be verified. Previously loaded data remains unchanged."
+            self.error = "The original task detail or report could not be verified. Previously loaded data remains unchanged."
         }
     }
 
@@ -366,8 +366,8 @@ struct SourceTaskDetailView: View {
         do {
             task = try await client.sourceSetTaskResolved(id: taskID, resolved: done)
             report = try? await client.sourceTaskReport(id: taskID)
-            error = nil
-        } catch { error = "Review change uncertain. Refresh task status before trying again." }
+            self.error = nil
+        } catch { self.error = "Review change uncertain. Refresh task status before trying again." }
     }
 
     private func sendReply() async {
@@ -387,9 +387,9 @@ struct SourceTaskDetailView: View {
             reply = ""
             lastReplyAccepted = true
             report = try? await client.sourceTaskReport(id: taskID)
-            error = nil
+            self.error = nil
         } catch {
-            error = "Reply delivery may be pending. The saved message ID must be reused; do not send a new reply."
+            self.error = "Reply delivery may be pending. The saved message ID must be reused; do not send a new reply."
         }
     }
 
@@ -404,7 +404,7 @@ struct SourceTaskDetailView: View {
             try context.save()
             lastReplyAccepted = true
             report = try? await client.sourceTaskReport(id: taskID)
-            error = nil
-        } catch { error = "Source task reply outcome is still uncertain. No new message ID was created." }
+            self.error = nil
+        } catch { self.error = "Source task reply outcome is still uncertain. No new message ID was created." }
     }
 }

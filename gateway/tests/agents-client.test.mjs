@@ -311,3 +311,55 @@ test('render rejection checks exact pending arguments and never sends errors to 
 test('turn history uses the official owned session endpoint and bounded descending pagination',async t=>{
  const {client,requests}=await provider(t,(_,res)=>json(res,{data:[],has_more:false}));await client.listTurns('sess_test',{limit:20,order:'desc',after:'turn_old'});assert.equal(requests[0].path,'/v1/agents/sessions/sess_test/turns?order=desc&limit=20&after=turn_old');await assert.rejects(client.listTurns('sess_test',{limit:101}));assert.equal(requests.length,1);
 });
+
+
+test('explicit reasoning and verbosity reach both session creation paths; cache fields stay provider-owned', async () => {
+ const bodies=[];
+ const client=new AgentsClient({apiKey:'test-only',fetchImpl:async(url,options)=>{
+  bodies.push(JSON.parse(options.body));
+  if(bodies.at(-1).stream)return new Response('data: '+JSON.stringify({type:'agent.session.created',event_id:'evt_1',session:{id:'sess_1'}})+'\n\n',{headers:{'content-type':'text/event-stream'}});
+  return Response.json({id:'sess_1'});
+ }});
+ const config={model:'gpt-6-luna',instructions:'Stable instructions',input:'Hello',reasoningEffort:'low',verbosity:'low'};
+ await client.createSession(config,'create_settings');
+ const stream=await client.createSessionStream(config,'stream_settings');stream.close();
+ for(const body of bodies){
+  assert.deepEqual(body.agent.reasoning,{effort:'low'});
+  assert.deepEqual(body.agent.text,{verbosity:'low'});
+  assert.equal('prompt_cache_options' in body,false);
+  assert.equal('prompt_cache_retention' in body,false);
+ }
+ let calls=0;
+ const invalid=new AgentsClient({apiKey:'test-only',fetchImpl:async()=>{calls++;}});
+ await assert.rejects(invalid.createSession({...config,reasoningEffort:'minimal'},'invalid_settings'));
+ await assert.rejects(invalid.createSession({...config,verbosity:'unlimited'},'invalid_verbosity'));
+ assert.equal(calls,0);
+});
+
+
+test('serialized continuation observes a new root and rejects an unresolved previous root before spending',async()=>{
+ let writes=0,opened=0,bound;
+ const client=new AgentsClient({apiKey:'test-only',fetchImpl:async(url,options)=>{
+  if(url.includes('/turns?'))return Response.json({data:[{id:'old',subagent_id:null,status:'completed'}],has_more:false});
+  if(options.method==='GET'){opened++;return new Response(new ReadableStream({start(c){setTimeout(()=>c.enqueue(new TextEncoder().encode('data: '+JSON.stringify({type:'agent.session.turn.created',event_id:'evt_new',session_id:'sess_test',turn_id:'new',turn:{id:'new',session_id:'sess_test',subagent_id:null}})+'\n\n')),5);}}),{headers:{'content-type':'text/event-stream'}});}
+  writes++;return new Response(null,{status:202});
+ }});
+ await client.sendMessageAndObserve('sess_test','Follow up','stable_follow',async event=>{bound=event.turn_id;});
+ assert.equal(bound,'new');assert.equal(writes,1);assert.equal(opened,1);
+ const blocked=new AgentsClient({apiKey:'test-only',fetchImpl:async()=>Response.json({data:[{id:'old',status:'in_progress',subagent_id:null}],has_more:false})});
+ await assert.rejects(blocked.sendMessageAndObserve('sess_test','Follow up','stable_block',async()=>{}),/unresolved/);
+});
+
+test('a definite session HTTP rejection preserves its status and never claims execution may have succeeded',async()=>{
+ const client=new AgentsClient({apiKey:'test-only',fetchImpl:async()=>Response.json({error:{message:'private provider body'}},{status:400})});
+ await assert.rejects(client.createSessionStream({model:'test',instructions:'Work',input:'Hello'},'rejected_1'),e=>e.status===400&&e.outcomeUnknown===false&&!e.message.includes('private'));
+});
+
+
+test('uncapped sessions require explicit opt-in and omit unsupported budget fields only then',async()=>{
+ assert.throws(()=>new AgentsClient({apiKey:'test',sessionSpendLimitCents:null}));
+ let body;
+ const client=new AgentsClient({apiKey:'test',sessionSpendLimitCents:null,allowUncappedSession:true,fetchImpl:async(_url,options)=>{body=JSON.parse(options.body);return Response.json({id:'sess_test'});}});
+ await client.createSession({model:'test',instructions:'Work',input:'One test'},'explicit_test');
+ assert.equal(Object.hasOwn(body,'spend_control'),false);
+});

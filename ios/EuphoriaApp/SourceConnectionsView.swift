@@ -20,8 +20,7 @@ struct SourceConnectionsView: View {
                 }
             }
             Section("Connected accounts") {
-                ForEach(connections.indices, id: \.self) { index in
-                    let connection = connections[index]
+                ForEach(Array(connections.enumerated()), id: \.offset) { _, connection in
                     VStack(alignment: .leading, spacing: 5) {
                         Text(connection.serverId).font(.headline)
                         LabeledContent("Holder", value: connection.holder == "deployment" ? "Shared deployment" : "Personal")
@@ -30,7 +29,7 @@ struct SourceConnectionsView: View {
                         }
                         if let verified = connection.verified {
                             Text(verified ? "Broker reported verified" : "Broker verification not confirmed")
-                                .font(.caption).foregroundStyle(verified ? .secondary : .orange)
+                                .font(.caption).foregroundStyle(verified ? Color.secondary : Color.orange)
                         }
                         if let time = connection.connectedAt {
                             Text("Recorded: " + time).font(.caption).foregroundStyle(.secondary)
@@ -60,10 +59,10 @@ struct SourceConnectionsView: View {
             let result = try await source.sourceConnections()
             client = source
             connections = result.connections
-            error = nil
+            self.error = nil
         } catch {
             client = nil
-            error = "The original plugin broker connection state could not be verified. Sign in under Bots."
+            self.error = "The original plugin broker connection state could not be verified. Sign in under Bots."
         }
     }
 }

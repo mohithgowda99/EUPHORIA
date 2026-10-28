@@ -1,0 +1,241 @@
+/** Loopback development assembly of ORIGINAL source stores/routes + managed execution.
+ * No CopilotKit Intelligence credential, duplicate task database or local model runner.
+ * Deliberately excludes unported tool grants and production identity.
+ */
+import {Hono, type MiddlewareHandler} from 'hono';
+import {bodyLimit} from 'hono/body-limit';
+import {timingSafeEqual,createHash} from 'node:crypto';
+import {and,eq,desc,isNull,isNotNull} from 'drizzle-orm';
+import {createDatabase,type Database} from '../db/client';
+import {loadTenantPackage,synchronizeTenantPackage} from '../tenant-package';
+import {deliveryInbox,managedAgentInboxTurns,managedAgentSessionLinks,workItems} from '../db/schema';
+import {DEV_ACTOR,initializeDevActorUser} from '../auth/dev-actor';
+import type {AppVariables} from '../auth/guards';
+import {createAgentProfileStore} from './profile-store';
+import {createRuntimeAgentLoader} from './runtime-agents';
+import {standingRoleMessage} from '../copilot';
+import {createChannelStore,createChannelRoutes} from '../channels/routes';
+import {createThreadIdentity} from '../channels/thread-identity';
+import {createAgentRoutes} from './routes';
+import {createDeliveryStore} from '../delivery/store';
+import {createDeliveryRouter} from '../delivery/router';
+import {createDeliveryRoutes} from '../delivery/routes';
+import type {DeliveryScope} from '../delivery/types';
+import {createWorkQueue} from '../work/queue';
+import {repeatAfterEach} from '../work/loop';
+import {resolveManagedSourceBot} from './managed-source-definition';
+import {createManagedSessionLinkStore} from './managed-session-links';
+import {createManagedInboxTurnStore} from './managed-inbox-turns';
+import {submitManagedSourceInput} from './managed-source-submission';
+import {reconcileManagedSourceInbox} from './managed-source-reconciliation';
+// Existing tested provider transport; Bun loads this ESM without a second SDK stack.
+// @ts-expect-error audited JavaScript boundary
+import {AgentsClient} from '../../../../gateway/agents-client.mjs';
+
+// @ts-expect-error existing canonical renderer contract
+import {normalizeRenderInput,renderInputSchema} from '../../../../gateway/a2ui-form.mjs';
+// @ts-expect-error existing canonical human operation validation
+import {decisionResult,stable} from '../../../../gateway/visual-contract.mjs';
+// @ts-expect-error existing bounded provider argument validation
+import {argumentFingerprint} from '../../../../gateway/provider-arguments.mjs';
+// @ts-expect-error stable shared native prompt prefix
+import {RENDER_INSTRUCTIONS} from '../../../../gateway/render-prompt.mjs';
+
+export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string}) {
+ if(input.token.length<32)throw Error('Development token must contain at least32 characters');
+ const {database,provider}=input;
+ await initializeDevActorUser(database,true);
+ const profiles=createAgentProfileStore(database,undefined);
+ const channels=createChannelStore(database,profiles,createThreadIdentity('euphoria-managed-development'));
+ const store=createDeliveryStore(database),queue=createWorkQueue(database);
+ const links=createManagedSessionLinkStore(database),turns=createManagedInboxTurnStore(database,links);
+ const registered=createRuntimeAgentLoader(database);
+ const actor={id:DEV_ACTOR.id,role:DEV_ACTOR.role};
+ const scopeFor=async(owner:string,channelId:string,agentId:string)=>{
+  if(owner!==actor.id)return null;
+  const channel=await channels.get(actor,channelId);
+  if(!channel||!channel.agentIds.includes(agentId)||!await profiles.get(actor,agentId))return null;
+  return {ownerUserId:owner,channelId,agentId,threadId:channel.threadId};
+ };
+ const authorised=async(scope:DeliveryScope)=>(await scopeFor(scope.ownerUserId,scope.channelId,scope.agentId))?.threadId===scope.threadId;
+ const router=createDeliveryRouter({store,queue,owner:'managed-development-delivery',providers:{},authoriseScope:authorised,
+  runTurn:async scope=>{
+   if(!await authorised(scope))throw Error('Source access revoked');
+   const resolved=await resolveManagedSourceBot({actor,botId:scope.agentId,profiles,registered,model:input.model,roleMessage:standingRoleMessage});
+   await channels.recordActivity(actor,scope.channelId,{text:scope.text,agentId:null,at:new Date()},{id:'delivery-input:'+scope.runId});
+   await submitManagedSourceInput({scope:{ownerUserId:scope.ownerUserId,channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId},
+    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema}]},links,turns,provider});
+   return {replyText:'',pending:true};
+  }});
+ const app=new Hono<{Variables:AppVariables}>();
+ const digest=(v:string)=>createHash('sha256').update(v).digest();
+ const expected=digest('euphoria-development='+input.token);
+ const requireUser:MiddlewareHandler<{Variables:AppVariables}>=async(c,next)=>{
+  if(!timingSafeEqual(expected,digest(c.req.header('cookie')??'')))return c.json({error:'Development authentication required'},401);
+  c.set('actor',DEV_ACTOR);await next();
+ };
+ app.use('*',bodyLimit({maxSize:128*1024}));
+ app.onError((error,c)=>{if('status' in error && [409,422,502].includes(Number(error.status)))return c.json({error:error.message},Number(error.status) as 409|422|502);console.error(JSON.stringify({type:'managed-development-error',name:error.name}));return c.json({error:'Managed source operation unavailable'},503);});
+ app.get('/api/auth/get-session',requireUser,c=>c.json({user:{...DEV_ACTOR,name:'Development'}}));
+ app.route('/api/agents',createAgentRoutes(profiles,requireUser,false,undefined,undefined,undefined,true));
+ app.route('/api/channels',createChannelRoutes(channels,requireUser));
+ app.route('/api/delivery',createDeliveryRoutes({store,router,requireUser,scopeFor,
+  listConversations:async(owner,cursor)=>{if(owner!==actor.id)throw Error('Unknown owner');return channels.list(actor,{cursor});},
+  history:async scope=>{
+   if(!await authorised(scope))throw Error('Source access revoked');
+   const link=await links.read({ownerUserId:scope.ownerUserId,channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId});
+
+   // Original Inbox identities gate history. Never expose a session-global
+   // message from an incomplete, foreign or uncorrelated provider root.
+   const rows=await database.select({inbox:deliveryInbox,receipt:managedAgentInboxTurns})
+    .from(deliveryInbox).leftJoin(managedAgentInboxTurns,eq(deliveryInbox.id,managedAgentInboxTurns.inboxId))
+    .where(and(eq(deliveryInbox.ownerUserId,scope.ownerUserId),eq(deliveryInbox.channelId,scope.channelId),eq(deliveryInbox.agentId,scope.agentId)))
+    .orderBy(desc(deliveryInbox.createdAt)).limit(100);
+   const messages:unknown[]=[];
+   for(const {inbox,receipt} of rows.reverse()){
+    messages.push({id:inbox.id,type:'message',role:'user',status:'completed',content:[{type:'input_text',text:inbox.text}]});
+    if(inbox.state!=='sent'||!receipt?.rootTurnId||receipt.providerSessionId!==link?.providerSessionId)continue;
+    const state=receipt.completedOutput;
+    if(state?.replyText)messages.push({id:'reply_'+inbox.id,type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:state.replyText}]});
+   }
+   if(!await authorised(scope))throw Error('Source access revoked');return{messages};
+  }}));
+
+ async function readTurnItems(sessionID:string,turnID:string){
+  const items:any[]=[];let after:string|undefined;
+  for(let i=0;i<10;i++){
+   const page=await provider.listTurnItems(sessionID,turnID,{limit:100,order:'asc',after});
+   if(!Array.isArray(page.data))throw Error('Invalid managed turn items');items.push(...page.data);
+   if(!page.has_more)return items;
+   if(!page.last_id||page.last_id===after)throw Error('Invalid turn cursor');after=page.last_id;
+  }throw Error('Managed turn exceeds development history limit');
+ }
+ const visualPath='/api/delivery/conversations/:id/visual';
+ async function pendingVisual(owner:string,channelId:string,botId:string){
+  const scope=await scopeFor(owner,channelId,botId);if(!scope)throw Error('Source access revoked');
+  const link=await links.read({ownerUserId:owner,channelId,botId,threadId:scope.threadId});
+  if(!link?.providerSessionId)return{surface:null};
+  const [current]=await database.select({inbox:deliveryInbox,receipt:managedAgentInboxTurns}).from(deliveryInbox)
+   .leftJoin(managedAgentInboxTurns,eq(deliveryInbox.id,managedAgentInboxTurns.inboxId))
+   .where(and(eq(deliveryInbox.ownerUserId,owner),eq(deliveryInbox.channelId,channelId),eq(deliveryInbox.agentId,botId)))
+   .orderBy(desc(deliveryInbox.createdAt)).limit(1);
+  if(!current||!['accepted','running'].includes(current.inbox.state)||!current.receipt?.rootTurnId||current.receipt.providerSessionId!==link.providerSessionId)return{surface:null};
+  const session=await provider.retrieveSession(link.providerSessionId);
+  if(session.id!==link.providerSessionId)throw Error('Provider identity mismatch');
+  const calls=(session.required_actions??[]).filter((call:any)=>call.turn_id===current.receipt!.rootTurnId);
+  if(!calls.length)return{surface:null};
+  if(calls.length!==1||calls[0].name!=='euphoria_render_surface')throw Error('Unsupported managed tool');
+  const call=calls[0];const args=typeof call.arguments==='string'?JSON.parse(call.arguments):call.arguments;
+  argumentFingerprint(args); // Bound size/depth before rendering.
+  let surface;
+  try{surface={...normalizeRenderInput(args),surfaceID:call.call_id,revision:0};}
+  catch{throw Object.assign(Error('The generated interface did not satisfy the native contract'),{status:502,renderCall:call,renderScope:scope,renderSessionID:session.id});}
+  if(!await authorised(scope))throw Error('Source access revoked');
+  const [response]=await database.select({error:workItems.lastError}).from(workItems).where(and(eq(workItems.kind,'managed.native-response'),eq(workItems.key,call.call_id))).limit(1);
+  return{surface,sessionID:session.id,call,scope,submissionUncertain:!!response?.error};
+ }
+ app.get(visualPath,requireUser,async c=>{
+  const result=await pendingVisual(c.var.actor.id,c.req.param('id')??'',c.req.query('agentId')??'');
+  const [latest]=await database.select({state:deliveryInbox.state,error:deliveryInbox.error}).from(deliveryInbox)
+   .where(and(eq(deliveryInbox.ownerUserId,c.var.actor.id),eq(deliveryInbox.channelId,c.req.param('id')??''),eq(deliveryInbox.agentId,c.req.query('agentId')??'')))
+   .orderBy(desc(deliveryInbox.createdAt)).limit(1);
+  const saved=await database.select({inboxID:deliveryInbox.id,output:managedAgentInboxTurns.completedOutput}).from(deliveryInbox)
+   .innerJoin(managedAgentInboxTurns,eq(deliveryInbox.id,managedAgentInboxTurns.inboxId))
+   .where(and(eq(deliveryInbox.ownerUserId,c.var.actor.id),eq(deliveryInbox.channelId,c.req.param('id')??''),eq(deliveryInbox.agentId,c.req.query('agentId')??''),eq(deliveryInbox.state,'sent')))
+   .orderBy(desc(deliveryInbox.createdAt)).limit(100);
+  const completedSurfaces=saved.reverse().flatMap(row=>(row.output?.surfaces??[]).map(surface=>({afterMessageID:'reply_'+row.inboxID,surface})));
+  return c.json({surface:result.surface,completedSurfaces,submissionUncertain:result.submissionUncertain??false,
+   deliveryState:latest?.state??null,deliveryError:latest?.error??null});
+ });
+ app.post(visualPath+'/actions',requireUser,async c=>{
+  const action=await c.req.json();
+  const result=await pendingVisual(c.var.actor.id,c.req.param('id')??'',c.req.query('agentId')??'');
+  if(!result.surface||!result.call||!result.scope) return c.json({error:'Decision no longer pending'},409);
+  if(result.submissionUncertain)return c.json({error:'Previous response outcome uncertain; automatic retry disabled'},503);
+  const output=decisionResult(result.surface,action);
+  const payload={scope:result.scope,sessionID:result.sessionID,call:result.call,output,action};
+  const key=result.call.call_id;
+  const [previous]=await database.select().from(workItems).where(and(eq(workItems.kind,'managed.native-response'),eq(workItems.key,key))).limit(1);
+  if(previous&&stable(previous.payload)!==stable(payload))return c.json({error:'Decision already submitted with different content'},409);
+  await queue.offer({kind:'managed.native-response',key,payload});
+  const [winner]=await database.select().from(workItems).where(and(eq(workItems.kind,'managed.native-response'),eq(workItems.key,key))).limit(1);
+  if(!winner||stable(winner.payload)!==stable(payload))return c.json({error:'Decision already submitted with different content'},409);
+  return c.json({phase:'accepted'},202);
+ });
+
+ // Recovery scans ORIGINAL accepted inbox receipts. Only provider reads and original
+ // deduplicated replies happen here; a lost submission is never re-executed.
+ async function tick(){
+  await router.sweep('delivery.inbound');
+  for(const item of await queue.claim({kind:'managed.native-response',owner:'managed-native-response',leaseMs:60000,limit:10,maxAttempts:100})){
+   // A reclaimed claim may have sent a result before a crash. Never resend it.
+   try{
+    if(item.attempts!==1)throw Error('Previous response dispatch outcome uncertain');
+    const payload=item.payload as unknown as {scope:DeliveryScope;sessionID:string;call:{turn_id:string;call_id:string;name:string;arguments:unknown};output:unknown;refusal?:string};
+    if(!await authorised(payload.scope))throw Error('Source access revoked');
+    if(payload.refusal)await provider.rejectToolCall(payload.sessionID,{turnID:payload.call.turn_id,callID:payload.call.call_id,name:payload.call.name,error:payload.refusal},'source_action_'+item.key,{expectedArguments:payload.call.arguments});
+    else await provider.submitToolResult(payload.sessionID,{turnID:payload.call.turn_id,callID:payload.call.call_id,name:payload.call.name,output:payload.output},'source_action_'+item.key,{expectedArguments:payload.call.arguments});
+    await queue.finish({kind:item.kind,key:item.key,owner:'managed-native-response'});
+   }catch{
+    // Retain a visible unresolved receipt, never finish or replay an uncertain write.
+    await database.update(workItems).set({attempts:100,lastError:'Provider response outcome uncertain; manual reconciliation required'})
+     .where(and(eq(workItems.kind,item.kind),eq(workItems.key,item.key)));
+    console.error('Native result outcome uncertain; original receipt retained');
+   }
+  }
+  const pending=await database.select({inboxId:deliveryInbox.id,sessionID:managedAgentInboxTurns.providerSessionId,rootTurnID:managedAgentInboxTurns.rootTurnId})
+   .from(deliveryInbox).innerJoin(managedAgentInboxTurns,eq(deliveryInbox.id,managedAgentInboxTurns.inboxId))
+   .where(and(eq(deliveryInbox.ownerUserId,actor.id),eq(deliveryInbox.state,'accepted'))).limit(20);
+  for(const row of pending){if(!row.rootTurnID)continue;
+   const original=await store.inbox(row.inboxId);
+   if(original){try{await pendingVisual(original.ownerUserId,original.channelId,original.agentId);}catch(error){
+    const invalid=error as {renderCall?:unknown;renderScope?:unknown;renderSessionID?:string};
+    if(invalid.renderCall){
+     const key='repair_'+row.rootTurnID;
+     const [previous]=await database.select().from(workItems).where(and(eq(workItems.kind,'managed.native-response'),eq(workItems.key,key))).limit(1);
+     if(previous){await store.setInbox(row.inboxId,'accepted','The generated interface is still unsupported after one correction. No further model retry was made.');continue;}
+     await queue.offer({kind:'managed.native-response',key,payload:{scope:invalid.renderScope,sessionID:invalid.renderSessionID,call:invalid.renderCall,
+      refusal:'Interface rejected; no user decision occurred. Use canonical native JSON for this choice: {"schemaVersion":1,"surfaceID":"temporary","revision":0,"nodes":[{"id":"day","kind":"askChoice","title":"Choose a workout day","options":[{"id":"pull","label":"Pull day"},{"id":"legs","label":"Leg day"}]}]}. For A2UI every message requires version v0.9, catalogId https://a2ui.org/specification/v0_9/basic_catalog.json, all components reachable from root, and initial bound data. Do not claim the user answered.'}});continue;
+    }
+   }}
+   try{await reconcileManagedSourceInbox({...row,rootTurnID:row.rootTurnID,inbox:store,links,provider,
+    turnBelongsToInbox:turns.turnBelongsToInbox,authorise:authorised,botAvailable:authorised,
+    recordSourceReply:async(scope,text,id)=>{
+     const items=await readTurnItems(row.sessionID,row.rootTurnID!);
+     const surfaces=items.filter(v=>v.type==='function_call'&&v.name==='euphoria_render_surface'&&v.turn_id===row.rootTurnID).map(call=>{
+      const args=typeof call.arguments==='string'?JSON.parse(call.arguments):call.arguments;argumentFingerprint(args);
+      return{...normalizeRenderInput(args),surfaceID:call.call_id,revision:0};
+     });
+     await database.update(managedAgentInboxTurns).set({completedOutput:{replyText:text,surfaces}})
+      .where(and(eq(managedAgentInboxTurns.inboxId,row.inboxId),eq(managedAgentInboxTurns.rootTurnId,row.rootTurnID!),isNull(managedAgentInboxTurns.completedOutput)));
+     await channels.recordActivity(actor,scope.channelId,{text,agentId:scope.agentId,at:new Date()},{id});
+    }});}catch{console.error('Managed source receipt awaiting reconciliation');}
+  }
+ }
+ return{app,tick,profiles,channels,store,links,turns};
+}
+
+if(import.meta.main){
+ if(process.env.NODE_ENV==='production')throw Error('This assembly is loopback development only');
+ const {DATABASE_URL,OPENAI_API_KEY,EUPHORIA_DEV_TOKEN}=process.env;
+ if(!DATABASE_URL||!OPENAI_API_KEY||!EUPHORIA_DEV_TOKEN)throw Error('Configure development database, server API key and local token');
+ const database=createDatabase(DATABASE_URL);
+ await synchronizeTenantPackage(database,await loadTenantPackage(new URL('../../../examples/openduet',import.meta.url).pathname));
+ const uncapped=process.env.EUPHORIA_ALLOW_ONE_UNCAPPED_JOURNEY==='1';
+ const existing=await database.select().from(managedAgentSessionLinks).where(isNotNull(managedAgentSessionLinks.providerSessionId)).limit(1);
+ let creations=existing.length;
+ const provider=new AgentsClient({apiKey:OPENAI_API_KEY,sessionSpendLimitCents:uncapped?null:25,allowUncappedSession:uncapped,
+  fetchImpl:async(url:string,options:RequestInit)=>{
+   if(uncapped&&options.method==='POST'&&url==='https://api.openai.com/v1/agents/sessions'){
+    if(creations>=1)throw Error('The one authorised development session was already attempted');creations++;
+   }
+   const response=await fetch(url,options);
+   if(!response.ok){const body=await response.clone().json().catch(()=>({}));console.error(JSON.stringify({type:'managed-provider-rejection',status:response.status,code:body.error?.code,param:body.error?.param}));}
+   return response;
+  }});
+ const source=await createManagedDevelopment({database,provider,token:EUPHORIA_DEV_TOKEN,model:process.env.EUPHORIA_MODEL??'gpt-6-luna'});
+ const server=Bun.serve({hostname:'127.0.0.1',port:8788,fetch:source.app.fetch});
+ const worker=repeatAfterEach(async()=>{try{await source.tick();}catch{console.error('Managed source work awaits recovery');}},1000);
+ console.info('Managed source development service listening on loopback:8788');
+ for(const sig of ['SIGINT','SIGTERM'] as const)process.on(sig,()=>{worker.stop();server.stop();process.exit(0);});
+}

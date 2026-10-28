@@ -1,4 +1,4 @@
-import { pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { agents, channels, users } from "./core";
 import { deliveryInbox } from "./delivery";
 
@@ -45,6 +45,9 @@ export const managedAgentInboxTurns = pgTable(
     providerSessionId: text("provider_session_id").notNull(),
     rootTurnId: text("root_turn_id"),
     createdEventId: text("created_event_id"),
+    // Validated completed-root presentation, owned by this original Inbox receipt.
+    // Provider reads are for reconciliation, never required to reopen saved work.
+    completedOutput: jsonb("completed_output").$type<{replyText:string;surfaces:unknown[]}>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

@@ -52,7 +52,13 @@ test('source message creates once, then continues same hosted session with origi
  const calls=[];
  const transport=new AgentsClient({apiKey:'test-only',fetchImpl:async(url,options)=>{
   calls.push({url,options});
+  if(options.method==='GET'&&url.includes('/turns?'))return Response.json({data:[{id:'root_one',status:'completed',subagent_id:null}],has_more:false});
+  if(options.method==='GET'&&url.includes('/events?'))return new Response(new ReadableStream({start(controller){setTimeout(()=>controller.enqueue(new TextEncoder().encode('data: '+JSON.stringify({type:'agent.session.turn.created',event_id:'evt_follow',session_id:'session_original',turn_id:'root_two',turn:{id:'root_two',session_id:'session_original',subagent_id:null}})+'\n\n')),5);}}),{headers:{'content-type':'text/event-stream'}});
   if(options.method==='POST'&&url.endsWith('/events'))return new Response(null,{status:202});
+  if(JSON.parse(options.body).stream) return new Response([
+   {type:'agent.session.created',event_id:'evt_session',session:{id:'session_original'}},
+   {type:'agent.session.turn.created',event_id:'evt_root',session_id:'session_original',turn_id:'root_one',turn:{id:'root_one',session_id:'session_original',subagent_id:null}}
+  ].map(e=>'data: '+JSON.stringify(e)+'\n\n').join(''),{headers:{'content-type':'text/event-stream'}});
   return Response.json({id:'session_original'});
  }});
  const storage=links();
@@ -62,12 +68,13 @@ test('source message creates once, then continues same hosted session with origi
  assert.deepEqual(await submitManagedSourceInput(input(storage,transport,'run_two')),{
   sessionID:'session_original',phase:'accepted',
  });
- assert.equal(calls.length,2);
+ const writes=calls.filter(v=>v.options.method==='POST');
+ assert.equal(writes.length,2);
  assert.equal(calls[0].options.headers['Idempotency-Key'],'source_create_run_one');
- assert.equal(calls[1].options.headers['Idempotency-Key'],'source_input_run_two');
+ assert.equal(writes[1].options.headers['Idempotency-Key'],'source_input_run_two');
  assert.equal(calls[0].url,'https://api.openai.com/v1/agents/sessions');
- assert.equal(calls[1].url,'https://api.openai.com/v1/agents/sessions/session_original/events');
- const body=JSON.parse(calls[1].options.body);
+ assert.equal(writes[1].url,'https://api.openai.com/v1/agents/sessions/session_original/events');
+ const body=JSON.parse(writes[1].options.body);
  assert.equal(body.events[0].type,'agent.session.input.message');
  assert.equal(body.events[0].input[0].content[0].text,'Help with today');
 });

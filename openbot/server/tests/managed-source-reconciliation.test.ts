@@ -134,7 +134,7 @@ test("revoked channel or deleted Bot refuses completion before any provider read
 test("unverified, foreign and incomplete turns never settle or post an answer", async () => {
   const f = fixture();
   f.setRoot({id:"other", status:"completed"});
-  expect(await reconcileManagedSourceInbox(f.deps)).toBe("pending");
+  await expect(reconcileManagedSourceInbox(f.deps)).rejects.toThrow("identity mismatch");
   f.setRoot({id:"root",status:"in_progress"});
   expect(await reconcileManagedSourceInbox(f.deps)).toBe("pending");
   f.setRoot({id:"root",status:"completed"});

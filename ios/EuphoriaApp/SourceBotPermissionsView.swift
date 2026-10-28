@@ -68,9 +68,9 @@ struct SourceBotPermissionsView: View {
             let owned = try await client.sourceBotGrants(botID: botID)
             catalogue = results
             grants = owned
-            error = nil
+            self.error = nil
         } catch {
-            error = "Bot tools and skills cannot be verified. The previous grant state will not be assumed current."
+            self.error = "Bot tools and skills cannot be verified. The previous grant state will not be assumed current."
             grants = nil
         }
     }
@@ -81,10 +81,10 @@ struct SourceBotPermissionsView: View {
         do {
             try await client.setSourceSkillGrant(botID: botID, slug: slug, enabled: enabled)
             grants = try await client.sourceBotGrants(botID: botID)
-            error = nil
+            self.error = nil
         } catch {
             grants = nil
-            error = "The original permission change is uncertain. Refresh the source grants before trying again."
+            self.error = "The original permission change is uncertain. Refresh the source grants before trying again."
         }
     }
 }

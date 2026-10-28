@@ -102,10 +102,10 @@ struct SourceMemoryView: View {
             _ = try await service.sourceSession()
             memories = try await service.memories()
             client = service
-            error = nil
+            self.error = nil
         } catch {
             client = nil
-            error = "Memory could not be loaded. Sign in under Bots, then try again."
+            self.error = "Memory could not be loaded. Sign in under Bots, then try again."
         }
     }
     private func perform(_ change: (OpenDuetSourceAPI) async throws -> Void) async {
@@ -115,11 +115,11 @@ struct SourceMemoryView: View {
         do {
             try await change(client)
             memories = try await client.memories()
-            error = nil
+            self.error = nil
         } catch {
             // Source state, not the button press, is authoritative.
             // A write with a lost response is not repeated automatically.
-            error = "The change could not be confirmed. Refresh the source memory list before trying again."
+            self.error = "The change could not be confirmed. Refresh the source memory list before trying again."
         }
     }
     private func create() async {

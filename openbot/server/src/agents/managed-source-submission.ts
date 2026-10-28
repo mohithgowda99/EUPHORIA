@@ -24,7 +24,7 @@ export async function submitManagedSourceInput(input: {
   scope: ManagedSourceScope;
   runId: string;
   message: string;
-  definition: { model: string; instructions: string; tools: [] };
+  definition: { model: string; instructions: string; tools: unknown[]; reasoningEffort?: string; verbosity?: string };
   links: {
     reserve(scope: ManagedSourceScope, key: string): Promise<
       { create: true; providerSessionId: null } |
@@ -51,12 +51,13 @@ export async function submitManagedSourceInput(input: {
     /** Managed session SSE returns actual session.created and root turn.created
      * identities; no turn is inferred from the session's latest history.
      */
-    createSessionStream?(initial: {model:string;instructions:string;tools:[];input:string},
+    createSessionStream?(initial: {model:string;instructions:string;tools:unknown[];input:string},
       key:string):Promise<{close():void;events:AsyncIterable<unknown>}>;
     createSession(
-      initial: { model: string; instructions: string; tools: []; input: string },
+      initial: { model: string; instructions: string; tools: unknown[]; input: string },
       key: string,
     ): Promise<{ id?: string }>;
+    sendMessageAndObserve?(sessionID:string,message:string,key:string,onRoot:(event:any)=>Promise<void>):Promise<void>;
     sendMessage(sessionID: string, message: string, key: string): Promise<unknown>;
   };
 }): Promise<{ sessionID: string; phase: "accepted" }> {
@@ -121,7 +122,8 @@ export async function submitManagedSourceInput(input: {
         }
       }
       throw new Error("Managed session stream closed without a root-created event");
-    } catch {
+    } catch (error) {
+      if(error instanceof Error && 'outcomeUnknown' in error && error.outcomeUnknown===false)throw error;
       // Any failure AFTER the provider create request can hide a successful
       // cloud submission. Neither the original queue nor the UI may resend it.
       throw new ManagedSourceOutcomeUnknown();
@@ -162,9 +164,12 @@ export async function submitManagedSourceInput(input: {
   // replayed. An "existing" receipt means another worker might have sent it.
   const reserved = await input.turns.reserve(input.runId, originalScope, link.providerSessionId);
   if (reserved === "reserved") {
-    await input.provider.sendMessage(
-      link.providerSessionId, input.message, "source_input_" + input.runId,
-    );
+    if(input.provider.sendMessageAndObserve){
+      await input.provider.sendMessageAndObserve(link.providerSessionId,input.message,"source_input_"+input.runId,
+        async event=>{await input.turns.bindRootCreatedEvent({inboxId:input.runId,scope:originalScope,sessionID:link.providerSessionId,event});});
+    }else{
+      await input.provider.sendMessage(link.providerSessionId,input.message,"source_input_"+input.runId);
+    }
   }
   return { sessionID: link.providerSessionId, phase: "accepted" };
 }

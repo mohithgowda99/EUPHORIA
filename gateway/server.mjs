@@ -11,7 +11,9 @@ if(!OPENAI_API_KEY||!EUPHORIA_DEV_TOKEN||EUPHORIA_DEV_TOKEN.length<32||!EUPHORIA
 const directory=resolve(process.env.EUPHORIA_STATE_DIR||'gateway/.state');mkdirSync(directory,{recursive:true,mode:0o700});
 const hash=x=>createHash('sha256').update(x).digest();
 const expected=hash('Bearer '+EUPHORIA_DEV_TOKEN);
-const server=createGateway({provider:new AgentsClient({apiKey:OPENAI_API_KEY}),model:EUPHORIA_MODEL,
+const sessionSpendLimitCents=process.env.EUPHORIA_SESSION_SPEND_LIMIT_CENTS===undefined
+  ? 50 : Number(process.env.EUPHORIA_SESSION_SPEND_LIMIT_CENTS);
+const server=createGateway({provider:new AgentsClient({apiKey:OPENAI_API_KEY,sessionSpendLimitCents}),model:EUPHORIA_MODEL,
   databasePath:join(directory,'gateway.sqlite'),authenticate:async req=>
     timingSafeEqual(expected,hash(req.headers.authorization||''))?'development-owner':null});
 server.listen(Number(process.env.EUPHORIA_PORT||8787),'127.0.0.1',()=>console.log('Development gateway listening on loopback. No production login configured.'));

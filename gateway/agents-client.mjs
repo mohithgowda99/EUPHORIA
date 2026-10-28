@@ -17,13 +17,20 @@ export class AgentsClient {
     this.#sessionSpendLimitCents = sessionSpendLimitCents;
   }
 
-  async createSession({model, instructions, input, tools = []}, submissionKey) {
+  async createSession({model, instructions, input, tools = [], environment, multiAgent}, submissionKey) {
     requireText(model, 'model');
     requireText(instructions, 'instructions');
     requireText(input, 'input');
     if (!Array.isArray(tools)) throw new Error('Invalid tools');
-    return this.#request('POST', '', {agent: {model, instructions, tools},
-      environment: {type: 'none'}, input, stream: false,
+    // Provider features remain opt-in and bound to the product's authoritative
+    // Bot grants. Passing a config here is not permission to expose external
+    // credentials, connected apps, unrestricted network, or device controls.
+    const sandbox = checkedEnvironment(environment);
+    const delegation = checkedDelegation(multiAgent);
+    const agent = {model, instructions, tools};
+    if (delegation) agent.multi_agent = delegation;
+    return this.#request('POST', '', {agent,
+      environment: sandbox, input, stream: false,
       spend_control: {limit: this.#sessionSpendLimitCents}}, submissionKey);
   }
 
@@ -167,6 +174,36 @@ export class AgentsClient {
       throw error;
     }
   }
+}
+
+/**
+ * A small fail-closed policy at the existing transport boundary. The caller
+ * must separately authorize which original OpenDuet Bot may use these options.
+ * Restricted/allowed network, self-hosted executors, vaults and service tools
+ * are intentionally not accepted by this minimal provider transport.
+ */
+function checkedEnvironment(value) {
+  if (value === undefined) return {type: 'none'};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('Invalid Agents environment');
+  if (value.type === 'none' && Object.keys(value).length === 1) return {type: 'none'};
+  if (value.type !== 'openai_hosted') throw Error('Unsupported Agents environment');
+  const keys = Object.keys(value);
+  if (keys.some(k => !['type', 'container_size', 'network'].includes(k))) throw Error('Unapproved Agents environment option');
+  if (value.container_size !== undefined && value.container_size !== 'small') throw Error('Only small hosted sandbox is approved');
+  if (!value.network || typeof value.network !== 'object' || Array.isArray(value.network) ||
+      Object.keys(value.network).length !== 1 || value.network.access !== 'disabled')
+    throw Error('Hosted sandbox network access must be disabled');
+  return {type:'openai_hosted',container_size:'small',network:{access:'disabled'}};
+}
+function checkedDelegation(value) {
+  if (value === undefined || value === null || value === false) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+      Object.keys(value).some(k => !['enabled', 'max_concurrent_subagents'].includes(k)) ||
+      value.enabled !== true ||
+      !Number.isInteger(value.max_concurrent_subagents) ||
+      value.max_concurrent_subagents < 1 || value.max_concurrent_subagents > 3)
+    throw Error('Unsupported Agents multi-agent configuration');
+  return {enabled:true,max_concurrent_subagents:value.max_concurrent_subagents};
 }
 
 function requireText(value, label) {

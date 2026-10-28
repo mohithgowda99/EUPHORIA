@@ -59,3 +59,20 @@ Additional **provider-transport support**, not product activation:
 **Remaining full capability gaps:** source CopilotKit cutover/turn projection and webhook recovery, original PluginStore-to-managed MCP grants, vault credential scope and revocation, trusted hosted browser/computer approvals, managed Automations mapping to OpenDuet routine ownership and notifications, managed plugin/skill upload and policy, hosted artifacts to source PageStore, full native A2UI. Do not claim functional GrokBot/Dots/Codex product parity from provider APIs alone.
 
 Official contracts: https://developers.openai.com/api/docs/guides/agents-api/architecture and /environments/openai-hosted and /multi-agent.
+
+## Next preflight checkpoint — verified source delivery boundary (2026-10-28)
+
+Implementation after the provider-hosted sandbox/subagent/artifact transport additions:
+
+- Original `createDeliveryRouter` now distinguishes a **pending asynchronous managed turn** from a verified response. Source Inbox remains `accepted`, NOT `sent`; pending turns never generate a completed reply, action UI or push notification. Existing synchronous CopilotKit behavior stays unchanged.
+- New `agents/managed-source-reconciliation.ts` implements **source-authorized read-only provider-result reconciliation**: validates Inbox state, original owner/channel/Bot/thread session binding, durable *per-Inbox root-turn correlation* (mandatory dependency), Bot availability and permissions twice. It reads root turns/items, preserves human approval waits, and projects only actual completed assistant output to original `ChannelStore` using the original `delivery-reply:<inboxId>` dedupe identity.
+- Original `DeliveryStore.settleAcceptedInbox` conditionally settles only `accepted` Inbox rows after verified completion/failure. Completion replays cannot promote a previously failed or settled request.
+- New source regression cases cover foreign sessions, mismatched root turn, revoked channel/Bot, required human actions, missing output, failure and duplicate settlement. Tests committed but **not yet run in Bun**.
+- Fixed `ios/scripts/verify-xcode.sh` so new XCTest cases do not fail a stale fixed count (previously exactly 25).
+- Added `scripts/validate-phase1.sh`: fails closed on wrong/dirty checkout; offline Bun source typecheck and targeted tests, Node 24+ gateway tests, Swift package tests, Xcode Debug/Release and Simulator verification. **Not executed here** because complete checkout, Bun and Xcode/macOS unavailable.
+
+**IMPORTANT: this is NOT a live provider cutover.** Completion still requires a **durable, provider-event-backed mapping** of each original Inbox run ID to its exact provider root turn ID and a restart-safe original WorkQueue recovery route. The new reconciliation function deliberately refuses an unknown mapping, preventing a previous turn in the same session from being mistaken for the current message. Do not mount it behind a production flag until these are implemented, original migrations verified, and tests pass.
+
+**Current engineering readiness estimates:** ~4/10 code integration, ~2/10 end-user/device validation. These are judgment estimates, not measured coverage.
+
+**Mac validation command:** on a clean `feature/phase1-reuse-first-integration` checkout with dependencies and iOS 27 SDK installed, set `EUPHORIA_SIMULATOR_ID` then run `bash scripts/validate-phase1.sh`. The script performs no paid OpenAI calls. Preserve any uncommitted Mac changes before checking out or running it.

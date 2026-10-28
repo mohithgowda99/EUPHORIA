@@ -16,6 +16,11 @@ struct ContentView: View {
                 NativeTaskAcceptanceView()
             }
             .tabItem { Label("Tasks", systemImage: "checklist") }
+
+            NavigationStack {
+                SourceBotsView()
+            }
+            .tabItem { Label("Bots", systemImage: "person.2.crop.square.stack") }
         }
     }
 }

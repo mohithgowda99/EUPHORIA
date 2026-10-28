@@ -10,7 +10,7 @@ struct VisualNodesView: View {
         if let errorMessage { Section { Text(errorMessage).foregroundStyle(.red) } }
         ForEach(state.surface.nodes) { node in section(for: node) }
     }
-    @ViewBuilder private func section(for node: VisualNode) -> some View {
+    @ViewBuilder func section(for node: VisualNode) -> some View {
         Section(node.title) {
             if let summary = node.summary { Text(summary).font(.subheadline).foregroundStyle(.secondary) }
             switch node.kind {

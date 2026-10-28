@@ -4,6 +4,12 @@
 
 This is an *acceptance ledger*, not a feature-completion claim. An invented screen, screenshot-only mock, fixture interaction or generic session record never substitutes for its source OpenDuet task, channel, page or bot. Source references are in `openbot/app/src`; native reference exists under `ios/`. The source tree currently contains **79 TSX route modules**, including layouts and explicit redirects. Route presence alone does not prove an implemented screen.
 
+## P0 source deviation discovered in existing native entry point
+
+`ios/EuphoriaApp/ContentView.swift` currently returns `WorkListView()` as its root. `WorkListView.swift` lists **gateway session envelopes** as rows labeled Tasks, with a new session/legacy workflow. That does **not** equal OpenDuet `ChatScreen` home or the source `TasksScreen` model: original Chat has persistent Bot/channel conversation and original Tasks has real task identities, statuses, assigned questions and reports. The route ledger must keep Chat and Tasks **not source-equivalent** even though a historical gateway test or session list works. Do not silently migrate session records into fake task entities or rebuild Agent A's Tasks backend. Gate native product navigation on actual channel/Task contracts, then port the exact source flows.
+
+**Immediate Agent A integration dependency:** published authenticated source-equivalent home/channel, task list/detail/question/report and create/stop/continue contracts with durable IDs, ownership, pagination, replay and backend receipts. Agent B then replaces provisional root and wires the existing Tasks browser to actual task data without rewriting gateway services. Until then, `WorkListView` is a **development/session surface**, not a completed product screen.
+
 ## The three independently tested UI tracks
 
 | Track | Source authority | Native implementation acceptance |

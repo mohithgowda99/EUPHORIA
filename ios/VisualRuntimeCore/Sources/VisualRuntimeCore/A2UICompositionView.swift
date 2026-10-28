@@ -69,8 +69,8 @@ public struct A2UICompositionView: View {
                 let tabs = tabEntries(node)
                 if !tabs.isEmpty {
                     Picker("Sections",selection:$selectedTabIndex) {
-                        ForEach(Array(tabs.enumerated()),id:\.offset) { index,tab in
-                            Text(tab.title).tag(index)
+                        ForEach(tabs.indices,id:\.self) { index in
+                            Text(tabs[index].title).tag(index)
                         }
                     }.pickerStyle(.segmented)
                     if tabs.indices.contains(selectedTabIndex) { content(for:tabs[selectedTabIndex].child) }
@@ -295,13 +295,15 @@ private struct A2UIMediaPlayer: View {
                 HStack {
                     Text(title.isEmpty ? "Audio" : title)
                     Spacer()
-                    Button("Play") {player?.play()}
+                    Button("Play") {
+                        if player == nil {player=AVPlayer(url:url)}
+                        player?.play()
+                    }
                     Button("Pause") {player?.pause()}
                 }
             } else if let player {VideoPlayer(player:player).frame(height:200)}
-            else {ProgressView()}
+            else {Button("Load video") {player=AVPlayer(url:url)}}
         }
-        .task(id:url) {player=AVPlayer(url:url)}
         .onDisappear {player?.pause()}
     }
 }

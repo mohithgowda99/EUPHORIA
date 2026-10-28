@@ -1,0 +1,59 @@
+{
+  "version": "v0.9",
+  "surfaceId": "tabs-projection",
+  "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json",
+  "revision": 0,
+  "components": [
+    {
+      "id": "root",
+      "component": "Tabs",
+      "tabs": [
+        {
+          "title": "Overview",
+          "child": "overview"
+        },
+        {
+          "title": "Media",
+          "child": "media"
+        }
+      ]
+    },
+    {
+      "id": "overview",
+      "component": "Card",
+      "child": "icon"
+    },
+    {
+      "id": "icon",
+      "component": "Icon",
+      "name": "info"
+    },
+    {
+      "id": "media",
+      "component": "Column",
+      "children": [
+        "cover",
+        "separator",
+        "clip"
+      ]
+    },
+    {
+      "id": "cover",
+      "component": "Image",
+      "url": "https://example.org/illustration.png",
+      "fit": "contain",
+      "description": "Preview"
+    },
+    {
+      "id": "separator",
+      "component": "Divider"
+    },
+    {
+      "id": "clip",
+      "component": "Video",
+      "url": "https://example.org/preview.mp4"
+    }
+  ],
+  "dataModel": {},
+  "localEdits": {}
+}

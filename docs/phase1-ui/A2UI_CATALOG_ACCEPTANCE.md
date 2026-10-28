@@ -48,3 +48,8 @@ A2UI v0.9 `ChildList` can be a static array of IDs or an object `{"componentId":
 The isolated portable Swift 6.2.1 verification scaffold executes original composition tests plus the new `A2UIExtendedCatalogTests` and source fixtures. It verifies nested static components, tabs/modal ID references, slider typed shared-state edits/remote updates, date validation, malformed/unsafe nodes, canonical snapshot Codable roundtrip, stale component replacement. The scaffold uses the previous isolated composition source and a local identity shim because GitHub was not network-mountable in the Linux runtime. **The final merged branch must be built/tested on the actual Mac Xcode 27 checkout before these tests count as integration proof.**
 
 Artifact sandbox remains the existing `GeneratedArtifactView`/`ArtifactPolicy` and is untouched; no WebKit security downgrade or JS bridge. GenUI tool-to-artifact publish, signed revision lifecycle, typed safe actions, visual history and revocation require gateway endpoints and future native implementation. See gateway handoff.
+
+
+### Second validation checkpoint: safer media and source-derived JSON fixtures
+
+Audio and video now require an explicit user action before AVPlayer is created; direct URLs reject loopback, .local, IP literals and non-443 ports. This is **not** a substitute for an Agent A media proxy, DNS-rebinding protections and redirect review. Two additional v0.9 JSON fixtures model a bound List/Slider/DateTimeInput and a structurally distinct Tabs/Card/Image/Video tree. Local portable Swift 6.2.1 scaffold: **20 XCTest cases passed, zero failures**. The full integration baseline and iOS native simulator builds remain unverified on this branch.

@@ -127,8 +127,19 @@ public enum A2UIExtendedCatalog {
     }
     private static func secureURL(_ value: String) throws {
         guard let u = URLComponents(string: value), u.scheme?.lowercased() == "https",
-              u.host != nil, u.url != nil, u.user == nil, u.password == nil, u.fragment == nil,
-              value.utf16.count <= 2000 else { throw A2UIError.invalidData }
+              let host = u.host?.lowercased(), !host.isEmpty, u.url != nil,
+              u.user == nil, u.password == nil, u.fragment == nil,
+              (u.port == nil || u.port == 443), value.utf16.count <= 2000 else {
+            throw A2UIError.invalidData
+        }
+        // Offline validation only. Agent A must gate media URLs against DNS rebinding
+        // and remote redirects before full production media admission.
+        guard host != "localhost", !host.hasSuffix(".localhost"),
+              !host.hasSuffix(".local"), !host.hasSuffix(".internal"),
+              !host.contains(":"), !host.hasSuffix(".onion"),
+              !host.split(separator: ".").allSatisfy({ Int($0) != nil }) else {
+            throw A2UIError.invalidData
+        }
     }
     private static func validDate(_ value: String, date: Bool, time: Bool) -> Bool {
         if value.isEmpty { return true } // Pinned source allows uninitialized bound values.

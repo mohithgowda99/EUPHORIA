@@ -20,3 +20,6 @@ Feature branch only from `d66c5e0`. No `gateway/`, backend, `main` merge, recove
 - New native controls use one existing `A2UIDocument` and no separate state persistence.
 - Dynamic list templates and relative-scoped bindings explicitly denied; no hidden partial success.
 - Do not mark catalog complete without simulator tests for media, date/time, modal, tab restoration and source parity.
+
+
+Follow-up: Added v0.9 JSON source graph tests (20/20 portable XCTest) and changed AVPlayer initialization to explicit user activation; indexed tabs use stable SwiftUI integer indices. No iOS simulator result available in this Linux environment.

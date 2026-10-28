@@ -1,0 +1,58 @@
+{
+  "version": "v0.9",
+  "surfaceId": "settings-projection",
+  "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json",
+  "revision": 0,
+  "components": [
+    {
+      "id": "root",
+      "component": "List",
+      "direction": "vertical",
+      "children": [
+        "heading",
+        "divider",
+        "volume",
+        "reminder"
+      ]
+    },
+    {
+      "id": "heading",
+      "component": "Text",
+      "text": {
+        "path": "/settings/title"
+      }
+    },
+    {
+      "id": "divider",
+      "component": "Divider",
+      "axis": "horizontal"
+    },
+    {
+      "id": "volume",
+      "component": "Slider",
+      "label": "Volume",
+      "value": {
+        "path": "/settings/volume"
+      },
+      "min": 0,
+      "max": 100
+    },
+    {
+      "id": "reminder",
+      "component": "DateTimeInput",
+      "label": "Reminder",
+      "enableDate": true,
+      "value": {
+        "path": "/settings/reminder"
+      }
+    }
+  ],
+  "dataModel": {
+    "settings": {
+      "title": "Preferences",
+      "volume": 45,
+      "reminder": "2026-10-28"
+    }
+  },
+  "localEdits": {}
+}

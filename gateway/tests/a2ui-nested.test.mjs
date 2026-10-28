@@ -56,3 +56,9 @@ test('same-looking keys remain exact and unrelated hidden data cannot satisfy a 
   const p=nested();p.a2ui[2].updateDataModel.value.trip.destinatión='Madrid';delete p.a2ui[2].updateDataModel.value.trip.destination;
   assert.throws(()=>result(p));
 });
+
+test('native-only composition studies are not advertised or accepted as live graph delivery',()=>{
+  assert.throws(()=>normalizeRenderInput({schemaVersion:2,surfaceID:'offline-study',revision:1,nodes:[{
+    id:'composition',kind:'sourceComposition',title:'Offline composition',composition:{version:'v0.9',components:[]}
+  }]}));
+});

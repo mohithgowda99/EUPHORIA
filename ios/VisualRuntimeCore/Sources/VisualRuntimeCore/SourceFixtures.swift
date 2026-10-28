@@ -3,6 +3,17 @@ import Foundation
 /// Transcribed from actual OpenDuet component previews, not synthetic agent output.
 /// See: components/gallery/decisions.tsx, form.tsx and cards.tsx; page-view.tsx.
 public enum SourceFixtures {
+    public static func compositionSurface(choice:Bool = false) throws -> VisualSurface {
+        #if SWIFT_PACKAGE
+        let bundle=Bundle.module
+        #else
+        let bundle=Bundle.main
+        #endif
+        let name=choice ? "a2ui-choice-deployment-v09" : "a2ui-nested-trip-v09"
+        guard let url=bundle.url(forResource:name,withExtension:"json") else {throw VisualContractError.invalidSurface}
+        let document=try JSONDecoder().decode(A2UIDocument.self,from:Data(contentsOf:url))
+        return try VisualSurface(surfaceID:"source-study-"+document.surfaceId,revision:document.revision,nodes:[VisualNode(id:"composition",kind:.sourceComposition,title:choice ? "Deployment choice" : "Trip composition",composition:document)],schemaVersion:2)
+    }
     public static func a2uiControlsSurface() throws -> VisualSurface { try bundledSurface("a2ui-controls-native") }
     public static func a2uiFormSurface() throws -> VisualSurface { try bundledSurface("a2ui-trip-native") }
     public static func gallerySurface() throws -> VisualSurface { try bundledSurface("gallery-v2") }

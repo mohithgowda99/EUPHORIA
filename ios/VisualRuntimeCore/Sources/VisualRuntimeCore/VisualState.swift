@@ -34,7 +34,7 @@ public struct VisualState: Codable, Equatable, Sendable {
         }
         guard !resolvedNodeIDs.contains(node.id) else { throw VisualContractError.duplicateAction }
         let prefix = node.id + "."
-        if node.kind == .askForm && action.kind == .setField &&
+        if [.askForm,.sourceComposition].contains(node.kind) && action.kind == .setField &&
             pending.contains(where: { $0.nodeID == node.id && $0.kind == .submitForm }) {
             throw VisualContractError.duplicateAction
         }
@@ -42,6 +42,13 @@ public struct VisualState: Codable, Equatable, Sendable {
             throw VisualContractError.duplicateAction
         }
         switch (node.kind, action.kind) {
+        case (.sourceComposition, .setField):
+            guard action.values.count==2, let component=action.values["component"]?.string, let value=action.values["value"] else {throw VisualContractError.invalidAction}
+            var document = try compositionDocument(nodeID:node.id)
+            let path = try document.edit(componentID:component,value:A2UIValue(native:value))
+            values[compositionPrefix(nodeID:node.id)+path] = value
+        case (.sourceComposition, .submitForm):
+            guard let button=action.values["$button"]?.string, action.values == (try compositionSubmissionValues(nodeID:node.id,buttonID:button)) else {throw VisualContractError.invalidAction}
         case (_, .displayed):
             guard requiresDisplayReceipt, node.id == surface.nodes.first?.id, action.values.isEmpty else { throw VisualContractError.invalidAction }
             values["$displayReceipt@" + String(surface.revision)] = .flag(true)
@@ -151,6 +158,21 @@ public struct VisualState: Codable, Equatable, Sendable {
     public var requiresDisplayReceipt: Bool {
         surface.nodes.allSatisfy { [.showChecklist, .gallery, .htmlArtifact].contains($0.kind) } &&
             values["$displayReceipt@" + String(surface.revision)] != .flag(true)
+    }
+    private func compositionPrefix(nodeID:String) -> String { nodeID+".source@"+String(surface.revision)+":" }
+    public func compositionDocument(nodeID:String) throws -> A2UIDocument {
+        guard let node=surface.nodes.first(where:{$0.id==nodeID && $0.kind == .sourceComposition}), let document=node.composition else {throw VisualContractError.invalidNode}
+        let prefix=compositionPrefix(nodeID:nodeID)
+        var drafts:[String:A2UIValue]=[:]
+        for (key,value) in values where key.hasPrefix(prefix) { drafts[String(key.dropFirst(prefix.count))]=A2UIValue(native:value) }
+        return try A2UIDocument(surfaceId:document.surfaceId,catalogId:document.catalogId,revision:surface.revision,components:document.components,dataModel:document.dataModel,localEdits:drafts,version:document.version)
+    }
+    public func compositionSubmissionValues(nodeID:String,buttonID:String) throws -> [String:VisualScalar] {
+        let document=try compositionDocument(nodeID:nodeID)
+        let event=try document.makeEvent(buttonID:buttonID,timestamp:"1970-01-01T00:00:00Z",idempotencyKey:"projection")
+        var output:[String:VisualScalar]=["$button":.text(buttonID)]
+        for (key,value) in event.context { output["context:"+key]=try value.nativeScalar() }
+        return output
     }
     private func approvalNoteKey(nodeID: String) -> String { nodeID + ".approvalNote@" + String(surface.revision) }
     public func approvalNote(nodeID: String) -> String {

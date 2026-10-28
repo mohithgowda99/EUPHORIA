@@ -14,6 +14,22 @@ struct VisualNodesView: View {
         Section(node.title) {
             if let summary = node.summary { Text(summary).font(.subheadline).foregroundStyle(.secondary) }
             switch node.kind {
+            case .sourceComposition:
+                if let document = try? state.compositionDocument(nodeID:node.id) {
+                    A2UICompositionView(document: Binding(
+                        get: { (try? state.compositionDocument(nodeID:node.id)) ?? document },
+                        set: { edited in
+                            guard let change=edited.localEdits.first(where:{document.localEdits[$0.key] != $0.value}),
+                                  let component=document.components.first(where:{["TextField","CheckBox","ChoicePicker"].contains($0.component) && $0.properties["value"]?.object?["path"]?.text == change.key}) else {return}
+                            do { enact(node,kind:.setField,values:["component":.text(component.id),"value":try change.value.nativeScalar()]) }
+                            catch { errorMessage="This composition edit is unsupported." }
+                        }
+                    )) { event in
+                        do { enact(node,kind:.submitForm,values:try state.compositionSubmissionValues(nodeID:node.id,buttonID:event.sourceComponentId)) }
+                        catch {errorMessage="This composition action is unsupported."}
+                    }
+                    .disabled(isWaiting(node,kind:.submitForm))
+                } else { Text("Composition unavailable").foregroundStyle(.secondary) }
             case .askChoice:
                 ForEach(node.options ?? []) { option in
                     Button {

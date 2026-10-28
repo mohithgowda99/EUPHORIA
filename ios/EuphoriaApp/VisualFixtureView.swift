@@ -3,7 +3,7 @@ import SwiftData
 
 /// Native-only source fixture viewer. No simulated model, server, or approval execution.
 struct VisualFixtureView: View {
-    enum Kind { case interactions, gallery, a2uiForm }
+    enum Kind { case interactions, gallery, a2uiForm, composition, compositionChoice }
     var kind: Kind = .interactions
     @Environment(\.modelContext) private var modelContext
     @State private var state: VisualState?
@@ -51,6 +51,8 @@ struct VisualFixtureView: View {
         do {
             let fixture: VisualSurface
             switch kind {
+            case .composition: fixture = try SourceFixtures.compositionSurface()
+            case .compositionChoice: fixture = try SourceFixtures.compositionSurface(choice:true)
             case .interactions: fixture = try SourceFixtures.surface()
             case .gallery: fixture = try SourceFixtures.gallerySurface()
             case .a2uiForm: fixture = try SourceFixtures.a2uiControlsSurface()

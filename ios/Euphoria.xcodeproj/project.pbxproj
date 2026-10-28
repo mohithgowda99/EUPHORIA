@@ -7,6 +7,10 @@
     objects = {
 
 /* Begin PBXBuildFile section */
+        0000000000000000000000B4 = {isa = PBXBuildFile; fileRef = 0000000000000000000000A4; };
+        0000000000000000000000B3 = {isa = PBXBuildFile; fileRef = 0000000000000000000000A3; };
+        0000000000000000000000B2 = {isa = PBXBuildFile; fileRef = 0000000000000000000000A2; };
+        0000000000000000000000B1 = {isa = PBXBuildFile; fileRef = 0000000000000000000000A1; };
         000000000000000000000094 = {isa = PBXBuildFile; fileRef = 000000000000000000000084; };
         000000000000000000000093 = {isa = PBXBuildFile; fileRef = 000000000000000000000083; };
         000000000000000000000014 /* EuphoriaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000000E /* EuphoriaApp.swift */; };
@@ -47,6 +51,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+        0000000000000000000000A4 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/Fixtures/a2ui-choice-deployment-v09.json"; sourceTree = "<group>"; };
+        0000000000000000000000A3 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/Fixtures/a2ui-nested-trip-v09.json"; sourceTree = "<group>"; };
+        0000000000000000000000A2 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/A2UICompositionView.swift"; sourceTree = "<group>"; };
+        0000000000000000000000A1 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/A2UIComposition.swift"; sourceTree = "<group>"; };
         000000000000000000000084 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkListView.swift; sourceTree = "<group>"; };
         000000000000000000000083 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/GatewayLiveUpdate.swift"; sourceTree = "<group>"; };
         00000000000000000000000E /* EuphoriaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EuphoriaApp.swift; sourceTree = "<group>"; };
@@ -109,6 +117,10 @@
                 000000000000000000000042 /* GatewaySessionModel.swift */,
                 000000000000000000000043 /* GatewaySessionView.swift */,
                 000000000000000000000084,
+                0000000000000000000000A4,
+                0000000000000000000000A3,
+                0000000000000000000000A2,
+                0000000000000000000000A1,
                 000000000000000000000060 /* ConversationState.swift */,
                 000000000000000000000061 /* ConversationHistoryView.swift */,
                 000000000000000000000065 /* VisualGallery.swift */,
@@ -201,7 +213,7 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-        00000000000000000000000A /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000090 /* gallery-v2.json in Resources */,000000000000000000000091 /* a2ui-trip-native.json in Resources */,000000000000000000000092 /* a2ui-controls-native.json in Resources */); runOnlyForDeploymentPostprocessing = 0; };
+        00000000000000000000000A /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (0000000000000000000000B3,000000000000000000000090 /* gallery-v2.json in Resources */,000000000000000000000091 /* a2ui-trip-native.json in Resources */,000000000000000000000092 /* a2ui-controls-native.json in Resources */); runOnlyForDeploymentPostprocessing = 0; };
         00000000000000000000000D /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
@@ -223,6 +235,8 @@
                 000000000000000000000052 /* GatewaySessionModel.swift in Sources */,
                 000000000000000000000053 /* GatewaySessionView.swift in Sources */,
                 000000000000000000000094,
+                0000000000000000000000B2,
+                0000000000000000000000B1,
                 000000000000000000000070 /* ConversationState.swift in Sources */,
                 000000000000000000000071 /* ConversationHistoryView.swift in Sources */,
                 000000000000000000000075 /* VisualGallery.swift in Sources */,

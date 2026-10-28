@@ -4,6 +4,24 @@ import SwiftData
 
 @MainActor
 final class VisualPersistenceTests: XCTestCase {
+    func testA2UICompositionUsesExistingDiskSnapshotForSharedDraftAndPendingEvent() throws {
+        let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)
+        defer {try? FileManager.default.removeItem(at:directory)}
+        let url=directory.appendingPathComponent("composition.store")
+        var original=VisualState(surface:try SourceFixtures.compositionSurface())
+        try original.apply(VisualAction(id:"draft",surfaceID:original.surface.surfaceID,expectedRevision:original.surface.revision,nodeID:"composition",kind:.setField,values:["component":.text("field"),"value":.text("Kyoto")]))
+        try original.apply(VisualAction(id:"source-pending",surfaceID:original.surface.surfaceID,expectedRevision:original.surface.revision,nodeID:"composition",kind:.submitForm,values:try original.compositionSubmissionValues(nodeID:"composition",buttonID:"submit")))
+        try autoreleasepool {
+            let container=try ModelContainer(for:VisualSnapshot.self,configurations:ModelConfiguration(url:url,cloudKitDatabase:.none))
+            try VisualSnapshotRepository(context:ModelContext(container)).save(original)
+        }
+        let reopened=try ModelContainer(for:VisualSnapshot.self,configurations:ModelConfiguration(url:url,cloudKitDatabase:.none))
+        let saved=try XCTUnwrap(VisualSnapshotRepository(context:ModelContext(reopened)).load(surfaceID:original.surface.surfaceID))
+        XCTAssertEqual(saved.pending.map(\.id),["source-pending"])
+        XCTAssertEqual(try saved.compositionDocument(nodeID:"composition").value(id:"mirror",property:"text"),.string("Kyoto"))
+        XCTAssertEqual(saved.pending.first?.values["context:destination"],.text("Kyoto"))
+    }
     func testSwiftDataSnapshotCanRestoreInNewContext() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: VisualSnapshot.self, configurations: config)

@@ -6,7 +6,7 @@ func visualWireStringKey(_ value: String) -> [UInt16] { Array(value.utf16) }
 
 /// Versioned native data contract; only explicit isolated artifact nodes carry executable web content.
 public enum VisualKind: String, Codable, Sendable {
-    case askChoice, askForm, askApproval, showChecklist, pageChecklist, gallery, htmlArtifact
+    case askChoice, askForm, askApproval, showChecklist, pageChecklist, gallery, htmlArtifact, sourceComposition
 }
 
 public enum VisualFieldKind: String, Codable, Sendable {
@@ -156,11 +156,12 @@ public struct VisualNode: Codable, Equatable, Sendable, Identifiable {
     public let html: String?
     public let submitLabel: String?
     public let formEvent: VisualFormEvent?
+    public let composition: A2UIDocument?
     public init(id: String, kind: VisualKind, title: String, summary: String? = nil,
                 options: [VisualOption]? = nil, fields: [VisualField]? = nil,
-                items: [VisualChecklistItem]? = nil, gallery: VisualGallery? = nil, html: String? = nil, submitLabel: String? = nil, formEvent: VisualFormEvent? = nil) {
+                items: [VisualChecklistItem]? = nil, gallery: VisualGallery? = nil, html: String? = nil, submitLabel: String? = nil, formEvent: VisualFormEvent? = nil, composition: A2UIDocument? = nil) {
         self.id = id; self.kind = kind; self.title = title; self.summary = summary
-        self.options = options; self.fields = fields; self.items = items; self.gallery = gallery; self.html = html; self.submitLabel = submitLabel; self.formEvent = formEvent
+        self.options = options; self.fields = fields; self.items = items; self.gallery = gallery; self.html = html; self.submitLabel = submitLabel; self.formEvent = formEvent; self.composition = composition
     }
 }
 
@@ -191,8 +192,9 @@ public struct VisualSurface: Codable, Equatable, Sendable {
               !nodes.isEmpty, nodes.count <= 32 else { throw VisualContractError.invalidSurface }
         var nodeIDs = Set<String>()
         for node in nodes {
-            guard !node.id.isEmpty, node.id.count <= 64, nodeIDs.insert(node.id).inserted,
+            guard node.id.range(of:"^[A-Za-z0-9_-]{1,64}$",options:.regularExpression) != nil, nodeIDs.insert(node.id).inserted,
                   !node.title.isEmpty, node.title.count <= 120 else { throw VisualContractError.invalidNode }
+            if node.composition != nil && node.kind != .sourceComposition { throw VisualContractError.invalidNode }
             if let label = node.submitLabel {
                 guard node.kind == .askForm, !label.isEmpty, label.count <= 100 else { throw VisualContractError.invalidNode }
             }
@@ -201,6 +203,13 @@ public struct VisualSurface: Codable, Equatable, Sendable {
                 try event.validate(fields: node.fields ?? [])
             }
             switch node.kind {
+            case .sourceComposition:
+                guard schemaVersion == 2, let document = node.composition, document.localEdits.isEmpty else { throw VisualContractError.invalidNode }
+                try document.validate()
+                for button in document.components where button.component == "Button" {
+                    let event = try document.makeEvent(buttonID:button.id,timestamp:"1970-01-01T00:00:00Z",idempotencyKey:"validation")
+                    for value in event.context.values { _ = try value.nativeScalar() }
+                }
             case .askChoice:
                 let options = node.options ?? []
                 guard (1...20).contains(options.count),
@@ -261,5 +270,24 @@ public struct VisualAction: Codable, Equatable, Sendable, Identifiable {
                 kind: VisualActionKind, values: [String: VisualScalar]) {
         self.id = id; self.surfaceID = surfaceID; self.expectedRevision = expectedRevision
         self.nodeID = nodeID; self.kind = kind; self.values = values
+    }
+}
+
+// The source composition fixture uses the existing bounded native scalar/action grammar.
+extension A2UIValue {
+    init(native value: VisualScalar) {
+        switch value { case .text(let s): self = .string(s); case .number(let n): self = .number(n); case .flag(let b): self = .bool(b); case .strings(let a): self = .array(a.map(A2UIValue.string)) }
+    }
+    func nativeScalar() throws -> VisualScalar {
+        switch self {
+        case .string(let s): guard s.utf16.count<=2000 else {throw VisualContractError.invalidAction}; return .text(s)
+        case .number(let n): guard n.isFinite else {throw VisualContractError.invalidAction}; return .number(n)
+        case .bool(let b): return .flag(b)
+        case .array(let values):
+            let strings=values.compactMap(\.text)
+            guard strings.count==values.count, strings.count<=20, Set(strings.map(visualWireStringKey)).count==strings.count, strings.allSatisfy({$0.utf16.count<=2000}) else {throw VisualContractError.invalidAction}
+            return .strings(strings)
+        default: throw VisualContractError.invalidAction
+        }
     }
 }

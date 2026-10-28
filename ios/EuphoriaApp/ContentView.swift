@@ -17,6 +17,8 @@ struct DevelopmentToolsView: View {
             Form {
                 #if DEBUG
                 Section("Visual contract proof") {
+                    NavigationLink("Nested A2UI composition study") { VisualFixtureView(kind:.composition) }
+                    NavigationLink("A2UI deployment choice study") { VisualFixtureView(kind:.compositionChoice) }
                     NavigationLink("Open gateway session") { GatewaySessionView() }
                     NavigationLink("Open A2UI source form fixture") { VisualFixtureView(kind: .a2uiForm) }
                     NavigationLink("Open gallery and artifact fixtures") { VisualFixtureView(kind: .gallery) }

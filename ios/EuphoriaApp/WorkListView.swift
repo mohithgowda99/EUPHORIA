@@ -14,6 +14,9 @@ struct WorkListView: View {
         NavigationStack {
             List {
                 if let model {
+                    if model.sessions.contains(where:{$0.verificationMode == "fixture"}) {
+                        Section { Text("Local test provider — no model inference").font(.caption).foregroundStyle(.orange) }
+                    }
                     if model.hasSession || model.hasPendingCreation {
                         Section {
                             Button(model.hasPendingCreation ? "Resume pending request" : "Resume last task") { showsTask = true }

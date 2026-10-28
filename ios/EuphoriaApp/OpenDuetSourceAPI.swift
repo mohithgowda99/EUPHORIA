@@ -198,11 +198,21 @@ struct OpenDuetSourceAPI: Sendable {
         return response.agent
     }
     func hideBot(id: String, hidden: Bool) async throws {
-        let _: SourceBotMutationResult = try await request(
+        let _: SourceVoidResponse = try await request(
             "api/agents/" + checkedID(id) + (hidden ? "/hide" : "/unhide"), method: "POST")
     }
     func deleteBot(id: String) async throws {
-        let _: SourceBotMutationResult = try await request("api/agents/" + checkedID(id), method: "DELETE")
+        let _: SourceVoidResponse = try await request("api/agents/" + checkedID(id), method: "DELETE")
+    }
+
+    func pinBot(id: String, pinned: Bool) async throws {
+        let _: SourceVoidResponse = try await request(
+            "api/agents/" + checkedID(id) + (pinned ? "/pin" : "/unpin"), method: "POST")
+    }
+    func duplicateBot(id: String) async throws -> SourceBot {
+        let response: SourceBotResponse = try await request(
+            "api/agents/" + checkedID(id) + "/duplicate", method: "POST")
+        return response.agent
     }
 
     /// Uses the ORIGINAL Better Auth provider initiation, not an EUPHORIA auth server.
@@ -246,6 +256,10 @@ struct OpenDuetSourceAPI: Sendable {
         guard let http = response as? HTTPURLResponse else { throw SourceAPIError.invalidResponse }
         guard http.statusCode != 401 else { throw SourceAPIError.unauthenticated }
         guard (200..<300).contains(http.statusCode) else { throw SourceAPIError.rejected(http.statusCode) }
+        if http.statusCode == 204 {
+            guard let empty = SourceVoidResponse() as? T else { throw SourceAPIError.invalidResponse }
+            return empty
+        }
         guard data.count <= 1_048_576 else { throw SourceAPIError.invalidResponse }
         do { return try JSONDecoder().decode(T.self, from: data) }
         catch { throw SourceAPIError.invalidResponse }
@@ -255,12 +269,7 @@ private struct SourceSocialInput: Encodable {
     let provider: String
     let callbackURL: String
 }
-private struct SourceBotMutationResult: Decodable {
-    // Source routes vary between {success:true} and {agent:...}.
-    // On 204 there is no object; use a more precise request if needed.
-    let success: Bool?
-    let agent: SourceBot?
-}
+private struct SourceVoidResponse: Decodable {}
 private struct AnyEncodableSource: Encodable {
     let encodeValue: (Encoder) throws -> Void
     init(_ value: any Encodable) { encodeValue = value.encode }

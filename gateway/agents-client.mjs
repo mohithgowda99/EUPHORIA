@@ -60,6 +60,24 @@ export class AgentsClient {
     const query=new URLSearchParams({order,limit:String(limit)});if(after!==undefined)query.set('after',identifier(after));
     return this.#request('GET','/'+identifier(sessionID)+'/turns?'+query);
   }
+  /** Immutable files published by completed OpenAI-hosted turns. The source
+   * PageStore and Bot/channel ownership must authorize access before a product
+   * route exposes this read; do not give iOS raw provider credentials.
+   */
+  async listArtifacts(sessionID,{after,limit=20,order='desc',signal}={}) {
+    if (!Number.isInteger(limit)||limit<1||limit>100||!['asc','desc'].includes(order))
+      throw Error('Invalid artifact page');
+    const query=new URLSearchParams({limit:String(limit),order});
+    if(after!==undefined)query.set('after',identifier(after));
+    return this.#request('GET','/'+identifier(sessionID)+'/artifacts?'+query,undefined,undefined,signal);
+  }
+  async retrieveArtifact(sessionID,artifactID,{signal}={}) {
+    const artifact=await this.#request('GET','/'+identifier(sessionID)+'/artifacts/'+identifier(artifactID),
+      undefined,undefined,signal);
+    if(artifact?.id!==artifactID)throw Error('Agents artifact identity mismatch');
+    return artifact;
+  }
+
   async openEventStream(sessionID,{signal}={}) {
     identifier(sessionID);
     const controller=new AbortController();

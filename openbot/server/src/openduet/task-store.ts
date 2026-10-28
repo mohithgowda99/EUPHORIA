@@ -32,6 +32,9 @@ import {
 import { ProactiveRefusedError } from "../proactive/types";
 import { DEFAULT_MAX_ATTEMPTS } from "../work/queue";
 import type { TaskReportReader } from "./task-report";
+import { taskStatus, type TaskStatus } from "./task-status";
+export { taskStatus } from "./task-status";
+export type { TaskStatus } from "./task-status";
 
 /*
  * The person's tasks: work OpenDuet does in the background, each in a conversation of its own, so
@@ -63,13 +66,6 @@ export type { OpenDuetTaskOrigin as TaskOrigin };
  *   conversation since;
  * - `ready_for_review`: its turn finished and wrote a reply.
  */
-export type TaskStatus =
-  | "needs_input"
-  | "working"
-  | "resolved"
-  | "failed"
-  | "ready_for_review";
-
 export type TaskRecord = {
   thumbnail?: string | null;
   queuedReplies?: { messageId: string; text: string }[];
@@ -135,19 +131,6 @@ export class TaskNotFoundError extends Error {
 }
 
 /** The rule above, on its own, so it can be read and tested without a database. */
-export function taskStatus(state: {
-  resolved: boolean;
-  needsInput: boolean;
-  working: boolean;
-  failed?: boolean;
-}): TaskStatus {
-  if (state.needsInput) return "needs_input";
-  if (state.working) return "working";
-  if (state.resolved) return "resolved";
-  if (state.failed) return "failed";
-  return "ready_for_review";
-}
-
 /** How long a task with no turn on the queue yet still reads as just started. */
 const STARTING_MS = 60_000;
 /** A turn whose last run a crash or restart cut off. */

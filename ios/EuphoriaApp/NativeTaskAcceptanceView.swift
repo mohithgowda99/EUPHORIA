@@ -8,6 +8,12 @@ import SwiftData
 @MainActor
 struct NativeTaskAcceptanceView: View {
     @Environment(\.modelContext) private var context
+    @Query private var savedCreationIntents: [TaskCreationSnapshot]
+    @State private var connectionScope: String?
+    @State private var showsNewTask = false
+    @State private var creating = false
+    @State private var titleDraft = ""
+    @State private var instructionDraft = ""
     @State private var transport: GatewayClient?
     @State private var tasks: [GatewayTask] = []
     @State private var cursor: String?
@@ -28,6 +34,15 @@ struct NativeTaskAcceptanceView: View {
                 }
             }
             if let transport {
+                if let pending = savedCreationIntents.first(where: { $0.scope == connectionScope }) {
+                    Section("Unconfirmed creation") {
+                        Text(pending.title)
+                        Text("A request was saved before transmission. Check it using the SAME idempotency identity. The gateway will not start a second task for that identity.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Button("Check saved request") { Task { await createOrRecoverTask() } }
+                            .disabled(creating)
+                    }
+                }
                 Section("Tasks") {
                     ForEach(tasks) { task in
                         NavigationLink {
@@ -55,18 +70,84 @@ struct NativeTaskAcceptanceView: View {
                 }
             }
             if loading { ProgressView("Loading real tasks…") }
+            if creating { ProgressView("Recording task creation…") }
         }
-        .navigationTitle("Tasks service")
+        .navigationTitle("Tasks")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("New task", systemImage: "plus") { showsNewTask = true }
+                    .disabled(transport == nil || creating || savedCreationIntents.contains(where: { $0.scope == connectionScope }))
+            }
+        }
+        .sheet(isPresented: $showsNewTask) {
+            NavigationStack {
+                Form {
+                    TextField("Task title", text: $titleDraft)
+                    TextField("What should the agent do?", text: $instructionDraft, axis: .vertical)
+                        .lineLimit(3...8)
+                    Text("The task must be confirmed by the gateway. If delivery is uncertain, the saved request ID is reused instead of starting another agent run.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .navigationTitle("New task")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { showsNewTask = false }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Start") {
+                            showsNewTask = false
+                            Task { await createOrRecoverTask() }
+                        }
+                        .disabled(titleDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                                  instructionDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                                  titleDraft.count > 160 || instructionDraft.count > 4000)
+                    }
+                }
+            }
+        }
         .refreshable { await refresh() }
         .task {
             guard transport == nil else { return }
             do {
                 let model = try GatewaySessionModel.configured(context: context)
                 transport = model.taskServiceClient
+                connectionScope = model.storageScope
                 await refresh()
             } catch {
                 self.error = "An authenticated development gateway is required to read tasks."
             }
+        }
+    }
+
+    private func createOrRecoverTask() async {
+        guard let transport, let scope = connectionScope, !creating else { return }
+        creating = true
+        defer { creating = false }
+        do {
+            let intent: TaskCreationSnapshot
+            if let prior = savedCreationIntents.first(where: { $0.scope == scope }) {
+                intent = prior
+            } else {
+                intent = TaskCreationSnapshot(scope: scope, requestID: UUID().uuidString,
+                    title: titleDraft.trimmingCharacters(in: .whitespacesAndNewlines),
+                    instruction: instructionDraft.trimmingCharacters(in: .whitespacesAndNewlines))
+                context.insert(intent)
+                try context.save() // Durable BEFORE the first external submission.
+            }
+            let response = try await transport.startTask(
+                title: intent.title, instruction: intent.instruction, requestID: intent.requestID)
+            guard !response.task.id.isEmpty else { throw GatewayClientError.invalidResponse }
+            if response.task.sessionID != nil && response.task.deliveryPhase != "uncertain" {
+                context.delete(intent)
+                try context.save()
+                titleDraft = ""
+                instructionDraft = ""
+            } else {
+                error = "Task creation is not confirmed yet. Use Check saved request; do not submit a new task."
+            }
+            await refresh()
+        } catch {
+            self.error = "Could not confirm task creation. The same saved request ID can be checked without starting a second task."
         }
     }
 

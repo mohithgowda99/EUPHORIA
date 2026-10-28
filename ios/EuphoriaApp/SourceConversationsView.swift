@@ -137,6 +137,7 @@ struct SourceConversationsHomeView: View {
 /// The source DeliveryStore already deduplicates native messages by externalID.
 /// Only the outbound submission identity is archived on-device before sending.
 struct SourceConversationDetailView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.modelContext) private var context
     @Query private var allPending: [SourceMessageIntent]
     let client: OpenDuetSourceAPI
@@ -227,6 +228,18 @@ struct SourceConversationDetailView: View {
             await reload()
         }
         .onChange(of: selectedBotID) { _, _ in Task { await reload() } }
+        .task(id: scenePhase == .active ? selectedBotID : "") {
+            // The original server runs the Bot independently; the iPhone only
+            // observes its saved channel history. Stop network reads when the
+            // screen disappears or the app moves to background.
+            guard scenePhase == .active, !selectedBotID.isEmpty else { return }
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(5)) }
+                catch { return }
+                guard !Task.isCancelled, scenePhase == .active else { return }
+                if !busy { await reload() }
+            }
+        }
     }
 
     private func reload() async {

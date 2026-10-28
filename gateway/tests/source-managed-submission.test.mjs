@@ -10,6 +10,16 @@ function links(){
  return {
   turns:{
    async read(id){return receipts.has(id)?{providerSessionId:receipts.get(id)}:null;},
+   async bindRootCreatedEvent({inboxId,scope:given,sessionID,event}){
+    assert.deepEqual(given,{ownerUserId:scope.ownerUserId,channelId:scope.channelId,
+     agentId:scope.botId,threadId:scope.threadId});
+    assert.equal(receipts.get(inboxId),sessionID);
+    assert.equal(event.type,'agent.session.turn.created');
+    assert.equal(event.turn.session_id,sessionID);
+    assert.equal(event.turn.id,event.turn_id);
+    assert.equal(event.turn.subagent_id,null);
+    return event.turn_id;
+   },
    async reserve(id,sourceScope,providerSessionId){
     assert.deepEqual(sourceScope,{ownerUserId:scope.ownerUserId,channelId:scope.channelId,
      agentId:scope.botId,threadId:scope.threadId});
@@ -113,4 +123,40 @@ test('ambiguous follow-up is not resent after owner lease loss or a process rest
   {sessionID:'session_a',phase:'accepted'});
  assert.equal(creates,1);
  assert.equal(followups,1,'One original source Inbox can submit only once');
+});
+
+test('initial provider-created stream binds exact original session and root turn, not the last completed task',async()=>{
+ const storage=links();let closed=0,created=0;
+ const provider={createSession:async()=>{created++;throw Error('should stream');},
+  createSessionStream:async()=>({
+   close:()=>{closed++;},
+   events:(async function*(){
+    yield {type:'agent.session.created',event_id:'ev_session',
+      session:{id:'session_stream'}};
+    yield {type:'agent.session.turn.created',event_id:'ev_root',
+      session_id:'session_stream',turn_id:'root_new',
+      turn:{id:'root_new',session_id:'session_stream',subagent_id:null}};
+   })(),
+  }),sendMessage:async()=>{throw Error('no follow-up expected');}};
+ assert.deepEqual(await submitManagedSourceInput(input(storage,provider,'inbox_1')),
+   {sessionID:'session_stream',phase:'accepted'});
+ assert.equal(created,0);
+ assert.equal(closed,1);
+ assert.equal((await storage.turns.read('inbox_1')).providerSessionId,'session_stream');
+});
+
+test('initial stream rejects foreign root events rather than fabricating a Bot completion',async()=>{
+ const storage=links();let closed=0;
+ const provider={createSession:async()=>{throw Error('should stream');},
+  createSessionStream:async()=>({
+   close:()=>{closed++;},
+   events:(async function*(){
+    yield {type:'agent.session.created',event_id:'evt_one',session:{id:'session_stream'}};
+    yield {type:'agent.session.turn.created',event_id:'evt_foreign',
+      session_id:'session_foreign',turn_id:'old_turn',
+      turn:{id:'old_turn',session_id:'session_foreign',subagent_id:null}};
+   })(),
+  }),sendMessage:async()=>{}};
+ await assert.rejects(submitManagedSourceInput(input(storage,provider,'inbox_1')),/source-bound session/);
+ assert.equal(closed,1);
 });

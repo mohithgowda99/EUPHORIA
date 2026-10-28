@@ -43,30 +43,33 @@ struct NativeTaskAcceptanceView: View {
                             .disabled(creating)
                     }
                 }
-                Section("Tasks") {
-                    ForEach(tasks) { task in
-                        NavigationLink {
-                            NativeTaskEvidenceView(client: transport, taskID: task.id)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(task.title)
-                                Text(statusLabel(task.status))
-                                    .font(.caption).foregroundStyle(.secondary)
-                                if task.deliveryPhase == "uncertain" {
-                                    Text("Provider delivery uncertain")
-                                        .font(.caption).foregroundStyle(.orange)
+                ForEach(["needs_input", "working", "ready_for_review", "failed", "resolved"], id: \.self) { status in
+                    let matching = tasks.filter { $0.status == status }
+                    if !matching.isEmpty {
+                        Section(statusLabel(status)) {
+                            ForEach(matching) { task in
+                                NavigationLink {
+                                    NativeTaskEvidenceView(client: transport, taskID: task.id)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(task.title)
+                                        if task.deliveryPhase == "uncertain" {
+                                            Text("Provider delivery uncertain")
+                                                .font(.caption).foregroundStyle(.orange)
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-                    if tasks.isEmpty && !loading && error == nil {
-                        ContentUnavailableView("No tasks", systemImage: "checklist",
-                            description: Text("No owned Task records were returned by the server."))
-                    }
-                    if hasMore {
-                        Button("Load more") { Task { await loadMore() } }
-                            .disabled(loading)
-                    }
+                }
+                if tasks.isEmpty && !loading && error == nil {
+                    ContentUnavailableView("No tasks", systemImage: "checklist",
+                        description: Text("No owned Task records were returned by the server."))
+                }
+                if hasMore {
+                    Button("Load more") { Task { await loadMore() } }
+                        .disabled(loading)
                 }
             }
             if loading { ProgressView("Loading real tasks…") }
@@ -142,10 +145,11 @@ struct NativeTaskAcceptanceView: View {
                 try context.save()
                 titleDraft = ""
                 instructionDraft = ""
-            } else {
-                error = "Task creation is not confirmed yet. Use Check saved request; do not submit a new task."
             }
             await refresh()
+            if response.task.sessionID == nil || response.task.deliveryPhase == "uncertain" {
+                error = "Task creation is not confirmed yet. Check the SAME saved request ID; do not submit a new task."
+            }
         } catch {
             self.error = "Could not confirm task creation. The same saved request ID can be checked without starting a second task."
         }

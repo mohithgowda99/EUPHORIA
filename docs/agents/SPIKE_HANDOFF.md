@@ -1,24 +1,26 @@
 # EUPHORIA phase-one handoff
 
-Updated2026-10-28. Current work is on `feature/agents-native-visual-contract-spike`, based on9e62bfd. Main and OpenBot/CopilotKit remain untouched.
+Updated 2026-10-28. Branch `feature/agents-native-visual-contract-spike`, implementation `3b8941b`, continuation based on `ccc37ca`. Main and OpenBot/CopilotKit are untouched.
 
-Phase one ports OpenDuet behavior to SwiftUI and uses OpenAI Agents API for intelligence. Phase two applies ETERNAL's visual interface. Phase one is unfinished.
+Phase one ports OpenDuet functionality to iOS with OpenAI Agents API behind an authenticated gateway. Phase two applies ETERNAL's visual experience. **Phase one remains unfinished.** User approved isolated generated HTML artifacts on 2026-10-28; the shell and standard interface remain native SwiftUI.
 
-## What works locally
+## Implemented locally
 
-- Existing five-type native fixture renderer is shared with the gateway session proof; no second renderer or WebView.
-- Debug **Open gateway session** sends a real HTTP request, renders a validated surface, persists local form drafts/intents, and sends source-equivalent choice/form/approval responses. Manual Refresh follows subsequent provider calls.
-- Node gateway enforces injected identity and session ownership, validates the canonical JSON Schema via AJV, assigns revisions and journals requests/actions in SQLite before sending. Repeated/concurrent accepted intents do not repeat writes. Lost outcomes are retained, never blindly replayed. Explicit recovery safely cancels unreceived submissions using durable tombstones.
-- Accepted/inactive decisions remain locked. Native session switching cannot expose the previous session's controls. Old native archives remain readable.
+- Shared native decisions/forms/checklists plus records, metrics, notices, sortable tables, bar/pie/line/area charts and progress. Version 2 adds gallery/HTML nodes; old version 1 archives remain readable. This is an adapter contract, not full A2UI.
+- Approval-note drafts now live in existing revision-scoped persisted visual state. Reopening restores them. Pending and completed decisions lock edits; malformed notes are rejected.
+- Same-session follow-up, cancellation, owned session list and paginated provider history. Input intents persist before HTTP. Unknown outcomes remain blocked without replay; definitive rejection is terminal. Latest history refresh preserves cached older pages, including gaps larger than a page.
+- Same SwiftData container holds account-scoped native history projections and input intents. SQLite retains ownership, source surfaces and operation receipts. No separate profile/domain system.
+- Read-only results use a durable display acknowledgement rather than inventing a human question. Rejected unreceived receipts can be acknowledged again; widgets remain usable after acceptance.
+- Generated HTML/JS uses unique isolated origins and ephemeral WKWebView stores. CSP blocks external network, frames, workers, forms and objects. No native bridge or credentials; navigation, popup, file and device permissions are denied. WebRTC/WebTransport constructors are removed before artifact code. This intentionally does not grant arbitrary online artifact access.
 
 ## Verification
 
-28 gateway tests,19 portable Swift tests,12 iOS tests, Debug/Release and plist checks passed. Native explicit QA flow: request → choice → form draft → termination/relaunch → restored draft → submission → approval decline → idle. Fixture server checked each of3 outputs exactly once. No OpenAI request or external task executed. Evidence and caveats: `TEST_EVIDENCE.md`.
+Current counts and commands are in `TEST_EVIDENCE.md`. Real WebKit execution checks inline interaction, blocked fetch, bridge absence and origin/state separation. On-disk SwiftData tests verify note and conversation recovery. Manual native QA reached a request and accepted choice; the expanded full gallery flow was not manually verified because input automation was unreliable. Do not substitute unit tests for that missing trace.
 
-## Boundaries
+## Required remaining implementation
 
-The real launcher is loopback-only with an explicit development bearer token; production Sign in with Apple/token verification and cloud deployment are not implemented. The proof uses single-process SQLite and manual refresh, not distributed storage or streaming. Native account setup, conversation/history, full basicCatalog/page/browser/bot/skill/files/integration/routine parity remain unfinished. One active choice/form/approval per tool call, with optional read-only context, is the connected subset. Approval-note drafts remain a deferred continuity gap.
+Full A2UI data bindings/actions and dynamic per-Bot grants; rich page blocks; tasks/routines/responsibilities/notifications; bot/skill and memory management; channel/group/attachment/voice behavior; integration grants/OAuth/credentials; computer/browser/files/commands and server-owned approvals; production identity/deployment/admin; streaming and authoritative reconciliation of genuinely uncertain provider effects. See the complete source inventory in `../ios/FEATURE_PARITY.md` and capability map in `NATIVE_VISUAL_PARITY.md`.
 
-Personal archives remain on-device. Submitted context/provider history are remote data; gateway stores minimal ownership and active operation state. No cloud vendor has been selected. Credentials are server-only; none bundled in iOS. Lack of a key blocks live verification, not local implementation.
+These are code and service gaps, not all API-key blockers. A key is needed only for real-provider acceptance. No real OpenAI request or external action has been verified. Development bearer identity and single-process SQLite are not production authentication or distributed execution.
 
-Next: native conversation/history and further source-component parity through the existing boundary, followed by real-provider acceptance when configured. Gateway run/QA instructions: `../../gateway/README.md`. Full source inventory: `NATIVE_VISUAL_PARITY.md`. Never mark phase one complete from fixture results.
+Next: implement the source A2UI binding/action subset through the existing validated surface boundary, keeping provider/session recovery intact. Do not restart or adopt another runtime merely to expand the catalog.

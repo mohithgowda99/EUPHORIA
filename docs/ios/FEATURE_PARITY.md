@@ -1,6 +1,6 @@
 # EUPHORIA native feature parity ledger
 
-**Reference:** OpenDuet fork at `5b0e15f9719db0628c02a3fe6386dcad683c8302`. **Parity state at M0:** all items **NOT VERIFIED** on native iOS. A route's existence is source inventory, not evidence of tested behavior.
+**Reference:** OpenDuet fork at `5b0e15f9719db0628c02a3fe6386dcad683c8302`. **Current phase one:** incomplete. Local validated decisions/forms, continuation/history/cancel, typed gallery and isolated generated artifacts are implemented; full source parity is not verified. A route's existence is source inventory, not evidence of tested behavior.
 
 ## Canonical React route and screen file inventory
 
@@ -104,7 +104,7 @@ Existing Expo mobile is React Native, not SwiftUI. Its conversation sends to `/a
 
 ## Cross-cutting UI parity checklist
 
-Every row requires native functional test, failure-path test and parity comparison with running web client; **none is green yet.**
+Every row requires native functional tests, failure-path tests and comparison with the source behavior. The evidence below validates specific local subsets; no row represents complete source parity.
 
 | Capability / UI family | Source of truth | Native acceptance evidence required |
 |---|---|---|
@@ -136,18 +136,19 @@ Source modules: `approval-tools.tsx`, `bot-tools.tsx`, `computer-tools.tsx`, `es
 
 For every tool record: exact name; offered conditions; parameter schema; read vs mutation; executor (server/client/render-only); run/agent/bot context; approval control; result serialization; stop/cancel/resume; history rehydration; errors; regression fixture. **Never implement a no-op handler to make a tool appear registered.**
 
-## Test evidence table (update only after running tests)
+## Current acceptance evidence — 2026-10-28
 
-| Requirement | iOS test status | Evidence |
+| Capability | Current evidence | Remaining gap |
 |---|---|---|
-| Debug and Release Xcode builds | NOT RUN | Mac/Xcode required |
-| Native auth and session across reopen | NOT RUN | Running HTTPS server and OAuth provider required |
-| AG-UI streaming text + structured events | NOT RUN | Runtime + provider required |
-| Real frontend tool result executed exactly once | NOT RUN | Runtime fixture required |
-| Approval 202 -> server continuation | NOT RUN | Running computer/approval service required |
-| Persisted conversation history after relaunch | NOT RUN | Intelligence + server required |
-| Unknown/duplicate/disordered events | NOT RUN | Unit + integration fixtures required |
-| All remaining routes/tools | NOT RUN | Implement iteratively and log evidence |
+| Debug/Release native builds | Passed; 16 iOS XCTest passed, no failures/skips | Signing/physical-device qualification |
+| Approval-note draft recovery | Core and on-disk SwiftData reopen passed; node/revision scoped and locked after submission | Full live external approval workflow |
+| Native choice/form/approval result | Gateway fixture tests and prior native three-step trace; current request/choice trace accepted | Real provider and external executor |
+| Conversation follow-up/cancel/history | 35 gateway and 33 core suite totals; owned endpoints, intent journal, newest-window pagination and persisted re-entry | Live API, streaming, attachments/grouped/rich AG-UI parity; new full native manual trace incomplete |
+| Gallery/HTML | Nine native gallery types and isolated HTML; shared 10-node fixture validates in Swift and gateway; real WebKit tests execute inline interaction and block fetch | Dynamic grants/registries, A2UI bindings, source formatting options, full online sandboxed tools |
+| Production auth/deployment | Development-token owner isolation tests | Real identity verifier, login/revoke, hosted deployment, distributed state |
+| Computer/integrations/routines/admin and all other routes | Source inventory only | Native/service implementation and end-to-end traces |
+
+Counts are totals, not per-feature coverage. Exact commands, failed attempts and retained local evidence: `../agents/TEST_EVIDENCE.md`.
 
 ## Definition of "complete"
 

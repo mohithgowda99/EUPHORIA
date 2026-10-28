@@ -5,10 +5,16 @@ import {parseSSE} from './sse.mjs';
 export class AgentsClient {
   #apiKey;
   #fetch;
-  constructor({ apiKey, fetchImpl = globalThis.fetch }) {
+  #sessionSpendLimitCents;
+  constructor({ apiKey, fetchImpl = globalThis.fetch, sessionSpendLimitCents = 50 }) {
     requireText(apiKey, 'server API key');
+    // Managed Agents API spend_control is per session, in USD cents.
+    // This deliberately avoids relying on our own usage-metering loop.
+    if (!Number.isInteger(sessionSpendLimitCents) || sessionSpendLimitCents < 1 ||
+        sessionSpendLimitCents > 500) throw new Error('Invalid per-session spending limit');
     this.#apiKey = apiKey;
     this.#fetch = fetchImpl;
+    this.#sessionSpendLimitCents = sessionSpendLimitCents;
   }
 
   async createSession({model, instructions, input, tools = []}, submissionKey) {
@@ -17,7 +23,8 @@ export class AgentsClient {
     requireText(input, 'input');
     if (!Array.isArray(tools)) throw new Error('Invalid tools');
     return this.#request('POST', '', {agent: {model, instructions, tools},
-      environment: {type: 'none'}, input, stream: false}, submissionKey);
+      environment: {type: 'none'}, input, stream: false,
+      spend_control: {limit: this.#sessionSpendLimitCents}}, submissionKey);
   }
 
   async retrieveSession(sessionID,{signal}={}) {

@@ -29,8 +29,19 @@ export async function submitManagedSourceInput(input: {
     reserve(inboxId:string, scope:{
       ownerUserId:string; channelId:string; agentId:string; threadId:string;
     },sessionID:string):Promise<"reserved"|"existing">;
+    bindRootCreatedEvent(input:{
+      inboxId:string; scope:{ownerUserId:string;channelId:string;agentId:string;threadId:string};
+      sessionID:string;
+      event:{type:string;event_id:string;session_id:string;turn_id:string;
+        turn:{id:string;session_id:string;subagent_id:string|null}};
+    }):Promise<string>;
   };
   provider: {
+    /** Managed session SSE returns actual session.created and root turn.created
+     * identities; no turn is inferred from the session's latest history.
+     */
+    createSessionStream?(initial: {model:string;instructions:string;tools:[];input:string},
+      key:string):Promise<{close():void;events:AsyncIterable<unknown>}>;
     createSession(
       initial: { model: string; instructions: string; tools: []; input: string },
       key: string,
@@ -59,6 +70,49 @@ export async function submitManagedSourceInput(input: {
     return {sessionID:previous.providerSessionId,phase:"accepted"};
   }
   const link = await input.links.reserve(input.scope, creationKey);
+  if (link.create && input.provider.createSessionStream) {
+    // OpenAI's initial stream emits session.created before turn.created.
+    // Bind each exact identity into ORIGINAL source state. No extra runner.
+    const stream = await input.provider.createSessionStream({
+      ...input.definition,input:input.message,
+    },creationKey);
+    let sessionID:string|null=null;
+    try {
+      for await (const raw of stream.events) {
+        if (!raw || typeof raw !== "object") continue;
+        const event=raw as {
+          type?:string;event_id?:string;session_id?:string;turn_id?:string;
+          session?:{id?:string};
+          turn?:{id:string;session_id:string;subagent_id:string|null};
+        };
+        if (event.type === "agent.session.created") {
+          const created=event.session?.id;
+          if (!created || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(created) ||
+              sessionID && sessionID !== created)
+            throw new Error("Unverified managed session creation");
+          sessionID=created;
+          await input.links.bind(input.scope,creationKey,created);
+          await input.turns.reserve(input.runId,originalScope,created);
+        }
+        if (event.type === "agent.session.turn.created") {
+          if (!sessionID || event.session_id !== sessionID ||
+              !event.event_id || !event.turn_id || !event.turn)
+            throw new Error("Root turn event lacks its source-bound session");
+          await input.turns.bindRootCreatedEvent({
+            inboxId:input.runId, scope:originalScope,sessionID,
+            event: {
+              type:event.type,event_id:event.event_id,session_id:sessionID,
+              turn_id:event.turn_id,turn:event.turn,
+            },
+          });
+          return {sessionID,phase:"accepted"};
+        }
+      }
+      throw new Error("Managed session stream closed without a root-created event");
+    } finally {
+      stream.close();
+    }
+  }
   if (link.create) {
     // The reservation precedes the network call. If that call times out,
     // future processing is blocked until a human/provider reconciliation,

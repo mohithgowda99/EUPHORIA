@@ -80,7 +80,8 @@ final class SourceOpenDuetTests: XCTestCase, @unchecked Sendable {
             }
         }
         let api = try client()
-        XCTAssertEqual(try await api.memories().first?.content, "Prefer detailed briefs")
+        let sourceMemories = try await api.memories()
+        XCTAssertEqual(sourceMemories.first?.content, "Prefer detailed briefs")
         _ = try await api.setMemoryEnabled(id: "mem1", enabled: false)
         XCTAssertEqual(observed.last?.url?.path, "/api/memory/mem1")
         let result = try await api.refuseApproval(id: "approval1")

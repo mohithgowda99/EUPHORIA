@@ -49,3 +49,23 @@ for(const [kind,error] of [['not_sent',{outcomeUnknown:false,failureStage:'pendi
  const {p,request,reopen}=await setup(t),s=(await request('/v1/sessions/session')).body,path=`/v1/surfaces/${s.surface.surfaceID}/actions`,a=answer(s);p.error=Object.assign(Error('secret raw message'),error);
  let r=await request(path,{method:'POST',body:a});assert.equal(r.body.failure.kind,kind);assert.ok(!JSON.stringify(r.body).includes('secret'));await reopen();r=await request(path,{method:'POST',body:a});assert.equal(r.body.failure.kind,kind);assert.equal(p.writes.length,1);
 });
+
+test('decoded provider graph arguments are bounded before recursive fingerprinting',async t=>{
+ const {p,request}=await setup(t);let deep={};let x=deep;for(let i=0;i<800;i++){x.child={};x=x.child;}p.current.required_actions[0].arguments=deep;
+ let tailReads=0;Object.defineProperty(x,'tail',{enumerable:true,get(){tailReads++;return 'never read';}});p.retrieveSession=async()=>p.current;
+ let refusals=0;p.rejectToolCall=async()=>{refusals++;};const r=await request('/v1/sessions/session');assert.equal(r.status,502);assert.equal(refusals,0);assert.equal(tailReads,0);assert.equal(p.writes.length,0);
+});
+
+test('owned HTTP graph loop uses the actual AgentsClient event serialization and verified 202 transport',async t=>{
+ const {AgentsClient}=await import('../agents-client.mjs');const {p,request,reopen}=await setup(t);const posts=[];
+ const client=new AgentsClient({apiKey:'offline-only',fetchImpl:async(url,options)=>{
+  if(options.method==='GET')return Response.json(p.current);
+  posts.push(JSON.parse(options.body));return new Response(null,{status:202});
+ }});
+ p.retrieveSession=client.retrieveSession.bind(client);p.submitToolResult=client.submitToolResult.bind(client);
+ const r=await request('/v1/sessions/session');assert.equal(r.status,200);const s=r.body,path=`/v1/surfaces/${s.surface.surfaceID}/actions`;
+ const sent=await request(path,{method:'POST',body:answer(s)});assert.equal(sent.status,202);assert.deepEqual(sent.body.acknowledgedActionIDs,['answer']);assert.equal(posts.length,1);
+ const event=posts[0].events[0];assert.equal(event.type,'agent.session.input.tool_result');assert.equal(event.turn_id,'turn');assert.equal(event.call_id,'call');assert.equal(event.success,true);
+ const output=JSON.parse(event.output);assert.deepEqual(output.userAction.context,{destination:'Kyoto',notify:true,source:'native'});
+ await reopen();await request(path,{method:'POST',body:answer(s)});assert.equal(posts.length,1);
+});

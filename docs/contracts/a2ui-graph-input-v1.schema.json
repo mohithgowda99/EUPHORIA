@@ -1,0 +1,579 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://euphoria.example/contracts/a2ui-graph-input/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "a2uiGraph"
+  ],
+  "properties": {
+    "a2uiGraph": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 40,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "createSurface"
+            ],
+            "properties": {
+              "version": {
+                "const": "v0.9"
+              },
+              "createSurface": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "surfaceId",
+                  "catalogId"
+                ],
+                "properties": {
+                  "surfaceId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                  },
+                  "catalogId": {
+                    "const": "https://a2ui.org/specification/v0_9/basic_catalog.json"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "updateComponents"
+            ],
+            "properties": {
+              "version": {
+                "const": "v0.9"
+              },
+              "updateComponents": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "surfaceId",
+                  "components"
+                ],
+                "properties": {
+                  "surfaceId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                  },
+                  "components": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "component",
+                            "children"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "component": {
+                              "const": "Column"
+                            },
+                            "children": {
+                              "type": "array",
+                              "maxItems": 40,
+                              "items": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "component",
+                            "children"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "component": {
+                              "const": "Row"
+                            },
+                            "children": {
+                              "type": "array",
+                              "maxItems": 40,
+                              "items": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "component",
+                            "child"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "component": {
+                              "const": "Card"
+                            },
+                            "child": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "component",
+                            "text"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "component": {
+                              "const": "Text"
+                            },
+                            "text": {
+                              "oneOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 2000
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "path"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^/"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "variant": {
+                              "enum": [
+                                "h1",
+                                "h2",
+                                "h3",
+                                "h4",
+                                "h5",
+                                "body",
+                                "caption"
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "component",
+                            "label"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "component": {
+                              "const": "TextField"
+                            },
+                            "label": {
+                              "oneOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 2000
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "path"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^/"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "value": {
+                              "oneOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 2000
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "path"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^/"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "component",
+                            "label",
+                            "value"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "component": {
+                              "const": "CheckBox"
+                            },
+                            "label": {
+                              "oneOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 2000
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "path"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^/"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "value": {
+                              "oneOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "path"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^/"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "component",
+                            "value",
+                            "options"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "component": {
+                              "const": "ChoicePicker"
+                            },
+                            "label": {
+                              "oneOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 2000
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "path"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^/"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "value": {
+                              "oneOf": [
+                                {
+                                  "type": "array",
+                                  "maxItems": 20,
+                                  "items": {
+                                    "type": "string",
+                                    "maxLength": 2000
+                                  }
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "path"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^/"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "variant": {
+                              "enum": [
+                                "mutuallyExclusive",
+                                "multipleSelection"
+                              ]
+                            },
+                            "options": {
+                              "type": "array",
+                              "minItems": 1,
+                              "maxItems": 20,
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "label",
+                                  "value"
+                                ],
+                                "properties": {
+                                  "label": {
+                                    "oneOf": [
+                                      {
+                                        "type": "string",
+                                        "maxLength": 2000
+                                      },
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "required": [
+                                          "path"
+                                        ],
+                                        "properties": {
+                                          "path": {
+                                            "type": "string",
+                                            "maxLength": 256,
+                                            "pattern": "^/"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "value": {
+                                    "type": "string",
+                                    "maxLength": 2000
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "component",
+                            "child",
+                            "action"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "component": {
+                              "const": "Button"
+                            },
+                            "child": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "variant": {
+                              "enum": [
+                                "primary",
+                                "borderless"
+                              ]
+                            },
+                            "action": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "event"
+                              ],
+                              "properties": {
+                                "event": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "name"
+                                  ],
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                                    },
+                                    "context": {
+                                      "type": "object",
+                                      "maxProperties": 20,
+                                      "additionalProperties": {
+                                        "oneOf": [
+                                          {
+                                            "oneOf": [
+                                              {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "array",
+                                                "maxItems": 20,
+                                                "items": {
+                                                  "type": "string",
+                                                  "maxLength": 2000
+                                                }
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "type": "object",
+                                            "additionalProperties": false,
+                                            "required": [
+                                              "path"
+                                            ],
+                                            "properties": {
+                                              "path": {
+                                                "type": "string",
+                                                "maxLength": 256,
+                                                "pattern": "^/"
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "updateDataModel"
+            ],
+            "properties": {
+              "version": {
+                "const": "v0.9"
+              },
+              "updateDataModel": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "surfaceId"
+                ],
+                "properties": {
+                  "surfaceId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                  },
+                  "path": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "value": {}
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "expectedRevision": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

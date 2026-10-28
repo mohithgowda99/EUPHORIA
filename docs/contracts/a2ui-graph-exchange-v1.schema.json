@@ -1,0 +1,418 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://euphoria.example/contracts/a2ui-graph-exchange/v1",
+  "$defs": {
+    "surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "surfaceID",
+        "revision",
+        "nodes"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 2
+        },
+        "surfaceID": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "kind",
+              "title",
+              "composition"
+            ],
+            "properties": {
+              "id": {
+                "const": "composition"
+              },
+              "kind": {
+                "const": "sourceComposition"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "composition": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "version",
+                  "surfaceId",
+                  "catalogId",
+                  "revision",
+                  "components",
+                  "dataModel",
+                  "localEdits"
+                ],
+                "properties": {
+                  "version": {
+                    "const": "v0.9"
+                  },
+                  "surfaceId": {
+                    "type": "string"
+                  },
+                  "catalogId": {
+                    "const": "https://a2ui.org/specification/v0_9/basic_catalog.json"
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "components": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "items": {
+                      "$ref": "https://euphoria.example/contracts/a2ui-graph-input/v1#/properties/a2uiGraph/items/oneOf/1/properties/updateComponents/properties/components/items"
+                    }
+                  },
+                  "dataModel": {
+                    "type": "object"
+                  },
+                  "localEdits": {
+                    "type": "object",
+                    "maxProperties": 0
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "surfaceID",
+        "expectedRevision",
+        "nodeID",
+        "kind",
+        "values"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "surfaceID": {
+          "type": "string"
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nodeID": {
+          "const": "composition"
+        },
+        "kind": {
+          "const": "submitForm"
+        },
+        "values": {
+          "type": "object",
+          "required": [
+            "$button"
+          ],
+          "properties": {
+            "$button": {
+              "type": "string"
+            }
+          },
+          "patternProperties": {
+            "^context:[A-Za-z_][A-Za-z0-9_-]{0,63}$": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "maxItems": 20,
+                  "items": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "toolResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "userAction"
+      ],
+      "properties": {
+        "userAction": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "surfaceId",
+            "sourceComponentId",
+            "timestamp",
+            "context"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "surfaceId": {
+              "type": "string"
+            },
+            "sourceComponentId": {
+              "type": "string"
+            },
+            "timestamp": {
+              "type": "string"
+            },
+            "context": {
+              "type": "object",
+              "maxProperties": 20,
+              "additionalProperties": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 2000
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sessionID",
+        "phase",
+        "verificationMode",
+        "publication",
+        "surface",
+        "acknowledgedActionIDs",
+        "rejectedActionIDs",
+        "displayAcknowledged",
+        "resolvedNodeIDs"
+      ],
+      "properties": {
+        "sessionID": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "verificationMode": {
+          "type": "string"
+        },
+        "publication": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failure": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "stage"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "not_sent",
+                "rejected",
+                "uncertain"
+              ]
+            },
+            "stage": {
+              "enum": [
+                "validation",
+                "pending_lookup",
+                "submission",
+                "response",
+                "read",
+                "unknown"
+              ]
+            },
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            }
+          }
+        },
+        "surface": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersion",
+            "surfaceID",
+            "revision",
+            "nodes"
+          ],
+          "properties": {
+            "schemaVersion": {
+              "const": 2
+            },
+            "surfaceID": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "nodes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "kind",
+                  "title",
+                  "composition"
+                ],
+                "properties": {
+                  "id": {
+                    "const": "composition"
+                  },
+                  "kind": {
+                    "const": "sourceComposition"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "composition": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "version",
+                      "surfaceId",
+                      "catalogId",
+                      "revision",
+                      "components",
+                      "dataModel",
+                      "localEdits"
+                    ],
+                    "properties": {
+                      "version": {
+                        "const": "v0.9"
+                      },
+                      "surfaceId": {
+                        "type": "string"
+                      },
+                      "catalogId": {
+                        "const": "https://a2ui.org/specification/v0_9/basic_catalog.json"
+                      },
+                      "revision": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "components": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 200,
+                        "items": {
+                          "$ref": "https://euphoria.example/contracts/a2ui-graph-input/v1#/properties/a2uiGraph/items/oneOf/1/properties/updateComponents/properties/components/items"
+                        }
+                      },
+                      "dataModel": {
+                        "type": "object"
+                      },
+                      "localEdits": {
+                        "type": "object",
+                        "maxProperties": 0
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "acknowledgedActionIDs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rejectedActionIDs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "displayAcknowledged": {
+          "type": "boolean"
+        },
+        "resolvedNodeIDs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/surface"
+    },
+    {
+      "$ref": "#/$defs/action"
+    },
+    {
+      "$ref": "#/$defs/toolResult"
+    },
+    {
+      "$ref": "#/$defs/snapshot"
+    }
+  ]
+}

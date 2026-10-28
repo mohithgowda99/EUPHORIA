@@ -44,7 +44,7 @@ test('create uses Agents API with explicit model, no environment, and stable sub
 });
 
 test('user messages retain exact content and caller submission key', async t => {
-  const {client,requests} = await provider(t, (_,res)=>json(res,{}));
+  const {client,requests} = await provider(t, (_,res)=>{res.writeHead(202);res.end();});
   await client.sendMessage('sess_test','Keep my text exactly.','message-1');
   assert.equal(requests[0].path,'/v1/agents/sessions/sess_test/events');
   assert.equal(requests[0].headers['idempotency-key'],'message-1');
@@ -53,8 +53,7 @@ test('user messages retain exact content and caller submission key', async t => 
 });
 
 test('tool result copies current required action identity and serializes typed output', async t => {
-  const {client,requests} = await provider(t,(req,res)=>json(res,req.method==='GET'
-    ? {id:'sess_test',required_actions:[pending]} : {}));
+  const {client,requests} = await provider(t,(req,res)=>{if(req.method==='GET')json(res,{id:'sess_test',required_actions:[pending]});else {res.writeHead(202);res.end();}});
   await client.submitToolResult('sess_test',{turnID:'turn_test',callID:'call_test',name:'askChoice',
     output:{choice:'staging',label:'Staging'}},'action-1');
   assert.equal(requests[0].method,'GET');
@@ -122,7 +121,7 @@ test('error-body cleanup cannot leak a provider exception or lose write uncertai
 });
 
 test('saved items retain pagination and cancellation uses the documented event',async t=>{
-  const {client,requests}=await provider(t,(_,res)=>json(res,{data:[],has_more:false,last_id:null}));
+  const {client,requests}=await provider(t,(req,res)=>{if(req.method==='POST'){res.writeHead(202);res.end();}else json(res,{data:[],has_more:false,last_id:null});});
   await client.listItems('sess_test',{after:'item_before',limit:10});
   assert.equal(requests[0].path,'/v1/agents/sessions/sess_test/items?order=asc&limit=10&after=item_before');
   await client.cancelTurn('sess_test','cancel-1');
@@ -161,7 +160,7 @@ test('event transport refuses non-SSE responses and malformed payloads',async t=
 });
 
 test('rejected UI calls return a provider error with exact pending identity and no success output',async t=>{
-  const {client,requests}=await provider(t,(req,res)=>json(res,req.method==='GET'?{id:'sess_test',required_actions:[pending]}:{}));
+  const {client,requests}=await provider(t,(req,res)=>{if(req.method==='GET')json(res,{id:'sess_test',required_actions:[pending]});else{res.writeHead(202);res.end();}});
   await client.rejectToolCall('sess_test',{turnID:'turn_test',callID:'call_test',name:'askChoice',error:'Unsupported UI contract'},'refuse-1');
   assert.deepEqual(requests[1].body,{events:[{type:'agent.session.input.tool_result',turn_id:'turn_test',call_id:'call_test',success:false,error:'Unsupported UI contract'}]});
 });
@@ -183,4 +182,9 @@ test('render refusal distinguishes rejected HTTP from uncertain submission and r
 test('human result refuses mutated pending arguments before any POST',async()=>{
  let writes=0;const client=new AgentsClient({apiKey:'secret',fetchImpl:async(url,options)=>{if(options.method==='POST')writes++;return Response.json({id:'sess_test',required_actions:[{type:'function_call',turn_id:'turn_test',call_id:'call_test',name:'render',arguments:{changed:true}}]});}});
  await assert.rejects(client.submitToolResult('sess_test',{turnID:'turn_test',callID:'call_test',name:'render',output:{ok:true}},'human-key',{expectedArguments:{changed:false}}),e=>e.outcomeUnknown===false&&e.failureStage==='pending_lookup');assert.equal(writes,0);
+});
+
+for(const [status,value] of [[200,{}],[200,null],[200,{session_id:'foreign',call_id:'foreign'}],[204,null]])test(`event status ${status} with ${JSON.stringify(value)} cannot fabricate acceptance`,async()=>{
+ const client=new AgentsClient({apiKey:'secret',fetchImpl:async(url,options)=>options.method==='GET'?Response.json({id:'sess_test',required_actions:[pending]}):status===204?new Response(null,{status}):Response.json(value,{status})});
+ await assert.rejects(client.submitToolResult('sess_test',{turnID:'turn_test',callID:'call_test',name:'askChoice',output:{choice:'stage'}},'event-key'),e=>e.outcomeUnknown===true&&e.failureStage==='response');
 });

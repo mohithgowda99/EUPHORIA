@@ -1,3 +1,4 @@
+import {readFileSync} from 'node:fs';
 import {normalizeGraphInput} from './a2ui-graph.mjs';
 import {fail,validateSurface,surfaceSchema} from './visual-contract.mjs';
 import {SourceFormModel,sourcePath} from './a2ui-model.mjs';
@@ -107,8 +108,9 @@ export function normalizeRenderInput(input,previous){
 
 // The single render tool accepts canonical native data or a source packet. Native validation remains separate.
 const { $id, $schema, $defs, ...nativeSchema }=surfaceSchema;
+const {$id:graphID,$schema:graphVersion,...graphInputSchema}=JSON.parse(readFileSync(new URL('../docs/contracts/a2ui-graph-input-v1.schema.json',import.meta.url)));
 export const renderInputSchema={type:'object',oneOf:[nativeSchema,{
   type:'object',additionalProperties:false,required:['a2ui'],properties:{a2ui:{type:'array',minItems:3,maxItems:20,items:{
     type:'object',required:['version'],properties:{version:{const:'v0.9'},createSurface:{type:'object'},updateComponents:{type:'object'},updateDataModel:{type:'object'}},additionalProperties:false
   }}}
-},{type:'object',additionalProperties:false,required:['a2uiGraph'],properties:{expectedRevision:{type:'integer',minimum:0},a2uiGraph:{type:'array',minItems:1,maxItems:40,items:{type:'object'}}}}],$defs};
+},graphInputSchema],$defs};

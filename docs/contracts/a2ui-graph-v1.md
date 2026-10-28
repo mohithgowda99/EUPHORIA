@@ -2,6 +2,8 @@
 
 Status: implemented bounded gateway execution path; offline HTTP/SQLite/Agents transport acceptance only. No new paid-provider or coordinated native end-to-end acceptance yet. Existing `/v1` routes and legacy `a2ui` form input remain compatible. Native implementation is owned separately; no iOS edits in this workstream.
 
+Machine schemas: `a2ui-graph-input-v1.schema.json` (actual advertised tool graph branch) and `a2ui-graph-exchange-v1.schema.json` (graph surface/action/result/snapshot envelopes). JSON Schema validates structure; server additionally enforces ownership, pending calls, revisions, bounds, graph references, safe keys and context semantics.
+
 ## Function request
 
 Tool `euphoria_render_surface` additionally accepts `{a2uiGraph:[message,...],expectedRevision?:integer}`. Do not mix this with native nodes or legacy a2ui. `message` is exactly `{version:"v0.9",createSurface:{surfaceId,catalogId}}`, `{version:"v0.9",updateComponents:{surfaceId,components}}`, or `{version:"v0.9",updateDataModel:{surfaceId,path?:string,value?:JSON}}`. All unknown fields fail. Function arguments may be JSON objects or bounded JSON strings from Agents API. Temporary normalization state only; existing sessions/surface_versions persist authority.
@@ -16,7 +18,7 @@ Update graph: expectedRevision must equal saved outer revision, source surfaceId
 
 ## Publication and native action
 
-Publication is existing `VisualSurface` schemaVersion2 with `nodes:[{id:"composition",kind:"sourceComposition",title:"Interactive workspace",composition:{version:"v0.9",surfaceId,catalogId,revision,components,dataModel,localEdits:{}}}]`. Outer surfaceID is gateway-generated and stable for the session; embedded surfaceId is source event identity. Existing snapshot envelope remains `{sessionID,title,phase,verificationMode,publication,failure?,surface,acknowledgedActionIDs,rejectedActionIDs,displayAcknowledged,resolvedNodeIDs}`. Existing SSE event shapes are unchanged: graph is inside the same snapshot projection; no parallel graph event stream. See gateway/live-snapshots.mjs for exact transport envelope.
+Publication is existing `VisualSurface` schemaVersion2 with `nodes:[{id:"composition",kind:"sourceComposition",title:"Interactive workspace",composition:{version:"v0.9",surfaceId,catalogId,revision,components,dataModel,localEdits:{}}}]`. Outer surfaceID is gateway-generated and stable for the session; embedded surfaceId is source event identity. Existing snapshot envelope remains `{sessionID,title,phase,verificationMode,publication,failure?,surface,acknowledgedActionIDs,rejectedActionIDs,displayAcknowledged,resolvedNodeIDs}`. Existing SSE event shapes are unchanged: `event: update`, JSON `data: {snapshot,history,inputs}`; graph is inside snapshot.surface. No parallel graph event stream. See gateway/live-snapshots.mjs for exact transport envelope.
 
 `POST /v1/surfaces/:gatewaySurfaceID/actions`: existing `{id,surfaceID,expectedRevision,nodeID:"composition",kind:"submitForm",values:{"$button":buttonID,"context:key":scalarOrStringList,...}}`. All event fields must be present exactly once; no extra fields. Server reconstructs permitted editable bindings from context, checks all controls sharing each path, refuses conflicting aliases, and recomputes event. Noneditable paths and literals cannot change. Client name/source/timestamp never confer authority. Displayed receipt cannot satisfy a graph Button.
 
@@ -31,3 +33,5 @@ Confirmed validation/pending lookup failure means not_sent. Verified submission4
 ## Fixtures and remaining acceptance
 
 Source graphs: gateway/tests/fixtures/a2ui-graph-{trip,deployment}-v09.json. Versioned examples: docs/contracts/fixtures/a2ui-graph-v1.json. Synthetic names only; no provider credentials. Offline tests use actual HTTP and disk SQLite plus injected provider transport; real Agents API output submission is separately unverified for graphs. Full native-created positive/failure journey, cloud identity/deployment, APNs and service parity remain open. No claim that a localhost endpoint is a hosted product.
+
+Provider event acknowledgement is restricted to verified HTTP202; a different successful status (including200/204 with parseable unrelated metadata) stays uncertain. Already-decoded and string function arguments are bounded before fingerprinting (128KiB wire, depth48,20000 values). Oversized/deep untrusted arguments fail502 without journalling or posting a refusal because a safe exact call fingerprint could not be established.

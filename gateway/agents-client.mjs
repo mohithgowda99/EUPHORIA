@@ -1,4 +1,4 @@
-import {stable} from './visual-contract.mjs';
+import {argumentFingerprint} from './provider-arguments.mjs';
 import {parseSSE} from './sse.mjs';
 
 /** Server-side Agents API transport. No user authentication, tool execution, or retries here. */
@@ -84,7 +84,7 @@ export class AgentsClient {
     const session = await this.retrieveSession(sessionID);
     pending = session.required_actions?.find(action => action.type === 'function_call'
       && action.turn_id === turnID && action.call_id === callID && action.name === name);
-    if (!pending||expectedArguments!==undefined&&stable(pending.arguments)!==stable(expectedArguments)) throw new Error('Tool call is not currently pending');
+    if (!pending||expectedArguments!==undefined&&argumentFingerprint(pending.arguments)!==argumentFingerprint(expectedArguments)) throw new Error('Tool call is not currently pending');
     }catch{const e=Error('Could not verify pending tool result; nothing was submitted');e.outcomeUnknown=false;e.failureStage='pending_lookup';throw e;}
     const encoded=JSON.stringify(output);
     return this.#request('POST', '/' + identifier(sessionID) + '/events', {events: [{
@@ -141,7 +141,11 @@ export class AgentsClient {
       throw error;
     }
     // The events endpoint returns HTTP 202 with no body: accepted, not completed.
-    if (path.endsWith('/events') && response.status === 202) return null;
+    if (path.endsWith('/events')) {
+      if(response.status===202)return null;
+      try{await response.body?.cancel();}catch{}
+      const error=Error('Unverified Agents event response; reconcile before retrying');error.outcomeUnknown=true;error.failureStage='response';throw error;
+    }
     if (response.status === 204) return null;
     try { return await response.json(); }
     catch {

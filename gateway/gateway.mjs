@@ -1,3 +1,4 @@
+import {argumentFingerprint} from './provider-arguments.mjs';
 import {liveSnapshots} from './live-snapshots.mjs';
 import {normalizeRenderInput,renderInputSchema} from './a2ui-form.mjs';
 import {conversations} from './conversations.mjs';
@@ -64,7 +65,7 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     if(calls.length>1||calls.some(a=>a.name!=='euphoria_render_surface'))fail(502,'Unsupported pending tool');
     if(calls.length){
       const call=calls[0];identifier(call.turn_id);identifier(call.call_id);
-      const fingerprint=stable(call.arguments);
+      const fingerprint=argumentFingerprint(call.arguments);
       if(row.call_id===call.call_id&&row.turn_id===call.turn_id&&row.call_payload!==fingerprint)fail(502,'Provider mutated a published call');
       const journalCall=db.prepare('SELECT * FROM actions WHERE session_id=? AND call_id=?').get(id,call.call_id);
       if(journalCall?.phase.startsWith('refus')){
@@ -102,7 +103,7 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     }else{
       if(records.length>=500||records.filter(a=>a.phase.startsWith('refus')&&JSON.parse(a.payload).turnID===call.turn_id).length>=3)fail(502,'Unsupported render correction limit reached');
       const actionID='refusal-'+createHash('sha256').update(row.id+'\0'+call.turn_id+'\0'+call.call_id).digest('hex');
-      const payload=stable({turnID:call.turn_id,fingerprint:stable(call.arguments)});
+      const payload=stable({turnID:call.turn_id,fingerprint:argumentFingerprint(call.arguments)});
       db.prepare('INSERT INTO actions(session_id,action_id,payload,phase,node_id,call_id) VALUES(?,?,?,?,?,?)').run(row.id,actionID,payload,'refusing',null,call.call_id);
       try{
         await provider.rejectToolCall(row.id,{turnID:call.turn_id,callID:call.call_id,name:'euphoria_render_surface',
@@ -171,7 +172,7 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     const output=decisionResult(JSON.parse(row.surface),action);
     // Recheck the actual pending call before journalling a human result. History never authorizes writes.
     let current;try{current=await provider.retrieveSession(row.id);}catch{fail(503,'Could not verify pending call; nothing was submitted');}
-    if(current?.id!==row.id||!(current.required_actions??[]).some(c=>c.type==='function_call'&&c.name==='euphoria_render_surface'&&c.turn_id===row.turn_id&&c.call_id===row.call_id&&stable(c.arguments)===row.call_payload))fail(409,'Pending call changed; nothing was submitted');
+    if(current?.id!==row.id||!(current.required_actions??[]).some(c=>c.type==='function_call'&&c.name==='euphoria_render_surface'&&c.turn_id===row.turn_id&&c.call_id===row.call_id&&argumentFingerprint(c.arguments)===row.call_payload))fail(409,'Pending call changed; nothing was submitted');
     // Assigned once before journalling/sending. Repeated action IDs return the existing receipt, never a new event.
     if(output.userAction)output.userAction.timestamp=new Date().toISOString();
     if(db.prepare('SELECT 1 FROM actions WHERE session_id=? AND call_id=?').get(row.id,row.call_id))fail(409,'Decision already submitted');

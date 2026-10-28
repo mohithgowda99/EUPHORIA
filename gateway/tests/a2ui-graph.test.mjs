@@ -58,3 +58,14 @@ test('deployment choices preserve UTF16 identity and enforce every shared picker
  assert.deepEqual(decisionResult(s,action(s,values)).userAction.context,Object.fromEntries(Object.entries(values).filter(([k])=>k!=='$button').map(([k,v])=>[k.slice(8),v])));
  values[Object.keys(values).find(k=>k!=='$button'&&Array.isArray(values[k]))]=['e\u0301','é'];assert.throws(()=>decisionResult(s,action(s,values)));
 });
+
+test('advertised tool schema describes graph operations instead of admitting arbitrary message objects',async()=>{
+ const {default:Ajv}=await import('ajv/dist/2020.js');const {renderInputSchema}=await import('../a2ui-form.mjs');const validate=new Ajv({strict:false}).compile(renderInputSchema);
+ assert.equal(validate(packet()),true);assert.equal(validate({a2uiGraph:[{script:'arbitrary'}]}),false);assert.equal(validate({a2uiGraph:[{version:'v0.9',updateComponents:{surfaceId:'trip',components:[{id:'x',component:'Script',code:'bad'}]}}]}),false);
+});
+
+test('versioned exchange schemas accept native-compatible synthetic surface action and provider result fixtures',async()=>{
+ const {default:Ajv}=await import('ajv/dist/2020.js');const load=name=>JSON.parse(readFileSync(new URL('../../docs/contracts/'+name,import.meta.url)));
+ const ajv=new Ajv({strict:false});ajv.addSchema(load('a2ui-graph-input-v1.schema.json'));const validate=ajv.compile(load('a2ui-graph-exchange-v1.schema.json'));
+ const f=load('fixtures/a2ui-graph-v1.json');for(const v of [f.surface,f.action,f.toolResult])assert.equal(validate(v),true,JSON.stringify(validate.errors));
+});

@@ -422,6 +422,22 @@ enum SourceAPIError: LocalizedError {
 /// The Better Auth native redirect carries Set-Cookie, not an API key.
 /// Extract only the signed session token from the source plugin's callback.
 /// It is later validated by the ORIGINAL /api/auth/get-session endpoint.
+enum SourceOAuthStateCookie {
+    /// The existing Better Auth Expo client forwards this exact cookie value
+    /// to the same-origin authorization proxy. The server owns state signing.
+    static func extract(from setCookie: String?) -> String? {
+        guard let raw = setCookie, raw.count <= 16_384 else { return nil }
+        let pattern = #"(?:^|,)\s*(?:__Secure-)?better-auth\.oauth_state=([^;,\s]+)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: raw,
+                range: NSRange(raw.startIndex..<raw.endIndex, in: raw)),
+              let range = Range(match.range(at: 1), in: raw)
+        else { return nil }
+        let state = String(raw[range])
+        return (1...1024).contains(state.count) ? state : nil
+    }
+}
+
 enum SourceSessionCookie {
     static func extract(from callback: URL) throws -> String {
         guard callback.scheme?.lowercased() == "openbotmobile",
@@ -794,8 +810,9 @@ struct OpenDuetSourceAPI: Sendable {
     /// Uses the ORIGINAL Better Auth provider initiation, not an EUPHORIA auth server.
     func socialAuthorizationURL(provider: String) async throws -> URL {
         guard ["google","microsoft","okta"].contains(provider) else { throw SourceAPIError.invalidInput }
-        let response: SourceSignInLaunch = try await request("api/auth/sign-in/social", method: "POST",
-            body: SourceSocialInput(provider: provider, callbackURL: "openbotmobile://"))
+        let (response, http): (SourceSignInLaunch, HTTPURLResponse) =
+            try await requestWithHTTP("api/auth/sign-in/social", method: "POST",
+                body: SourceSocialInput(provider: provider, callbackURL: "openbotmobile://"))
         guard let raw = response.url, let target = URL(string: raw),
               target.scheme?.lowercased() == "https", target.user == nil,
               target.password == nil, target.fragment == nil
@@ -807,7 +824,12 @@ struct OpenDuetSourceAPI: Sendable {
         var proxy = URLComponents(url: endpoint.baseURL
             .appendingPathComponent("api/auth/expo-authorization-proxy"),
             resolvingAgainstBaseURL: false)
-        proxy?.queryItems = [URLQueryItem(name: "authorizationURL", value: raw)]
+        var parameters = [URLQueryItem(name: "authorizationURL", value: raw)]
+        if let oauthState = SourceOAuthStateCookie.extract(
+            from: http.value(forHTTPHeaderField: "Set-Cookie")) {
+            parameters.append(URLQueryItem(name: "oauthState", value: oauthState))
+        }
+        proxy?.queryItems = parameters
         guard let proxyURL = proxy?.url else { throw SourceAPIError.invalidResponse }
         return proxyURL
     }
@@ -823,6 +845,13 @@ struct OpenDuetSourceAPI: Sendable {
     }
     private func request<T: Decodable>(_ path: String, method: String, body: (any Encodable)? = nil,
                                        queryItems: [URLQueryItem] = []) async throws -> T {
+        let (body, _): (T, HTTPURLResponse) = try await requestWithHTTP(
+            path, method: method, body: body, queryItems: queryItems)
+        return body
+    }
+
+    private func requestWithHTTP<T: Decodable>(_ path: String, method: String, body: (any Encodable)? = nil,
+                                               queryItems: [URLQueryItem] = []) async throws -> (T, HTTPURLResponse) {
         guard !path.hasPrefix("/"), !path.contains(".."), !path.contains("?") else {
             throw SourceAPIError.invalidInput
         }
@@ -854,10 +883,10 @@ struct OpenDuetSourceAPI: Sendable {
         guard (200..<300).contains(http.statusCode) else { throw SourceAPIError.rejected(http.statusCode) }
         if http.statusCode == 204 {
             guard let empty = SourceVoidResponse() as? T else { throw SourceAPIError.invalidResponse }
-            return empty
+            return (empty, http)
         }
         guard data.count <= 1_048_576 else { throw SourceAPIError.invalidResponse }
-        do { return try JSONDecoder().decode(T.self, from: data) }
+        do { return (try JSONDecoder().decode(T.self, from: data), http) }
         catch { throw SourceAPIError.invalidResponse }
     }
 }

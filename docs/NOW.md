@@ -76,3 +76,16 @@ Implementation after the provider-hosted sandbox/subagent/artifact transport add
 **Current engineering readiness estimates:** ~4/10 code integration, ~2/10 end-user/device validation. These are judgment estimates, not measured coverage.
 
 **Mac validation command:** on a clean `feature/phase1-reuse-first-integration` checkout with dependencies and iOS 27 SDK installed, set `EUPHORIA_SIMULATOR_ID` then run `bash scripts/validate-phase1.sh`. The script performs no paid OpenAI calls. Preserve any uncommitted Mac changes before checking out or running it.
+
+## Source-owned managed correlation continuation (2026-10-28)
+
+**Implemented on the same integration branch; NOT a live production cutover:**
+
+- Added original Postgres table `managed_agent_inbox_turns` with immutable mapping from each original `delivery_inbox.id` to its provider session, exact root turn and authenticated `agent.session.turn.created` event. Migration `0069`, snapshot and journal are committed. This is a source-to-provider identity receipt, not a competing executor, memory engine or task database.
+- Existing `gateway/AgentsClient` now supports initial `POST /agents/sessions` with `stream:true` and the original stable Idempotency-Key, exposing provider session.created and root turn.created in one request. The original submission helper can bind those events and fails uncertain rather than inventing completion.
+- Managed submission retries inspect the original Inbox receipt. A crash after session-link commit but before receipt commit recognizes the creation key and never re-sends the initial input as a follow-up. Follow-up submissions reserve the original Inbox receipt before POST, so ambiguous outcomes do not replay.
+- Original delivery router preserves `accepted` state for uncertain provider writes. No fabricated success/failure or push. Reconciliation retrieves the exact root turn and all paged turn items, never settling from the latest session-global page.
+- Native source Chat performs read-only refresh while visible, without becoming an agent runner or requiring an awake phone.
+- Added stream, duplicate-write, foreign-root, pagination, uncertain-outcome and original-source security tests. Executed a narrow isolated V8 mock-stream transport test; **full Node24+, Bun, Drizzle, Xcode and device validation have not run**.
+
+**Still not complete:** `openbot/server/src/index.ts` still routes normal delivery execution to the original CopilotKit runner. The source-managed adapter is **not mounted**. Follow-up root-event observation, independently running completion recovery, source-authorized managed tool/approval integration, native interactive A2UI, production backend/APNs and device parity still require further code. The committed Drizzle snapshot must be checked with drizzle-kit before applying migration 0069. These are implementation gaps, not merely test gaps. No paid API calls or main merge occurred.

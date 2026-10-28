@@ -39,6 +39,65 @@ struct SourceUser: Decodable, Sendable {
     let email: String
     let name: String?
 }
+struct SourceConversation: Decodable, Identifiable, Sendable {
+    let id: String
+    let name: String
+    let agentIds: [String]
+    let active: Bool
+}
+struct SourceConversationsResponse: Decodable, Sendable {
+    let conversations: [SourceConversation]
+    let nextCursor: String?
+}
+struct SourceConversationResponse: Decodable, Sendable {
+    let channel: SourceConversation
+}
+struct SourceChannelInput: Encodable { let agentIds: [String] }
+struct SourceConversationText: Decodable, Identifiable, Sendable {
+    let id: String
+    let role: String
+    let text: String
+    let unsupportedContent: Bool
+
+    private enum CodingKeys: String, CodingKey { case id, role, content }
+    private struct TextPart: Decodable { let text: String? }
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        role = try container.decode(String.self, forKey: .role)
+        if let string = try? container.decode(String.self, forKey: .content) {
+            text = string
+            unsupportedContent = false
+        } else if let parts = try? container.decode([TextPart].self, forKey: .content) {
+            text = parts.compactMap(\.text).joined(separator: "\n")
+            unsupportedContent = parts.contains { $0.text == nil }
+        } else {
+            text = ""
+            unsupportedContent = true
+        }
+    }
+}
+struct SourceHistoryResponse: Decodable, Sendable {
+    let history: SourceHistory
+}
+struct SourceHistory: Decodable, Sendable {
+    let messages: [SourceConversationText]
+    init(from decoder: Decoder) throws {
+        let single = try decoder.singleValueContainer()
+        if let list = try? single.decode([SourceConversationText].self) {
+            messages = list
+        } else {
+            let object = try single.decode(Nested.self)
+            messages = object.messages
+        }
+    }
+    private struct Nested: Decodable { let messages: [SourceConversationText] }
+}
+private struct SourceMessageInput: Encodable {
+    let agentId: String
+    let text: String
+    let externalId: String
+}
 struct SourceApprovalAction: Decodable, Sendable {
     let botId: String?
     let toolRef: String?
@@ -273,6 +332,44 @@ struct OpenDuetSourceAPI: Sendable {
         return response.agent
     }
 
+    /// The original source channel list and delivery queue are the only
+    /// channel and message authorities. No provider session is mislabeled.
+    func sourceConversations(cursor: String? = nil) async throws -> SourceConversationsResponse {
+        let query = cursor.map { [URLQueryItem(name: "cursor", value: $0)] } ?? []
+        let response: SourceConversationsResponse = try await request(
+            "api/delivery/conversations", method: "GET", queryItems: query)
+        guard response.conversations.count <= 150,
+              Set(response.conversations.map(\.id)).count == response.conversations.count
+        else { throw SourceAPIError.invalidResponse }
+        return response
+    }
+    func sourceConversation(id: String) async throws -> SourceConversation {
+        let response: SourceConversationResponse = try await get("api/channels/" + checkedID(id))
+        guard response.channel.id == id else { throw SourceAPIError.invalidResponse }
+        return response.channel
+    }
+    func createSourceConversation(withBot id: String) async throws -> SourceConversation {
+        let response: SourceConversationResponse = try await request("api/channels",
+            method: "POST", body: SourceChannelInput(agentIds: [checkedID(id)]))
+        return response.channel
+    }
+    func sourceHistory(channelID: String, agentID: String) async throws -> [SourceConversationText] {
+        let response: SourceHistoryResponse = try await request(
+            "api/delivery/conversations/" + checkedID(channelID) + "/history",
+            method: "GET", queryItems: [URLQueryItem(name: "agentId", value: checkedID(agentID))])
+        return response.history.messages
+    }
+    func sendSourceMessage(channelID: String, botID: String, text: String, externalID: String) async throws {
+        guard UUID(uuidString: externalID) != nil,
+              (1...16_000).contains(text.trimmingCharacters(in: .whitespacesAndNewlines).count)
+        else { throw SourceAPIError.invalidInput }
+        // The original DeliveryRouter.offerInbox deduplicates externalId.
+        let _: SourceReceivedMessage = try await request(
+            "api/delivery/conversations/" + checkedID(channelID) + "/messages",
+            method: "POST", body: SourceMessageInput(agentId: checkedID(botID),
+                text: text, externalId: externalID))
+    }
+
     /// Source ApprovalService owns every decision and subsequent tool effect.
     /// This transport deliberately never implements approval policy or execution.
     func approvalInbox() async throws -> SourceApprovalInbox {
@@ -377,11 +474,15 @@ struct OpenDuetSourceAPI: Sendable {
     private func get<T: Decodable>(_ path: String) async throws -> T {
         try await request(path, method: "GET")
     }
-    private func request<T: Decodable>(_ path: String, method: String, body: (any Encodable)? = nil) async throws -> T {
+    private func request<T: Decodable>(_ path: String, method: String, body: (any Encodable)? = nil,
+                                       queryItems: [URLQueryItem] = []) async throws -> T {
         guard !path.hasPrefix("/"), !path.contains(".."), !path.contains("?") else {
             throw SourceAPIError.invalidInput
         }
-        let url = endpoint.baseURL.appendingPathComponent(path)
+        var components = URLComponents(url: endpoint.baseURL.appendingPathComponent(path),
+            resolvingAgainstBaseURL: false)
+        if !queryItems.isEmpty { components?.queryItems = queryItems }
+        guard let url = components?.url else { throw SourceAPIError.invalidInput }
         var req = URLRequest(url: url, timeoutInterval: 30)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -411,6 +512,8 @@ private struct SourceSocialInput: Encodable {
     let callbackURL: String
 }
 private struct SourceVoidResponse: Decodable {}
+private struct SourceReceivedMessage: Decodable {}
+
 private struct SourceQuestionAnswerReceipt: Decodable {
     // Source answerQuestion returns the original service's queued outcome.
     // Accept a JSON object, but never infer completion from HTTP acceptance.

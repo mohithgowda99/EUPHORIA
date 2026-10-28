@@ -19,9 +19,9 @@ export function createManagedInboxTurnStore(database: Database, links: {
   } | null>;
 }) {
   async function original(inboxId: string, scope: DeliveryScope) {
-    if (!valid(inboxId) || !valid(scope.ownerUserId) || !valid(scope.channelId) ||
-        !valid(scope.agentId) || !valid(scope.threadId))
-      throw new Error("Invalid original delivery identity");
+    // Original identities come from the authenticated source database, not
+    // provider URL identifiers; do not impose OpenAI's ID grammar on them.
+    if (!valid(inboxId)) throw new Error("Invalid original Inbox identity");
     const [row] = await database.select().from(deliveryInbox)
       .where(eq(deliveryInbox.id,inboxId)).limit(1);
     if (!row || row.ownerUserId !== scope.ownerUserId ||

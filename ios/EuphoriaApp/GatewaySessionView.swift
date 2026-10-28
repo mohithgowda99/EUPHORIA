@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftData
-import CryptoKit
 
 /// Developer connection proof. Production account setup is intentionally not impersonated here.
 struct GatewaySessionView: View {
@@ -9,6 +8,10 @@ struct GatewaySessionView: View {
     @State private var model: GatewaySessionModel?
     @State private var message = ""
     @State private var setupError: String?
+    private let showsRoster: Bool
+    init(model: GatewaySessionModel? = nil) {
+        _model = State(initialValue: model); showsRoster = model == nil
+    }
     var body: some View {
         List {
             Section {
@@ -24,13 +27,14 @@ struct GatewaySessionView: View {
                         Text("Checks delivery and cancels unreceived requests. Uncertain effects stay blocked; nothing is replayed.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
+                    if let failure = model.gatewayFailure { Text(failure.message).foregroundStyle(.secondary) }
                     if let error = model.errorMessage { Text(error).foregroundStyle(.red) }
                     if model.isBusy { ProgressView("Connecting…") }
                     Button("Refresh session") { Task { await model.refresh(); await model.loadHistory(); await model.loadSessions() } }.disabled(model.isBusy)
                 }
             }
             if let model {
-                if !model.sessions.isEmpty {
+                if showsRoster && !model.sessions.isEmpty {
                     Section {
                         DisclosureGroup("Conversations") {
                             ForEach(model.sessions, id: \.sessionID) { session in
@@ -63,7 +67,7 @@ struct GatewaySessionView: View {
                 }
             }
         }
-        .navigationTitle("Gateway session")
+        .navigationTitle("Task")
         .task(id: scenePhase == .active ? model?.liveSessionID : nil) {
             if scenePhase == .active { await model?.followCurrentSession() }
         }
@@ -77,15 +81,8 @@ struct GatewaySessionView: View {
     }
     private func configure() {
         #if DEBUG
-        let environment = ProcessInfo.processInfo.environment
-        guard let url = environment["EUPHORIA_GATEWAY_URL"], let token = environment["EUPHORIA_GATEWAY_TOKEN"] else {
-            setupError = "No gateway configured for this Debug build. The offline fixtures remain available."; return
-        }
-        do {
-            let connection = try GatewayConnection(url: url, token: token, allowLoopback: true)
-            let key = SHA256.hash(data: Data((url + "\0" + token).utf8)).map { String(format: "%02x", $0) }.joined()
-            model = GatewaySessionModel(client: GatewayClient(connection: connection), context: context, storageKey: key)
-        } catch { setupError = error.localizedDescription }
+        do { model = try GatewaySessionModel.configured(context: context) }
+        catch { setupError = "No gateway configured for this Debug build. The offline fixtures remain available." }
         #else
         setupError = "Gateway connection proof is available in Debug builds only."
         #endif
@@ -99,6 +96,7 @@ struct GatewaySessionView: View {
         case "in_progress": return "Agent session is in progress"
         case "idle": return "Agent session is idle"
         case "failed": return "Agent session failed"
+        case "render_failed": return "The interface could not be generated"
         default: return "Session status: " + phase
         }
     }

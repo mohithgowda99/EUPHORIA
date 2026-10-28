@@ -6,6 +6,24 @@ import FoundationNetworking
 @testable import VisualRuntimeCore
 
 final class GatewayClientTests: XCTestCase, @unchecked Sendable {
+    func testPagedRosterAndSafeFailureDecoding() throws {
+        let wire = #"{"sessions":[{"sessionID":"sess_test","phase":"render_failed","surface":null,"acknowledgedActionIDs":[],"resolvedNodeIDs":[],"failure":{"kind":"not_sent","stage":"pending_lookup","status":503}}],"hasMore":true,"nextCursor":"sess_test"}"#
+        let page = try JSONDecoder().decode(GatewaySessionList.self, from: Data(wire.utf8))
+        XCTAssertTrue(page.hasMore); XCTAssertEqual(page.nextCursor, "sess_test")
+        XCTAssertEqual(page.sessions[0].failure?.kind, "not_sent")
+        for bad in [wire.replacingOccurrences(of: "pending_lookup", with: "private-text"), wire.replacingOccurrences(of: "503", with: "999"), wire.replacingOccurrences(of: "\"nextCursor\":\"sess_test\"", with: "\"nextCursor\":null")] {
+            XCTAssertThrowsError(try JSONDecoder().decode(GatewaySessionList.self, from: Data(bad.utf8)))
+        }
+        let legacy = try JSONDecoder().decode(GatewaySessionList.self, from: Data(#"{"sessions":[]}"#.utf8))
+        XCTAssertFalse(legacy.hasMore)
+    }
+    func testSessionRosterUsesValidatedCursor() async throws {
+        let box = RequestBox()
+        GatewayTestProtocol.box.set { req in box.record(req); return (200, Data(#"{"sessions":[],"hasMore":false,"nextCursor":null}"#.utf8)) }
+        _ = try await client().listSessions(after: "sess_before")
+        XCTAssertEqual(box.last?.url?.query, "limit=50&after=sess_before")
+        do { _ = try await client().listSessions(after: "../other"); XCTFail("Invalid cursor sent") } catch { }
+    }
     func testConnectionRequiresHTTPSExceptExplicitLoopbackDevelopment() throws {
         XCTAssertThrowsError(try GatewayConnection(url: "http://example.com", token: "token"))
         XCTAssertThrowsError(try GatewayConnection(url: "https://user:pass@example.com", token: "token"))

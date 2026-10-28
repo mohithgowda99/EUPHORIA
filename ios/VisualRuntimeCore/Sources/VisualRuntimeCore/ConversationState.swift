@@ -24,7 +24,22 @@ public struct GatewayInputReceipt: Codable, Sendable {
     public init(id: String, phase: String) { self.id = id; self.phase = phase }
 }
 public struct GatewayInputReceipts: Decodable, Sendable { public let operations: [GatewayInputReceipt] }
-public struct GatewaySessionList: Decodable, Sendable { public let sessions: [GatewayEnvelope] }
+public struct GatewaySessionList: Decodable, Sendable {
+    public let sessions: [GatewayEnvelope]
+    public let hasMore: Bool
+    public let nextCursor: String?
+    private enum CodingKeys: String, CodingKey { case sessions, hasMore, nextCursor }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessions = try c.decode([GatewayEnvelope].self, forKey: .sessions)
+        hasMore = try c.decodeIfPresent(Bool.self, forKey: .hasMore) ?? false
+        nextCursor = try c.decodeIfPresent(String.self, forKey: .nextCursor)
+        let ids = sessions.compactMap(\.sessionID)
+        guard sessions.count <= 50, ids.count == sessions.count, Set(ids).count == ids.count,
+              ids.allSatisfy({ $0.range(of: "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", options: .regularExpression) != nil }),
+              hasMore ? (!sessions.isEmpty && nextCursor == sessions.last?.sessionID) : nextCursor == nil else { throw GatewayClientError.invalidResponse }
+    }
+}
 public enum GatewayInputKind: String, Codable, Sendable { case message, cancel }
 public struct GatewayInputIntent: Codable, Sendable, Identifiable {
     public let id: String

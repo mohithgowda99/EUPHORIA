@@ -88,11 +88,21 @@ export class AgentsClient {
   }
 
   async rejectToolCall(sessionID,{turnID,callID,name,error},submissionKey){
-    identifier(turnID);identifier(callID);key(submissionKey);requireText(name,'tool name');
-    if(typeof error!=='string'||!error||error.length>2000)throw Error('Invalid tool error');
-    const session=await this.retrieveSession(sessionID);
-    const pending=session.required_actions?.find(a=>a.type==='function_call'&&a.turn_id===turnID&&a.call_id===callID&&a.name===name);
-    if(!pending)throw Error('Tool call is not currently pending');
+    try{
+      identifier(turnID);identifier(callID);key(submissionKey);requireText(name,'tool name');
+      if(typeof error!=='string'||!error||error.length>2000)throw Error('Invalid tool error');
+    }catch{const e=Error('Invalid render refusal');e.outcomeUnknown=false;e.failureStage='validation';throw e;}
+    let pending;
+    try{
+      const session=await this.retrieveSession(sessionID);
+      pending=session.required_actions?.find(a=>a.type==='function_call'&&a.turn_id===turnID&&a.call_id===callID&&a.name===name);
+      if(!pending)throw Error('Tool call is not currently pending');
+    }catch(error){
+      const e=Error('Could not verify pending render call; nothing was submitted');
+      e.outcomeUnknown=false;e.failureStage='pending_lookup';
+      if(Number.isInteger(error.status)&&error.status>=400&&error.status<=599)e.status=error.status;
+      throw e;
+    }
     return this.#request('POST','/'+identifier(sessionID)+'/events',{events:[{
       type:'agent.session.input.tool_result',turn_id:pending.turn_id,call_id:pending.call_id,success:false,error
     }]},submissionKey);
@@ -113,12 +123,14 @@ export class AgentsClient {
         ? 'Agents API request outcome unknown; reconcile before retrying'
         : 'Agents API request failed; retrieve session again');
       error.outcomeUnknown = method === 'POST';
+      error.failureStage = method === 'POST' ? 'submission' : 'read';
       throw error;
     }
     if (!response.ok) {
       try { await response.body?.cancel(); } catch { /* Cleanup cannot expose provider errors. */ }
       const error = new Error(`Agents API request failed (${response.status})`);
       error.status = response.status;
+      error.failureStage = method === 'POST' ? 'submission' : 'read';
       error.outcomeUnknown = method === 'POST' && (response.status >= 500 || response.status === 408);
       throw error;
     }
@@ -129,6 +141,7 @@ export class AgentsClient {
     catch {
       const error = new Error('Invalid Agents API response; reconcile before retrying');
       error.outcomeUnknown = method === 'POST';
+      error.failureStage = 'response';
       throw error;
     }
   }

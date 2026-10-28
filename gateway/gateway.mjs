@@ -40,8 +40,13 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     const actions=db.prepare('SELECT * FROM actions WHERE session_id=? ORDER BY rowid').all(row.id);
     let phase=row.active?'waiting':row.provider_phase||'unknown';
     if(row.active&&actions.some(a=>a.call_id===row.call_id&&a.phase==='accepted'))phase='accepted';
+    if(row.provider_phase==='render_failed')phase='render_failed';
     if(actions.some(a=>['uncertain','submitting','refusing','refusal_uncertain'].includes(a.phase)))phase='uncertain';
-    return {sessionID:row.id,title:row.title,phase,verificationMode,publication,surface:row.surface?JSON.parse(row.surface):null,
+    const failed=phase==='uncertain'?actions.findLast(a=>['uncertain','submitting','refusing','refusal_uncertain'].includes(a.phase)):
+      actions.findLast(a=>['refusal_not_sent','refusal_rejected'].includes(a.phase));
+    const failure=['uncertain','render_failed'].includes(phase)&&failed?
+      (JSON.parse(failed.payload)?.failure??{kind:'uncertain',stage:'unknown'}):undefined;
+    return {sessionID:row.id,title:row.title,phase,verificationMode,publication,failure,surface:row.surface?JSON.parse(row.surface):null,
       acknowledgedActionIDs:actions.filter(a=>a.phase==='accepted').map(a=>a.action_id),
       rejectedActionIDs:actions.filter(a=>a.phase==='cancelled').map(a=>a.action_id),
       displayAcknowledged:!row.active||actions.some(a=>a.call_id===row.call_id&&a.phase==='accepted'),
@@ -89,7 +94,7 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     const records=db.prepare('SELECT * FROM actions WHERE session_id=?').all(row.id);
     const previous=records.find(a=>a.call_id===call.call_id);
     if(previous){
-      if(!['refused','refusing','refusal_uncertain'].includes(previous.phase))fail(502,'Invalid published tool contract');
+      if(!['refused','refusing','refusal_uncertain','refusal_not_sent','refusal_rejected'].includes(previous.phase))fail(502,'Invalid published tool contract');
     }else{
       if(records.length>=500||records.filter(a=>a.phase.startsWith('refus')&&JSON.parse(a.payload).turnID===call.turn_id).length>=3)fail(502,'Unsupported render correction limit reached');
       const actionID='refusal-'+createHash('sha256').update(row.id+'\0'+call.turn_id+'\0'+call.call_id).digest('hex');
@@ -99,11 +104,20 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
         await provider.rejectToolCall(row.id,{turnID:call.turn_id,callID:call.call_id,name:'euphoria_render_surface',
           error:'Unsupported UI contract; nothing was rendered or approved. Use canonical native JSON, not a mixture of A2UI and native formats. Example: {"schemaVersion":1,"surfaceID":"temporary","revision":0,"nodes":[{"id":"choice","kind":"askChoice","title":"Choose","options":[{"id":"first","label":"First"}]}]}. Use a new tool call with valid arguments.'},actionID);
         db.prepare("UPDATE actions SET phase='refused' WHERE session_id=? AND action_id=?").run(row.id,actionID);
-      }catch{
-        db.prepare("UPDATE actions SET phase='refusal_uncertain' WHERE session_id=? AND action_id=?").run(row.id,actionID);
+      }catch(error){
+        const stage=['validation','pending_lookup','submission','response','read'].includes(error?.failureStage)?error.failureStage:'unknown';
+        const notSent=error?.outcomeUnknown===false&&['validation','pending_lookup','read'].includes(stage);
+        const rejected=error?.outcomeUnknown===false&&stage==='submission'&&Number.isInteger(error.status)&&error.status>=400&&error.status<500&&error.status!==408;
+        const kind=notSent?'not_sent':rejected?'rejected':'uncertain';
+        const failure={kind,stage};
+        if(Number.isInteger(error?.status)&&error.status>=400&&error.status<=599)failure.status=error.status;
+        db.prepare('UPDATE actions SET phase=?,payload=? WHERE session_id=? AND action_id=?')
+          .run('refusal_'+kind,stable({...JSON.parse(payload),failure}),row.id,actionID);
       }
     }
-    db.prepare("UPDATE sessions SET active=0,provider_phase='in_progress' WHERE id=?").run(row.id);
+    const saved=db.prepare('SELECT phase FROM actions WHERE session_id=? AND call_id=?').get(row.id,call.call_id);
+    const phase=['refusal_not_sent','refusal_rejected'].includes(saved.phase)?'render_failed':'in_progress';
+    db.prepare('UPDATE sessions SET active=0,provider_phase=? WHERE id=?').run(phase,row.id);
     return snapshot(owned(row.id,owner));
   }
   async function body(req){
@@ -181,7 +195,16 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
         const input=await body(req);
         [status,result]=await locked('create:'+owner,()=>create(owner,input));
       }else if(path==='/v1/sessions'&&req.method==='GET'){
-        result={sessions:db.prepare('SELECT * FROM sessions WHERE owner=? ORDER BY rowid DESC LIMIT 50').all(owner).map(snapshot)};
+        const url=new URL(req.url,'http://localhost'),limit=url.searchParams.has('limit')?Number(url.searchParams.get('limit')):50;
+        if(!Number.isInteger(limit)||limit<1||limit>50)fail(422,'Invalid session page size');
+        const after=url.searchParams.get('after');let rows;
+        if(after!==null){
+          identifier(after);const cursor=db.prepare('SELECT rowid AS position FROM sessions WHERE id=? AND owner=?').get(after,owner);
+          if(!cursor)fail(404,'Session not found');
+          rows=db.prepare('SELECT * FROM sessions WHERE owner=? AND rowid<? ORDER BY rowid DESC LIMIT ?').all(owner,cursor.position,limit+1);
+        }else rows=db.prepare('SELECT * FROM sessions WHERE owner=? ORDER BY rowid DESC LIMIT ?').all(owner,limit+1);
+        const hasMore=rows.length>limit,visible=rows.slice(0,limit);
+        result={sessions:visible.map(snapshot),hasMore,nextCursor:hasMore?visible.at(-1).id:null};
       }else if(/^\/v1\/sessions\/[A-Za-z0-9_-]+\/events$/.test(path)&&req.method==='GET'){
         await live.serve(path.split('/')[3],owner,req,res);return;
       }else if(/^\/v1\/sessions\/[A-Za-z0-9_-]+$/.test(path)&&req.method==='GET'){

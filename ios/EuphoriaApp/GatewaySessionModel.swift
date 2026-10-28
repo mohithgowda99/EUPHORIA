@@ -1,12 +1,19 @@
 import Foundation
 import SwiftData
 import Observation
+import CryptoKit
 
 /// Native local archive + gateway transport state. No provider credentials or alternate domain store.
 @MainActor @Observable
 final class GatewaySessionModel {
     private(set) var conversation: ConversationArchive?
     private(set) var sessions: [GatewayEnvelope] = []
+    private(set) var isLoadingSessions = false
+    private(set) var sessionsError: String?
+    private(set) var hasMoreSessions = false
+    private var sessionsCursor: String?
+    var hasPendingCreation: Bool { pendingRequestID != nil }
+    private(set) var gatewayFailure: GatewayFailure?
     private(set) var historyError: String?
     var hasSession: Bool { sessionID != nil }
     private(set) var state: VisualState?
@@ -39,6 +46,17 @@ final class GatewaySessionModel {
         conversationRepository = ConversationSnapshotRepository(context: context); scope = storageKey
         self.prefix = "euphoria.gateway." + storageKey; self.preferences = preferences
         liveSessionID = preferences.string(forKey: prefix + ".session")
+    }
+    static func configured(context: ModelContext) throws -> GatewaySessionModel {
+        #if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        guard let url = environment["EUPHORIA_GATEWAY_URL"], let token = environment["EUPHORIA_GATEWAY_TOKEN"] else { throw GatewayClientError.invalidConnection }
+        let connection = try GatewayConnection(url: url, token: token, allowLoopback: true)
+        let key = SHA256.hash(data: Data((url + "\0" + token).utf8)).map { String(format: "%02x", $0) }.joined()
+        return GatewaySessionModel(client: GatewayClient(connection: connection), context: context, storageKey: key)
+        #else
+        throw GatewayClientError.invalidConnection
+        #endif
     }
     func restore() async {
         do {
@@ -140,23 +158,40 @@ final class GatewaySessionModel {
             try archive.apply(page, reset: !more); try saveConversation(archive); historyError = nil
         } catch { historyError = "History is unavailable. Saved history remains on this device." }
     }
-    func loadSessions() async {
-        guard !isBusy else { return }
-        do { sessions = try await client.listSessions().sessions }
-        catch { /* Keep the current session usable if roster retrieval fails. */ }
+    func loadSessions(more: Bool = false) async {
+        guard !isBusy, !isLoadingSessions else { return }
+        if more && (!hasMoreSessions || sessionsCursor == nil) { return }
+        isLoadingSessions = true; defer { isLoadingSessions = false }
+        do {
+            let page = try await client.listSessions(after: more ? sessionsCursor : nil)
+            try Task.checkCancellation()
+            if more {
+                let existing = Set(sessions.compactMap(\.sessionID))
+                sessions += page.sessions.filter { !existing.contains($0.sessionID ?? "") }
+            } else { sessions = page.sessions }
+            hasMoreSessions = page.hasMore; sessionsCursor = page.nextCursor; sessionsError = nil
+        } catch is CancellationError { }
+        catch { sessionsError = "Could not load tasks. Previously loaded tasks remain available." }
     }
     func selectSession(_ selected: GatewayEnvelope) async {
         guard !isBusy, let id = selected.sessionID, pendingRequestID == nil else { return }
         sessionID = id; liveSessionID = id; bufferedLiveUpdate = nil; state = nil; conversation = nil
         preferences.removeObject(forKey: prefix + ".surface")
-        do { conversation = try conversationRepository.load(scope: scope, sessionID: id) }
-        catch { historyError = "Could not read saved conversation." }
+        publicationSession = nil; publication = 0
+        phase = selected.phase; verificationMode = selected.verificationMode; gatewayFailure = selected.failure
+        do {
+            if let incoming = selected.surface {
+                state = try repository.load(surfaceID: incoming.surfaceID) ?? VisualState(surface: incoming)
+                preferences.set(incoming.surfaceID, forKey: prefix + ".surface")
+            }
+            conversation = try conversationRepository.load(scope: scope, sessionID: id)
+        } catch { historyError = "Could not read saved task." }
         await refresh(); await loadHistory()
     }
     func newConversation() {
         guard !isBusy, pendingRequestID == nil else { return }
         sessionID = nil; liveSessionID = nil; bufferedLiveUpdate = nil; state = nil; conversation = nil; phase = "ready"
-        errorMessage = nil; historyError = nil
+        errorMessage = nil; historyError = nil; gatewayFailure = nil
         preferences.removeObject(forKey: prefix + ".surface")
     }
     private func saveConversation(_ archive: ConversationArchive) throws {
@@ -246,6 +281,7 @@ final class GatewaySessionModel {
         }
         if let id = response.sessionID { sessionID = id; liveSessionID = id }
         if let number = response.publication { publicationSession = response.sessionID; publication = number }
+        gatewayFailure = response.failure
         phase = response.phase
         verificationMode = response.verificationMode
         return true

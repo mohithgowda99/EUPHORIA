@@ -105,6 +105,58 @@ final class GatewaySessionTests: XCTestCase {
         XCTAssertEqual(model.state?.formFieldValue(nodeID: "brief", fieldID: "team"), "Live QA plan")
         XCTAssertEqual(SessionTestProtocol.responses.paths.count, 1)
     }
+    func testRosterPagingFailureKeepsExistingWorkAndCursor() async throws {
+        let (model, preferences, key, container) = try makeModel(); _ = container
+        defer { preferences.removePersistentDomain(forName: key) }
+        func page(_ id: String) throws -> Data {
+            let row = try JSONSerialization.jsonObject(with: reply(session: id, phase: "idle"))
+            return try JSONSerialization.data(withJSONObject: ["sessions":[row], "hasMore":true, "nextCursor":id])
+        }
+        SessionTestProtocol.responses.set([("/v1/sessions",try page("sess_new")),("/v1/sessions",try page("sess_older"))])
+        await model.loadSessions(); await model.loadSessions(more: true)
+        XCTAssertEqual(model.sessions.compactMap(\.sessionID), ["sess_new", "sess_older"])
+        await model.loadSessions(more: true)
+        XCTAssertEqual(model.sessions.count, 2); XCTAssertTrue(model.hasMoreSessions)
+        XCTAssertNotNil(model.sessionsError); XCTAssertFalse(model.isLoadingSessions)
+    }
+    func testSelectingWorkRestoresTheSameLocalDraftAndNeverCreatesAnotherSession() async throws {
+        let (model, preferences, key, container) = try makeModel(); _ = container
+        defer { preferences.removePersistentDomain(forName: key) }
+        let surface = try SourceFixtures.surface(), data = try reply(session: "sess_old", phase: "waiting", surface: surface)
+        SessionTestProtocol.responses.set([("/v1/sessions/sess_old", data)])
+        await model.restore()
+        model.enact(try XCTUnwrap(model.state?.surface.nodes.first(where: { $0.id == "brief" })), kind: .setField, values: ["team":.text("Preserved work")])
+        SessionTestProtocol.responses.set([("/v1/sessions/sess_old", data), ("/v1/sessions/sess_old/items", Data(#"{"sessionID":"sess_old","entries":[],"hasMore":false}"#.utf8))])
+        await model.selectSession(try JSONDecoder().decode(GatewayEnvelope.self, from: data))
+        XCTAssertEqual(model.liveSessionID, "sess_old")
+        XCTAssertEqual(model.state?.formFieldValue(nodeID: "brief", fieldID: "team"), "Preserved work")
+        XCTAssertEqual(SessionTestProtocol.responses.paths, ["/v1/sessions/sess_old", "/v1/sessions/sess_old/items"])
+    }
+    func testUncertainCreationRemainsResumableAndBlocksANewTask() async throws {
+        let (model, preferences, key, container) = try makeModel(); _ = container
+        defer { preferences.removePersistentDomain(forName: key) }
+        SessionTestProtocol.responses.set([("/v1/sessions", try reply(session: nil, phase: "uncertain"))])
+        await model.start(message: "A pending task")
+        XCTAssertTrue(model.hasPendingCreation)
+        let selected = model.liveSessionID
+        model.newConversation()
+        XCTAssertTrue(model.hasPendingCreation); XCTAssertEqual(model.liveSessionID, selected)
+        await model.start(message: "Must not send")
+        XCTAssertEqual(SessionTestProtocol.responses.paths.count, 1)
+    }
+    func testOfflineTaskReentryKeepsCachedSurfaceAndDraft() async throws {
+        let (model, preferences, key, container) = try makeModel(); _ = container
+        defer { preferences.removePersistentDomain(forName: key) }
+        let surface = try SourceFixtures.surface(), data = try reply(session: "sess_old", phase: "waiting", surface: surface)
+        SessionTestProtocol.responses.set([("/v1/sessions/sess_old", data)])
+        await model.restore()
+        model.enact(try XCTUnwrap(model.state?.surface.nodes.first(where: { $0.id == "brief" })), kind: .setField, values: ["team":.text("Offline draft")])
+        SessionTestProtocol.responses.set([])
+        await model.selectSession(try JSONDecoder().decode(GatewayEnvelope.self, from: data))
+        XCTAssertNotNil(model.state)
+        XCTAssertEqual(model.state?.formFieldValue(nodeID: "brief", fieldID: "team"), "Offline draft")
+        XCTAssertNotNil(model.errorMessage)
+    }
     private func makeModel() throws -> (GatewaySessionModel, UserDefaults, String, ModelContainer) {
         let suite = "euphoria.tests." + UUID().uuidString
         let prefs = try XCTUnwrap(UserDefaults(suiteName: suite))

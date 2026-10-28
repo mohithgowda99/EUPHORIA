@@ -7,6 +7,7 @@
     objects = {
 
 /* Begin PBXBuildFile section */
+        000000000000000000000094 = {isa = PBXBuildFile; fileRef = 000000000000000000000084; };
         000000000000000000000093 = {isa = PBXBuildFile; fileRef = 000000000000000000000083; };
         000000000000000000000014 /* EuphoriaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000000E /* EuphoriaApp.swift */; };
         000000000000000000000015 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000000F /* ContentView.swift */; };
@@ -46,6 +47,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+        000000000000000000000084 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkListView.swift; sourceTree = "<group>"; };
         000000000000000000000083 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/GatewayLiveUpdate.swift"; sourceTree = "<group>"; };
         00000000000000000000000E /* EuphoriaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EuphoriaApp.swift; sourceTree = "<group>"; };
         00000000000000000000000F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -106,6 +108,7 @@
                 000000000000000000000041 /* VisualNodesView.swift */,
                 000000000000000000000042 /* GatewaySessionModel.swift */,
                 000000000000000000000043 /* GatewaySessionView.swift */,
+                000000000000000000000084,
                 000000000000000000000060 /* ConversationState.swift */,
                 000000000000000000000061 /* ConversationHistoryView.swift */,
                 000000000000000000000065 /* VisualGallery.swift */,
@@ -219,6 +222,7 @@
                 000000000000000000000051 /* VisualNodesView.swift in Sources */,
                 000000000000000000000052 /* GatewaySessionModel.swift in Sources */,
                 000000000000000000000053 /* GatewaySessionView.swift in Sources */,
+                000000000000000000000094,
                 000000000000000000000070 /* ConversationState.swift in Sources */,
                 000000000000000000000071 /* ConversationHistoryView.swift in Sources */,
                 000000000000000000000075 /* VisualGallery.swift in Sources */,

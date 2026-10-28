@@ -49,7 +49,7 @@ test('authentication is mandatory; one account cannot list or access another acc
   assert.equal((await request('/v1/sessions',{user:'unknown'})).status,401);
   const s=await start();
   assert.equal((await request('/v1/sessions/sess_test',{user:'bob'})).status,404);
-  assert.deepEqual((await request('/v1/sessions',{user:'bob'})).body,{sessions:[]});
+  assert.deepEqual((await request('/v1/sessions',{user:'bob'})).body,{sessions:[],hasMore:false,nextCursor:null});
   assert.equal((await request(`/v1/surfaces/${s.surface.surfaceID}/actions`,{user:'bob',method:'POST',body:answer(s)})).status,404);
   assert.equal(provider.results.length,0);
 });
@@ -394,4 +394,48 @@ test('a refused call cannot mutate into a valid actionable decision under the sa
     const r=await request('/v1/sessions/sess_test');assert.equal(r.status,502);
     assert.equal((await request('/v1/sessions')).body.sessions[0].surface,null);
   }
+});
+
+test('refusal certainty and safe diagnostics survive restart without leaking provider text or retrying',async t=>{
+  for(const [stage,unknown,status,kind,phase] of [['pending_lookup',false,503,'not_sent','render_failed'],['submission',false,422,'rejected','render_failed'],['submission',true,503,'uncertain','uncertain'],['unexpected secret',undefined,999,'uncertain','uncertain']]){
+    const p=rejectingProvider();let attempts=0;p.rejectToolCall=async()=>{attempts++;const e=Error('secret-token private prompt');e.failureStage=stage;e.outcomeUnknown=unknown;e.status=status;throw e;};
+    const {request,reopen}=await setup(t,p);await request('/v1/sessions',{method:'POST',body:{id:'create',message:'Synthetic'}});
+    const first=(await request('/v1/sessions/sess_test')).body;assert.equal(first.phase,phase);assert.equal(first.failure.kind,kind);
+    assert.equal(first.failure.stage,stage==='unexpected secret'?'unknown':stage);
+    assert.ok(!JSON.stringify(first).includes('secret'));assert.equal(first.failure.status,status===999?undefined:status);
+    await reopen();const second=(await request('/v1/sessions/sess_test')).body;assert.deepEqual(second.failure,first.failure);assert.equal(attempts,1);
+  }
+});
+
+test('owned session pagination exposes all work in newest-first order without invoking the provider',async t=>{
+  let serial=0,reads=0;const p=sourceProvider();p.createSession=async()=>({id:'sess_page_'+(++serial)});p.retrieveSession=async()=>{reads++;throw Error('Unexpected provider read');};
+  const {request}=await setup(t,p);
+  for(let i=0;i<52;i++)assert.equal((await request('/v1/sessions',{method:'POST',body:{id:'create_'+i,message:'Task '+i}})).status,201);
+  const first=(await request('/v1/sessions')).body;assert.equal(first.sessions.length,50);assert.equal(first.hasMore,true);assert.equal(first.nextCursor,'sess_page_3');
+  const second=(await request('/v1/sessions?after='+first.nextCursor)).body;
+  assert.deepEqual(second.sessions.map(s=>s.sessionID),['sess_page_2','sess_page_1']);assert.equal(second.hasMore,false);assert.equal(second.nextCursor,null);
+  assert.equal(new Set([...first.sessions,...second.sessions].map(s=>s.sessionID)).size,52);assert.equal(reads,0);
+  assert.equal((await request('/v1/sessions?after='+first.nextCursor,{user:'bob'})).status,404);
+  assert.deepEqual((await request('/v1/sessions',{user:'bob'})).body.sessions,[]);
+});
+test('session paging rejects invalid limits and cursors without truncating or exposing foreign records',async t=>{
+  const {request,start}=await setup(t);await start();
+  for(const limit of ['0','51','1.5','foo','-1'])assert.equal((await request('/v1/sessions?limit='+limit)).status,422);
+  assert.equal((await request('/v1/sessions?after=missing')).status,404);
+  assert.equal((await request('/v1/sessions?after=..%2Fforeign')).status,422);
+});
+
+test('inconsistent or incomplete provider failure metadata stays uncertain',async t=>{
+  for(const [stage,status] of [['unknown',422],['submission',408],['submission',503],['response',400],['submission',undefined]]){
+    const p=rejectingProvider();p.rejectToolCall=async()=>{const e=Error('private');e.failureStage=stage;e.outcomeUnknown=false;e.status=status;throw e;};
+    const {request}=await setup(t,p);await request('/v1/sessions',{method:'POST',body:{id:'create',message:'Synthetic'}});
+    const r=(await request('/v1/sessions/sess_test')).body;assert.equal(r.phase,'uncertain');assert.equal(r.failure.kind,'uncertain');
+  }
+});
+test('an earlier uncertain action takes priority over a later definitely rejected render',async t=>{
+  const p=rejectingProvider();let calls=0;p.rejectToolCall=async()=>{const e=Error('private');e.failureStage='submission';e.outcomeUnknown=calls++===0;e.status=e.outcomeUnknown?503:422;throw e;};
+  const {request}=await setup(t,p);await request('/v1/sessions',{method:'POST',body:{id:'create',message:'Synthetic'}});
+  await request('/v1/sessions/sess_test');p.current.required_actions[0].call_id='later_call';
+  const r=(await request('/v1/sessions/sess_test')).body;
+  assert.equal(r.phase,'uncertain');assert.equal(r.failure.kind,'uncertain');assert.equal(r.failure.status,503);
 });

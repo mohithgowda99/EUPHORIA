@@ -25,10 +25,33 @@ public struct GatewayConnection: Sendable {
         self.url = url; self.token = token
     }
 }
+/// Fixed diagnostic categories only. Provider bodies, messages and credentials are never decoded here.
+public struct GatewayFailure: Decodable, Sendable {
+    public let kind: String
+    public let stage: String
+    public let status: Int?
+    private enum CodingKeys: String, CodingKey { case kind, stage, status }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try c.decode(String.self, forKey: .kind); stage = try c.decode(String.self, forKey: .stage)
+        status = try c.decodeIfPresent(Int.self, forKey: .status)
+        guard ["not_sent", "rejected", "uncertain"].contains(kind),
+              ["validation", "pending_lookup", "submission", "response", "read", "unknown"].contains(stage),
+              status == nil || (400...599).contains(status!) else { throw GatewayClientError.invalidResponse }
+    }
+    public var message: String {
+        switch kind {
+        case "not_sent": return "The UI correction was not sent. Check the gateway connection or start a new task."
+        case "rejected": return "The provider rejected the UI correction. Check the gateway configuration or start a new task."
+        default: return "Delivery could not be confirmed. This operation will not be sent again automatically."
+        }
+    }
+}
 public struct GatewayEnvelope: Decodable, Sendable {
     public let sessionID: String?
     public let phase: String
     public let publication: Int?
+    public let failure: GatewayFailure?
     public let title: String?
     public let surface: VisualSurface?
     public let acknowledgedActionIDs: Set<String>
@@ -36,13 +59,14 @@ public struct GatewayEnvelope: Decodable, Sendable {
     public let verificationMode: String
     public let displayAcknowledged: Bool
     public let resolvedNodeIDs: Set<String>
-    private enum CodingKeys: String, CodingKey { case sessionID, phase, publication, title, surface, acknowledgedActionIDs, resolvedNodeIDs, rejectedActionIDs, verificationMode, displayAcknowledged }
+    private enum CodingKeys: String, CodingKey { case sessionID, phase, publication, failure, title, surface, acknowledgedActionIDs, resolvedNodeIDs, rejectedActionIDs, verificationMode, displayAcknowledged }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         sessionID = try c.decodeIfPresent(String.self, forKey: .sessionID)
         phase = try c.decode(String.self, forKey: .phase)
         publication = try c.decodeIfPresent(Int.self, forKey: .publication)
         guard publication == nil || publication! >= 0 else { throw GatewayClientError.invalidResponse }
+        failure = try c.decodeIfPresent(GatewayFailure.self, forKey: .failure)
         title = try c.decodeIfPresent(String.self, forKey: .title)
         verificationMode = try c.decodeIfPresent(String.self, forKey: .verificationMode) ?? "unverified"
         displayAcknowledged = try c.decodeIfPresent(Bool.self, forKey: .displayAcknowledged) ?? false
@@ -72,7 +96,11 @@ public struct GatewayClient: Sendable {
     public func recover(requestID: String) async throws -> GatewayEnvelope {
         try await request("v1/requests/" + validatedID(requestID))
     }
-    public func listSessions() async throws -> GatewaySessionList { try await request("v1/sessions") }
+    public func listSessions(after: String? = nil) async throws -> GatewaySessionList {
+        var path = "v1/sessions?limit=50"
+        if let after { path += "&after=" + (try validatedID(after)) }
+        return try await request(path)
+    }
     public func sendMessage(sessionID: String, message: String, id: String) async throws -> GatewayInputReceipt {
         struct Input: Encodable { let id: String; let message: String }
         return try await request("v1/sessions/" + validatedID(sessionID) + "/messages", method: "POST",

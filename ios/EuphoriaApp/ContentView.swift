@@ -1,7 +1,12 @@
 import SwiftUI
 
-/// M0/M1 native bootstrap, deliberately not a mock chat or feature-parity screen.
 struct ContentView: View {
+    var body: some View { WorkListView() }
+}
+
+
+/// M0/M1 native bootstrap, deliberately not a mock chat or feature-parity screen.
+struct DevelopmentToolsView: View {
     @State private var serverAddress = ""
     @State private var probeState: ProbeState = .idle
     @State private var probeTask: Task<Void, Never>?

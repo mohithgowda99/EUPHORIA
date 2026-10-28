@@ -165,3 +165,17 @@ test('rejected UI calls return a provider error with exact pending identity and 
   await client.rejectToolCall('sess_test',{turnID:'turn_test',callID:'call_test',name:'askChoice',error:'Unsupported UI contract'},'refuse-1');
   assert.deepEqual(requests[1].body,{events:[{type:'agent.session.input.tool_result',turn_id:'turn_test',call_id:'call_test',success:false,error:'Unsupported UI contract'}]});
 });
+
+test('render refusal pending lookup failure proves no write was attempted',async()=>{
+  let calls=0;const client=new AgentsClient({apiKey:'test-only-key',fetchImpl:async()=>{calls++;throw Error('private transport text');}});
+  await assert.rejects(client.rejectToolCall('sess_test',{turnID:'turn_test',callID:'call_test',name:'askChoice',error:'Unsupported'},'refuse-1'),e=>e.outcomeUnknown===false&&e.failureStage==='pending_lookup'&&!e.message.includes('private'));
+  assert.equal(calls,1);
+});
+test('render refusal distinguishes rejected HTTP from uncertain submission and response decoding',async t=>{
+  for(const status of [400,401,403,422,408,500,503]){
+    const {client}=await provider(t,(req,res)=>json(res,req.method==='GET'?{id:'sess_test',required_actions:[pending]}:{private:'never expose'},req.method==='GET'?200:status));
+    await assert.rejects(client.rejectToolCall('sess_test',{turnID:'turn_test',callID:'call_test',name:'askChoice',error:'Unsupported'},'refuse-1'),e=>e.failureStage==='submission'&&e.status===status&&e.outcomeUnknown===(status>=500||status===408));
+  }
+  const {client}=await provider(t,(req,res)=>{if(req.method==='GET')json(res,{id:'sess_test',required_actions:[pending]});else{res.writeHead(200);res.end('invalid');}});
+  await assert.rejects(client.rejectToolCall('sess_test',{turnID:'turn_test',callID:'call_test',name:'askChoice',error:'Unsupported'},'refuse-1'),e=>e.failureStage==='response'&&e.outcomeUnknown===true);
+});

@@ -280,7 +280,10 @@ struct OpenDuetSourceAPI: Sendable {
         let config = URLSessionConfiguration.ephemeral
         config.httpShouldSetCookies = false
         config.httpCookieAcceptPolicy = .never
-        self.session = session ?? URLSession(configuration: config)
+        // A trusted account cookie must never follow a server redirect to
+        // another origin, including a maliciously configured agent endpoint.
+        self.session = session ?? URLSession(configuration: config,
+            delegate: SourceRejectRedirects(), delegateQueue: nil)
     }
 
     func capabilities() async throws -> DeploymentCapabilities {
@@ -505,6 +508,14 @@ struct OpenDuetSourceAPI: Sendable {
         guard data.count <= 1_048_576 else { throw SourceAPIError.invalidResponse }
         do { return try JSONDecoder().decode(T.self, from: data) }
         catch { throw SourceAPIError.invalidResponse }
+    }
+}
+private final class SourceRejectRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        completionHandler(nil)
     }
 }
 private struct SourceSocialInput: Encodable {

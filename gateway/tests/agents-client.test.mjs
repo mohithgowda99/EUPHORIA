@@ -40,7 +40,18 @@ test('create uses Agents API with explicit model, no environment, and stable sub
   assert.equal(requests[0].headers['openai-beta'],'agents=v1');
   assert.equal(requests[0].headers['idempotency-key'],'create-1');
   assert.deepEqual(requests[0].body, {agent:{model:'test-model',instructions:'Be useful',tools:[]},
-    environment:{type:'none'},input:'Help me',stream:false});
+    environment:{type:'none'},input:'Help me',stream:false,spend_control:{limit:50}});
+});
+
+test('managed spending limits are bounded before any API request', async () => {
+  for (const invalid of [0, -1, NaN, 1.2, 501, Infinity, '100']) {
+    assert.throws(() => new AgentsClient({apiKey:'test-only-key',sessionSpendLimitCents:invalid}));
+  }
+  let calls=0;
+  const client=new AgentsClient({apiKey:'test-only-key',sessionSpendLimitCents:25,
+    fetchImpl:async(url, options)=>{calls++;return Response.json({id:'sess_test'});}});
+  await client.createSession({model:'test',instructions:'Do safe work',input:'Hello'},'stable-request');
+  assert.equal(calls,1);
 });
 
 test('user messages retain exact content and caller submission key', async t => {

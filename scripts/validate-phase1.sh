@@ -26,6 +26,7 @@ node -e 'if(Number(process.versions.node.split(".")[0])<24){console.error("BLOCK
   bun run --filter server typecheck
   bun test \
     server/tests/managed-source-definition.test.ts \
+    server/tests/managed-inbox-turns.test.ts \
     server/tests/managed-source-reconciliation.test.ts \
     server/tests/delivery-router.test.ts \
     server/tests/delivery-turn.test.ts

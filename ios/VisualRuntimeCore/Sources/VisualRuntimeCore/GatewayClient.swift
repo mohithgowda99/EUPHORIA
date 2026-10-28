@@ -117,6 +117,23 @@ public struct GatewayClient: Sendable {
         if let after { path += "?historyAfter=" + (try validatedID(after)) }
         return try await request(path)
     }
+    /// The existing gateway is the sole task-creation journal. The caller owns
+    /// its stable request ID and must not mint another on an ambiguous response.
+    /// This transitional API is replaced by original OpenDuet TaskStore later.
+    public func startTask(title: String, instruction: String, requestID: String) async throws -> GatewayTaskDetail {
+        struct Input: Encodable { let id: String; let title: String; let instruction: String }
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, title.count <= 160,
+              !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, instruction.count <= 4000
+        else { throw GatewayClientError.invalidResponse }
+        return try await request("v1/tasks", method: "POST",
+            data: JSONEncoder().encode(Input(id: try validatedID(requestID), title: title, instruction: instruction)))
+    }
+    /// Marking done is a user-owned metadata change, never proof the agent executed an effect.
+    public func setTaskResolved(id: String, resolved: Bool) async throws -> GatewayTaskDetail {
+        try await request("v1/tasks/" + validatedID(id) + (resolved ? "/resolve" : "/reopen"),
+            method: "POST", data: Data("{}".utf8))
+    }
+
     public func sendMessage(sessionID: String, message: String, id: String) async throws -> GatewayInputReceipt {
         struct Input: Encodable { let id: String; let message: String }
         return try await request("v1/sessions/" + validatedID(sessionID) + "/messages", method: "POST",

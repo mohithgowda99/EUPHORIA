@@ -40,12 +40,15 @@ export async function reconcileManagedSourceInbox(input: {
   };
   provider: {
     retrieveSession(id: string): Promise<{ id?: string; status?: unknown; required_actions?: unknown[] }>;
-    listTurns(id: string, options: { order: "desc"; limit: 100 }): Promise<{
-      data?: { id?: string; status?: string; subagent_id?: string | null }[];
+    retrieveTurn(id: string, turnID: string): Promise<{
+      id?: string; session_id?: string; status?: string; subagent_id?: string | null;
     }>;
-    listItems(id: string, options: { order: "desc"; limit: 100 }): Promise<{
-      data?: { type?: string; role?: string; status?: string; turn_id?: string; content?: unknown }[];
-    }>;
+    listTurnItems(id: string, turnID: string,
+      options: { order: "asc"; limit: 100; after?: string }): Promise<{
+        data?: { type?: string; role?: string; status?: string; turn_id?: string; content?: unknown }[];
+        has_more?: boolean;
+        last_id?: string | null;
+      }>;
   };
   /** Source-authoritative proof that this root turn was started by THIS inbox
    * request, not another input in the same Bot/session. Must be backed by
@@ -97,15 +100,36 @@ export async function reconcileManagedSourceInbox(input: {
   // Only READ provider state; these calls never replay a model, tool or action.
   const session = await input.provider.retrieveSession(input.sessionID);
   if (session?.id !== input.sessionID) throw new Error("Managed provider session identity mismatch");
-  const [turns, items] = await Promise.all([
-    input.provider.listTurns(input.sessionID, {order: "desc", limit: 100}),
-    input.provider.listItems(input.sessionID, {order: "desc", limit: 100}),
-  ]);
+  // The exact turn endpoint remains correct even after hundreds of later
+  // messages. The session-global last 100 items were NOT sufficient evidence
+  // of a complete answer and could accidentally truncate a long reply.
+  const turn = await input.provider.retrieveTurn(input.sessionID, input.rootTurnID);
+  if (turn?.id !== input.rootTurnID || turn.session_id !== input.sessionID ||
+      (turn.subagent_id !== null && turn.subagent_id !== undefined))
+    throw new Error("Managed root turn identity mismatch");
+  const messages: {type?: string; role?: string; status?: string; turn_id?: string; content?: unknown}[] = [];
+  let cursor: string | undefined;
+  const seen = new Set<string>();
+  let complete = false;
+  for (let pageNumber = 0; pageNumber < 10; pageNumber++) {
+    const page = await input.provider.listTurnItems(input.sessionID, input.rootTurnID,
+      { order: "asc", limit: 100, ...(cursor ? {after:cursor} : {}) });
+    if (!Array.isArray(page.data) || page.data.length > 100)
+      throw new Error("Invalid managed turn item page");
+    messages.push(...page.data);
+    if (!page.has_more) { complete = true; break; }
+    if (!page.last_id || seen.has(page.last_id) ||
+        !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(page.last_id))
+      throw new Error("Managed turn pagination cannot be verified");
+    seen.add(page.last_id);
+    cursor = page.last_id;
+  }
+  if (!complete) return "pending"; // Never publish a truncated report.
   const state = managedTurnOutcome({
     sessionStatus: session.status,
     turnID: input.rootTurnID,
-    turns,
-    items,
+    turns: {data:[turn]},
+    items: {data:messages},
     requiredActions: session.required_actions,
   });
   if (state.kind === "pending") return "pending";

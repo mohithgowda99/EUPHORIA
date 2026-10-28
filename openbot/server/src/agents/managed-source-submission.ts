@@ -9,6 +9,17 @@ import type { ManagedSourceScope } from "./managed-session-links";
  * The real Agents API transport can be the existing gateway/AgentsClient.
  * Deliberately no duplicate provider event journal, scheduler or runner.
  */
+/** The original Inbox must not mark an ambiguous provider write as failed or
+ * automatically retry it. The exact already-reserved identity stays pending.
+ */
+export class ManagedSourceOutcomeUnknown extends Error {
+  readonly outcomeUnknown = true;
+  constructor() {
+    super("Managed provider submission may already be running; reconcile original Inbox before retry");
+    this.name = "ManagedSourceOutcomeUnknown";
+  }
+}
+
 export async function submitManagedSourceInput(input: {
   scope: ManagedSourceScope;
   runId: string;
@@ -73,11 +84,12 @@ export async function submitManagedSourceInput(input: {
   if (link.create && input.provider.createSessionStream) {
     // OpenAI's initial stream emits session.created before turn.created.
     // Bind each exact identity into ORIGINAL source state. No extra runner.
-    const stream = await input.provider.createSessionStream({
-      ...input.definition,input:input.message,
-    },creationKey);
+    let stream: Awaited<ReturnType<NonNullable<typeof input.provider.createSessionStream>>> | null = null;
     let sessionID:string|null=null;
     try {
+      stream = await input.provider.createSessionStream({
+        ...input.definition,input:input.message,
+      },creationKey);
       for await (const raw of stream.events) {
         if (!raw || typeof raw !== "object") continue;
         const event=raw as {
@@ -109,25 +121,31 @@ export async function submitManagedSourceInput(input: {
         }
       }
       throw new Error("Managed session stream closed without a root-created event");
+    } catch {
+      // Any failure AFTER the provider create request can hide a successful
+      // cloud submission. Neither the original queue nor the UI may resend it.
+      throw new ManagedSourceOutcomeUnknown();
     } finally {
-      stream.close();
+      stream?.close();
     }
   }
   if (link.create) {
     // The reservation precedes the network call. If that call times out,
     // future processing is blocked until a human/provider reconciliation,
     // rather than inventing another hosted agent session.
-    const session = await input.provider.createSession({
-      ...input.definition,
-      input: input.message,
-    }, creationKey);
-    if (!session?.id ||
-        !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(session.id)) {
-      throw new Error("Managed session outcome unknown; reconciliation required");
+    try {
+      const session = await input.provider.createSession({
+        ...input.definition, input: input.message,
+      }, creationKey);
+      if (!session?.id ||
+          !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(session.id))
+        throw new Error("Invalid managed session identity");
+      await input.links.bind(input.scope, creationKey, session.id);
+      await input.turns.reserve(input.runId, originalScope, session.id);
+      return { sessionID: session.id, phase: "accepted" };
+    } catch {
+      throw new ManagedSourceOutcomeUnknown();
     }
-    await input.links.bind(input.scope, creationKey, session.id);
-    await input.turns.reserve(input.runId, originalScope, session.id);
-    return { sessionID: session.id, phase: "accepted" };
   }
   // Crash window: first session creation succeeded and its link was bound,
   // but the Inbox receipt had not yet been inserted. The link's immutable

@@ -315,7 +315,8 @@
         00000000000000000000001E /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
             ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
             CODE_SIGN_STYLE = Automatic;
-            GENERATE_INFOPLIST_FILE = YES;
+            GENERATE_INFOPLIST_FILE = NO;
+            INFOPLIST_FILE = EuphoriaApp/Info-Release.plist;
             INFOPLIST_KEY_UILaunchScreen_Generation = YES;
             INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
             IPHONEOS_DEPLOYMENT_TARGET = 27.0;

@@ -1,5 +1,9 @@
 import Foundation
 
+// Protocol values use JavaScript's exact UTF-16 identity, not Swift's canonical Unicode equivalence.
+func visualWireStringEqual(_ lhs: String, _ rhs: String) -> Bool { lhs.utf16.elementsEqual(rhs.utf16) }
+func visualWireStringKey(_ value: String) -> [UInt16] { Array(value.utf16) }
+
 /// Versioned native data contract; only explicit isolated artifact nodes carry executable web content.
 public enum VisualKind: String, Codable, Sendable {
     case askChoice, askForm, askApproval, showChecklist, pageChecklist, gallery, htmlArtifact
@@ -15,12 +19,22 @@ public enum VisualScalar: Codable, Equatable, Sendable {
     case flag(Bool)
     case strings([String])
 
+    public static func == (lhs: VisualScalar, rhs: VisualScalar) -> Bool {
+        switch (lhs, rhs) {
+        case (.text(let x), .text(let y)): return visualWireStringEqual(x, y)
+        case (.number(let x), .number(let y)): return x == y
+        case (.flag(let x), .flag(let y)): return x == y
+        case (.strings(let x), .strings(let y)): return x.map(visualWireStringKey) == y.map(visualWireStringKey)
+        default: return false
+        }
+    }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
         if let b = try? c.decode(Bool.self) { self = .flag(b) }
         else if let n = try? c.decode(Double.self) { self = .number(n) }
         else if let list = try? c.decode([String].self) {
-            guard list.count <= 20, Set(list).count == list.count, list.allSatisfy({ $0.utf16.count <= 2000 }) else {
+            guard list.count <= 20, Set(list.map(visualWireStringKey)).count == list.count, list.allSatisfy({ $0.utf16.count <= 2000 }) else {
                 throw DecodingError.dataCorruptedError(in: c, debugDescription: "Invalid bounded string list")
             }
             self = .strings(list)
@@ -33,7 +47,7 @@ public enum VisualScalar: Codable, Equatable, Sendable {
         case .number(let x): try c.encode(x)
         case .flag(let x): try c.encode(x)
         case .strings(let x):
-            guard x.count <= 20, Set(x).count == x.count, x.allSatisfy({ $0.utf16.count <= 2000 }) else {
+            guard x.count <= 20, Set(x.map(visualWireStringKey)).count == x.count, x.allSatisfy({ $0.utf16.count <= 2000 }) else {
                 throw EncodingError.invalidValue(x, .init(codingPath: encoder.codingPath, debugDescription: "Invalid bounded string list"))
             }
             try c.encode(x)
@@ -48,6 +62,11 @@ public struct VisualOption: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let label: String
     public let description: String?
+    public var wireID: [UInt16] { visualWireStringKey(id) }
+    public static func == (lhs: VisualOption, rhs: VisualOption) -> Bool {
+        lhs.wireID == rhs.wireID && visualWireStringEqual(lhs.label, rhs.label) &&
+            lhs.description.map(visualWireStringKey) == rhs.description.map(visualWireStringKey)
+    }
     public init(id: String, label: String, description: String? = nil) {
         self.id = id; self.label = label; self.description = description
     }
@@ -75,8 +94,8 @@ public struct VisualField: Codable, Equatable, Sendable, Identifiable {
         case (.text, .text(let text)), (.textarea, .text(let text)): return text.utf16.count <= 2000
         case (.checkbox, .flag): return true
         case (.choice, .strings(let list)):
-            return list.count <= 20 && Set(list).count == list.count && (allowsMultipleSelection == true || list.count <= 1) &&
-                list.allSatisfy { value in value.utf16.count <= 2000 && choices?.contains(where: { $0.id == value }) == true }
+            return list.count <= 20 && Set(list.map(visualWireStringKey)).count == list.count && (allowsMultipleSelection == true || list.count <= 1) &&
+                list.allSatisfy { value in value.utf16.count <= 2000 && choices?.contains(where: { visualWireStringEqual($0.id, value) }) == true }
         default: return false
         }
     }
@@ -84,7 +103,7 @@ public struct VisualField: Codable, Equatable, Sendable, Identifiable {
         guard !required, options == nil, min == nil, max == nil, let initialValue else { return false }
         if type == .choice {
             guard let choices, choices.count <= 20, allowsMultipleSelection != nil,
-                  Set(choices.map(\.id)).count == choices.count,
+                  Set(choices.map(\.wireID)).count == choices.count,
                   choices.allSatisfy({ $0.id.utf16.count <= 2000 && !$0.label.isEmpty && $0.label.utf16.count <= 100 && $0.description == nil }) else { return false }
         } else if choices != nil || allowsMultipleSelection != nil { return false }
         return acceptsSourceValue(initialValue)

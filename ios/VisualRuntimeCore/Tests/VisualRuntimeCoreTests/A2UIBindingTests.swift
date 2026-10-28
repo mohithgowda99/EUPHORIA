@@ -63,4 +63,41 @@ final class A2UIBindingTests: XCTestCase {
         XCTAssertNotEqual(try SourceFixtures.a2uiFormSurface().surfaceID, try SourceFixtures.a2uiControlsSurface().surfaceID)
     }
 
+    private func unicodeState(_ values: [String]) throws -> VisualState {
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(SourceFixtures.a2uiControlsSurface())) as? [String: Any])
+        var nodes = try XCTUnwrap(json["nodes"] as? [[String: Any]])
+        var fields = try XCTUnwrap(nodes[0]["fields"] as? [[String: Any]])
+        fields[3]["choices"] = values.enumerated().map { ["id": $0.element, "label": "Option \($0.offset)"] }
+        fields[3]["initialValue"] = [String]()
+        nodes[0]["fields"] = fields; json["nodes"] = nodes
+        return VisualState(surface: try JSONDecoder().decode(VisualSurface.self, from: JSONSerialization.data(withJSONObject: json)))
+    }
+    func testUnicodeChoiceIdentityMatchesExactGatewayStringSequences() throws {
+        let composed = "\u{e9}", decomposed = "e\u{301}"
+        var state = try unicodeState([composed, decomposed])
+        try choose(&state, "field_3", composed); try choose(&state, "field_3", decomposed)
+        XCTAssertEqual(try state.proposedFormValues(nodeID: "form")["field_3"], .strings([composed, decomposed]))
+        try choose(&state, "field_3", composed)
+        XCTAssertFalse(state.formChoiceIsSelected(nodeID: "form", fieldID: "field_3", optionID: composed))
+        XCTAssertTrue(state.formChoiceIsSelected(nodeID: "form", fieldID: "field_3", optionID: decomposed))
+        XCTAssertEqual(try state.proposedFormValues(nodeID: "form")["field_3"], .strings([decomposed]))
+    }
+    func testCanonicalEquivalentButUnsupportedChoiceIsRejectedLocally() throws {
+        let composed = "\u{e9}", decomposed = "e\u{301}"
+        var state = try unicodeState([composed])
+        XCTAssertThrowsError(try edit(&state, "field_3", .strings([decomposed])))
+        XCTAssertThrowsError(try state.proposedChoiceValue(nodeID: "form", fieldID: "field_3", optionID: decomposed))
+        XCTAssertTrue(state.pending.isEmpty)
+        XCTAssertEqual(try state.proposedFormValues(nodeID: "form")["field_3"], .strings([]))
+    }
+    func testWireValuesAndChoiceMetadataDoNotNormalizeUnicode() throws {
+        let composed = "\u{e9}", decomposed = "e\u{301}"
+        XCTAssertNotEqual(VisualScalar.text(composed), VisualScalar.text(decomposed))
+        XCTAssertNotEqual(VisualScalar.strings([composed]), VisualScalar.strings([decomposed]))
+        XCTAssertNotEqual(VisualOption(id: composed, label: "Same"), VisualOption(id: decomposed, label: "Same"))
+        XCTAssertNotEqual(VisualOption(id: composed, label: "Same").wireID, VisualOption(id: decomposed, label: "Same").wireID)
+        let list = VisualScalar.strings([composed, decomposed])
+        XCTAssertEqual(try JSONDecoder().decode(VisualScalar.self, from: JSONEncoder().encode(list)), list)
+    }
+
 }

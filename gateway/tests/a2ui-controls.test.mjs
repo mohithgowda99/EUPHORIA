@@ -48,3 +48,20 @@ test('mixed native fixture is the exact source projection and fits the advertise
   assert.equal(validate(s),true);
   assert.deepEqual(JSON.parse(JSON.stringify(s)),JSON.parse(readFileSync(new URL('../../ios/VisualRuntimeCore/Sources/VisualRuntimeCore/Fixtures/a2ui-controls-native.json',import.meta.url))));
 });
+
+test('null group labels are rejected rather than treated as absent',()=>{
+  const p=fixture();component(p,'channel').label=null;assert.throws(()=>normalizeRenderInput(p));
+});
+test('canonically equivalent choice values remain distinct exact wire values',()=>{
+  const p=fixture();component(p,'activities').options=[{label:'Composed',value:'é'},{label:'Decomposed',value:'e\u0301'}];
+  p.a2ui[2].updateDataModel.value.activities=[];
+  const s=normalizeRenderInput(p),a=answer(s);a.values.field_3=['é','e\u0301'];
+  assert.deepEqual(decisionResult(s,a).userAction.context.activities,['é','e\u0301']);
+  const only=fixture();component(only,'activities').options=[{label:'Composed',value:'é'}];only.a2ui[2].updateDataModel.value.activities=[];
+  const one=normalizeRenderInput(only),forged=answer(one);forged.values.field_3=['e\u0301'];
+  assert.throws(()=>decisionResult(one,forged));
+});
+
+test('explicit null event context is rejected rather than dropped',()=>{
+  const p=fixture();component(p,'confirm').action.event.context=null;assert.throws(()=>normalizeRenderInput(p));
+});

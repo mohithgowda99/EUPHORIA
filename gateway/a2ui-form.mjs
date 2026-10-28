@@ -69,7 +69,7 @@ export function normalizeRenderInput(input){
     const c=take(id,type);
     if(type==='ChoicePicker')shape(c,['id','component','options','value'],['label','variant','displayStyle','filterable']);
     else shape(c,['id','component','label','value'],type==='TextField'?['variant']:[]);
-    const label=c.label??'';
+    const label=Object.hasOwn(c,'label')?c.label:'';
     if(!text(label,100)||(type!=='ChoicePicker'&&!label))bad();
     const binding=path(c.value);
     if(bindingFields.has(binding)||!Object.hasOwn(model,binding))bad();
@@ -96,9 +96,10 @@ export function normalizeRenderInput(input){
   const label=take(button.child,'Text');shape(label,['id','component','text']);
   if(!text(label.text,100)||!label.text)bad();
   shape(button.action,['event']);const event=button.action.event;shape(event,['name'],['context']);
-  if(!key(event.name)||!object(event.context??{})||Object.keys(event.context??{}).length>20)bad();
+  const context=Object.hasOwn(event,'context')?event.context:{};
+  if(!key(event.name)||!object(context)||Object.keys(context).length>20)bad();
   const contextFields=Object.create(null),literalContext=Object.create(null);
-  for(const [k,v] of Object.entries(event.context??{})){
+  for(const [k,v] of Object.entries(context)){
     if(!key(k))bad();
     if(object(v)){
       const field=bindingFields.get(path(v));if(!field)bad();contextFields[k]=field;

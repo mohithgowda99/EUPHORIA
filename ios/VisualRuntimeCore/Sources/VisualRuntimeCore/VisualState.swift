@@ -168,13 +168,17 @@ public struct VisualState: Codable, Equatable, Sendable {
     }
     public func formFieldValue(nodeID: String, fieldID: String) -> String { formFieldData(nodeID: nodeID, fieldID: fieldID)?.string ?? "" }
 
+    public func formChoiceIsSelected(nodeID: String, fieldID: String, optionID: String) -> Bool {
+        formFieldData(nodeID: nodeID, fieldID: fieldID)?.stringList?.contains(where: { visualWireStringEqual($0, optionID) }) == true
+    }
+
     public func proposedChoiceValue(nodeID: String, fieldID: String, optionID: String) throws -> VisualScalar {
         guard let node = surface.nodes.first(where: { $0.id == nodeID && $0.formEvent != nil }),
               let field = node.fields?.first(where: { $0.id == fieldID && $0.type == .choice }),
-              field.choices?.contains(where: { $0.id == optionID }) == true,
+              field.choices?.contains(where: { visualWireStringEqual($0.id, optionID) }) == true,
               let current = formFieldData(nodeID: nodeID, fieldID: fieldID), field.acceptsSourceValue(current), let selected = current.stringList else { throw VisualContractError.invalidAction }
         if field.allowsMultipleSelection == true {
-            return .strings(selected.contains(optionID) ? selected.filter { $0 != optionID } : selected + [optionID])
+            return .strings(selected.contains(where: { visualWireStringEqual($0, optionID) }) ? selected.filter { !visualWireStringEqual($0, optionID) } : selected + [optionID])
         }
         return .strings([optionID])
     }

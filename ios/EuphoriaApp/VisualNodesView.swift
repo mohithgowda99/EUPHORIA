@@ -89,8 +89,8 @@ struct VisualNodesView: View {
         } else if field.type == .choice {
             VStack(alignment: .leading, spacing: 10) {
                 if !field.label.isEmpty { Text(field.label).font(.subheadline.weight(.medium)) }
-                ForEach(field.choices ?? []) { option in
-                    let selected = state.formFieldData(nodeID: node.id, fieldID: field.id)?.stringList?.contains(option.id) == true
+                ForEach(field.choices ?? [], id: \.wireID) { option in
+                    let selected = state.formChoiceIsSelected(nodeID: node.id, fieldID: field.id, optionID: option.id)
                     Button {
                         do {
                             let value = try state.proposedChoiceValue(nodeID: node.id, fieldID: field.id, optionID: option.id)

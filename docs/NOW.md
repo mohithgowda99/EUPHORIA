@@ -30,3 +30,19 @@
 **Single next acceptance path:** Mac checkout with uncommitted-work preservation; run original Bun typecheck/tests and Node24 gateway tests, `xcodebuild` Debug/Release + simulator XCTest, fix compile/runtime issues. Then implement a **small managed Agents provider adapter for original source CopilotKit conversation/headless-turn/lock/history seam**, preserving original Bot/TaskStore/Channel/Approval authority. Verify a genuine account/Bot Chat → Task → native A2UI → answer → report → relaunch trace, before retiring transitional gateway and shipping externally reachable hosting/notifications.
 
 Reference: `docs/architecture/MANAGED_FIRST_REUSE_AUDIT.md`, `docs/phase1-ui/OPENDUET_SOURCE_FIDELITY_LEDGER.md`.
+
+## Managed Agents source bridge: pre-Mac continuation (2026-10-28)
+
+New actual implementation (not yet live-mounted):
+
+- `server/src/agents/managed-source-definition.ts`: maps original authenticated `AgentProfileStore` + registered built-in Bot identity into an Agents configuration. Deleted, foreign and remote AG-UI/Mastra Bots fail closed. No managed MCP/plugin tool is granted until original OpenDuet tool policy is translated and enforced.
+- `server/src/db/schema/managed-agents.ts`, `agents/managed-session-links.ts`, Drizzle migration/snapshot `0068`: minimal user/channel/Bot to provider session association in the **original** Postgres database. A reserved provider creation with an uncertain outcome is never automatically submitted a second time. No alternate task, message, memory or execution database.
+- `server/src/agents/managed-source-submission.ts`: stable original DeliveryStore inbox-run ID is used as provider idempotency identity through the **existing** `gateway/agents-client.mjs` transport for creation/follow-ups. Returns `accepted`, never fabricates completion.
+- `server/src/agents/managed-source-outcome.ts`: only specific completed root turns qualify as completed; idle sessions/subagent completions do not. Required actions are a human wait, not an authorization grant.
+- New original Bun and gateway Node tests are committed for Bot authority, cross-source restrictions, duplicate delivery, session binding and completion semantics.
+
+**Gate deliberately not crossed:** The managed source adapter is NOT yet mounted in `index.ts`/DeliveryRouter. The original native Chat and TaskStore still execute through CopilotKit. To enable this safely, original inbound delivery must hand off to the managed transport and the provider event/turn result must be projected back into the original source channel history, with an independently running completion/recovery path and approval gates. A provider session ID or HTTP 202 must not count as a Bot reply. Do not flip a production cutover switch yet.
+
+**Validation:** performed remote structural checks only, without a full checkout; Bun/Node24 original suites, Xcode and real provider execution still pending. Manual Drizzle 0068 snapshot must be checked against `drizzle-kit` on the Mac before applying migrations. No paid API calls or production DB changes.
+
+**Mac first commands:** preserve uncommitted work; inspect branch head and `git status`, run `cd openbot && bun install --frozen-lockfile && bun run --filter server typecheck && bun test server/tests/managed-source-definition.test.ts`, run `cd gateway && node --test tests/source-managed-*.test.mjs`, then `cd ios/VisualRuntimeCore && swift test`, and `EUPHORIA_SIMULATOR_ID=<available-UDID> bash ios/scripts/verify-xcode.sh` at repo root. No paid provider test until this baseline passes.

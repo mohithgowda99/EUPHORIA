@@ -778,6 +778,13 @@ struct OpenDuetSourceAPI: Sendable {
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let sessionCookie { req.setValue(sessionCookie, forHTTPHeaderField: "Cookie") }
+        // Better Auth's existing expo() onRequest reads this header and
+        // applies the already-trusted openbotmobile:// origin for native OAuth
+        // CSRF checks. Exact source client contract, not a new auth bypass.
+        if path.hasPrefix("api/auth/") {
+            req.setValue("openbotmobile://", forHTTPHeaderField: "expo-origin")
+            req.setValue("true", forHTTPHeaderField: "x-skip-oauth-proxy")
+        }
         if let body {
             req.httpBody = try JSONEncoder().encode(AnyEncodableSource(body))
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")

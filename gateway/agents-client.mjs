@@ -41,6 +41,11 @@ export class AgentsClient {
     if (after !== undefined) query.set('after', identifier(after));
     return this.#request('GET', '/' + identifier(sessionID) + '/items?' + query,undefined,undefined,signal);
   }
+  async listTurns(sessionID,{after,limit=20,order='desc'}={}) {
+    if(!Number.isInteger(limit)||limit<1||limit>100||!['asc','desc'].includes(order))throw Error('Invalid turn page');
+    const query=new URLSearchParams({order,limit:String(limit)});if(after!==undefined)query.set('after',identifier(after));
+    return this.#request('GET','/'+identifier(sessionID)+'/turns?'+query);
+  }
   async openEventStream(sessionID,{signal}={}) {
     identifier(sessionID);
     const controller=new AbortController();

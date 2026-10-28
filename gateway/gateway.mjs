@@ -1,3 +1,4 @@
+import {taskServices} from './tasks.mjs';
 import {argumentFingerprint} from './provider-arguments.mjs';
 import {liveSnapshots} from './live-snapshots.mjs';
 import {normalizeRenderInput,renderInputSchema} from './a2ui-form.mjs';
@@ -191,6 +192,7 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     }
     return snapshot(owned(row.id,owner));
   }
+  const tasks=taskServices({db,provider,create,refresh,conversation,locked});
   const live=liveSnapshots({provider,owned,authenticate,
     readProjection:(id,owner,signal)=>locked(id,async()=>{
       const snapshot=await refresh(id,owner,{signal});
@@ -203,7 +205,17 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
       if(typeof owner!=='string'||!owner||owner.length>256)fail(401,'Authentication required');
       const path=new URL(req.url,'http://localhost').pathname;
       let result,status=200;
-      if(path==='/v1/sessions'&&req.method==='POST'){
+      if(path==='/v1/tasks'&&req.method==='POST'){
+        [status,result]=await tasks.start(owner,await body(req));
+      }else if(path==='/v1/tasks'&&req.method==='GET'){
+        result=await tasks.list(owner,new URL(req.url,'http://localhost'));
+      }else if(/^\/v1\/tasks\/[A-Za-z0-9_-]+$/.test(path)&&req.method==='GET'){
+        result={task:await tasks.get(owner,path.split('/')[3])};
+      }else if(/^\/v1\/tasks\/[A-Za-z0-9_-]+\/report$/.test(path)&&req.method==='GET'){
+        result=await tasks.report(owner,path.split('/')[3],new URL(req.url,'http://localhost'));
+      }else if(/^\/v1\/tasks\/[A-Za-z0-9_-]+\/(reply|cancel|resolve|reopen)$/.test(path)&&req.method==='POST'){
+        [status,result]=await tasks.mutate(owner,path.split('/')[3],path.split('/')[4],await body(req));
+      }else if(path==='/v1/sessions'&&req.method==='POST'){
         const input=await body(req);
         [status,result]=await locked('create:'+owner,()=>create(owner,input));
       }else if(path==='/v1/sessions'&&req.method==='GET'){
@@ -223,7 +235,9 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
         const id=path.split('/')[3];result=await locked(id,()=>refresh(id,owner));
       }else if(/^\/v1\/sessions\/[A-Za-z0-9_-]+\/(messages|cancel)$/.test(path)&&req.method==='POST'){
         const id=path.split('/')[3];owned(id,owner);const input=await body(req);
-        result=await locked(id,()=>conversation.submit(id,owner,path.endsWith('/messages')?'message':'cancel',input));status=202;
+        const task=tasks.forSession(owner,id);
+        if(task){const response=await tasks.mutate(owner,task.id,path.endsWith('/messages')?'reply':'cancel',input);status=response[0];result=response[1].operation;}
+        else{result=await locked(id,()=>conversation.submit(id,owner,path.endsWith('/messages')?'message':'cancel',input));status=202;}
       }else if(/^\/v1\/sessions\/[A-Za-z0-9_-]+\/inputs$/.test(path)&&req.method==='GET'){
         result=conversation.receipts(path.split('/')[3],owner);
       }else if(/^\/v1\/sessions\/[A-Za-z0-9_-]+\/inputs\/reconcile$/.test(path)&&req.method==='POST'){

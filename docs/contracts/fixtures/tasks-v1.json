@@ -1,0 +1,15 @@
+{
+  "task": {
+    "id": "synthetic-task",
+    "title": "Plan the visit",
+    "instruction": "Prepare a visit plan",
+    "sessionID": "synthetic-session",
+    "status": "ready_for_review",
+    "resolvedAt": null,
+    "createdAt": "2026-10-28T00:00:00Z",
+    "updatedAt": "2026-10-28T00:00:00Z",
+    "deliveryPhase": "accepted",
+    "pendingNodeIDs": [],
+    "failure": null
+  }
+}

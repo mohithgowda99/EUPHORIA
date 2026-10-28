@@ -193,3 +193,7 @@ test('render rejection checks exact pending arguments and never sends errors to 
  let posts=0;const client=new AgentsClient({apiKey:'offline',fetchImpl:async(url,options)=>{if(options.method==='POST')posts++;return Response.json({id:'sess_test',required_actions:[pending]});}});
  await assert.rejects(client.rejectToolCall('sess_test',{turnID:'turn_test',callID:'call_test',name:'askChoice',error:'bad'},'reject-key',{expectedArguments:{different:true}}),e=>e.outcomeUnknown===false&&e.failureStage==='pending_lookup');assert.equal(posts,0);
 });
+
+test('turn history uses the official owned session endpoint and bounded descending pagination',async t=>{
+ const {client,requests}=await provider(t,(_,res)=>json(res,{data:[],has_more:false}));await client.listTurns('sess_test',{limit:20,order:'desc',after:'turn_old'});assert.equal(requests[0].path,'/v1/agents/sessions/sess_test/turns?order=desc&limit=20&after=turn_old');await assert.rejects(client.listTurns('sess_test',{limit:101}));assert.equal(requests.length,1);
+});

@@ -7,8 +7,9 @@ export function conversations({db,provider,owned}) {
     CREATE TABLE IF NOT EXISTS surface_versions(session_id TEXT,revision INTEGER,surface TEXT,turn_id TEXT,call_id TEXT,
     PRIMARY KEY(session_id,revision));
     UPDATE inputs SET phase='uncertain' WHERE phase='submitting';`);
+  if(!db.prepare('PRAGMA table_info(inputs)').all().some(c=>c.name==='base_turn_id'))db.exec('ALTER TABLE inputs ADD COLUMN base_turn_id TEXT');
   const operations=id=>db.prepare('SELECT input_id AS id,kind,phase FROM inputs WHERE session_id=? ORDER BY rowid').all(id);
-  async function submit(id,owner,kind,input) {
+  async function submit(id,owner,kind,input,{baseTurnID=null}={}) {
     owned(id,owner);
     const expected=kind==='message'?'id,message':'id';
     if(!input||Object.keys(input).sort().join(',')!==expected)fail(422,'Invalid conversation operation');
@@ -21,7 +22,7 @@ export function conversations({db,provider,owned}) {
       return {id:input.id,phase:old.phase};
     }
     if(operations(id).length>=500)fail(429,'Conversation input limit reached');
-    db.prepare('INSERT INTO inputs VALUES(?,?,?,?,?)').run(id,input.id,kind,fingerprint,'submitting');
+    db.prepare('INSERT INTO inputs(session_id,input_id,kind,payload,phase,base_turn_id) VALUES(?,?,?,?,?,?)').run(id,input.id,kind,fingerprint,'submitting',baseTurnID);
     const key='input-'+createHash('sha256').update(id+'\0'+input.id).digest('hex');
     let phase='accepted';
     try {
@@ -37,7 +38,7 @@ export function conversations({db,provider,owned}) {
     if(!input||Object.keys(input).join(',')!=='ids'||!Array.isArray(input.ids)||input.ids.length>50)fail(422,'Invalid recovery input');
     input.ids.forEach(identifier);
     if(operations(id).length+input.ids.length>500)fail(429,'Conversation input limit reached');
-    for(const key of input.ids)db.prepare('INSERT OR IGNORE INTO inputs VALUES(?,?,NULL,NULL,?)').run(id,key,'cancelled');
+    for(const key of input.ids)db.prepare('INSERT OR IGNORE INTO inputs(session_id,input_id,kind,payload,phase) VALUES(?,?,NULL,NULL,?)').run(id,key,'cancelled');
     return receipts(id,owner);
   }
   async function history(id,owner,{after,limit=10,signal}={}) {

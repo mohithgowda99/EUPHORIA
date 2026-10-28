@@ -9,7 +9,7 @@ CREATE TABLE "managed_agent_session_links" (
   "creation_key" text NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT now(),
   "updated_at" timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT "managed_agent_session_links_pkey" PRIMARY KEY ("owner_user_id", "channel_id", "bot_id")
+  CONSTRAINT "managed_agent_session_links_owner_user_id_channel_id_bot_id_pk" PRIMARY KEY ("owner_user_id", "channel_id", "bot_id")
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX "managed_agent_session_links_provider_idx"

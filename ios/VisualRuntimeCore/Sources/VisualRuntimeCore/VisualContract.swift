@@ -49,10 +49,11 @@ public struct VisualField: Codable, Equatable, Sendable, Identifiable {
     public let options: [String]?
     public let min: Double?
     public let max: Double?
+    public let initialValue: String?
     public init(id: String, label: String, type: VisualFieldKind, required: Bool = false,
-                options: [String]? = nil, min: Double? = nil, max: Double? = nil) {
+                options: [String]? = nil, min: Double? = nil, max: Double? = nil, initialValue: String? = nil) {
         self.id = id; self.label = label; self.type = type; self.required = required
-        self.options = options; self.min = min; self.max = max
+        self.options = options; self.min = min; self.max = max; self.initialValue = initialValue
     }
 }
 
@@ -66,6 +67,29 @@ public struct VisualChecklistItem: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// Source event metadata is data only. The gateway resolves it; it grants no native execution authority.
+public struct VisualFormEvent: Codable, Equatable, Sendable {
+    public let name: String
+    public let surfaceID: String
+    public let sourceComponentID: String
+    public let contextFields: [String: String]
+    public let literalContext: [String: VisualScalar]
+    func validate(fields: [VisualField]) throws {
+        func safe(_ key: String) -> Bool {
+            key.range(of: "^[A-Za-z_][A-Za-z0-9_-]{0,63}$", options: .regularExpression) != nil &&
+                !["__proto__", "prototype", "constructor"].contains(key)
+        }
+        guard [name, surfaceID, sourceComponentID].allSatisfy(safe), contextFields.count <= 20, literalContext.count <= 20,
+              contextFields.keys.allSatisfy(safe), literalContext.keys.allSatisfy(safe),
+              Set(contextFields.keys).isDisjoint(with: literalContext.keys),
+              contextFields.values.allSatisfy({ id in fields.contains { $0.id == id } }),
+              fields.allSatisfy({ [.text, .textarea].contains($0.type) && $0.initialValue != nil }),
+              literalContext.values.allSatisfy({ value in
+                  switch value { case .text(let s): return s.utf16.count <= 2000; case .number(let n): return n.isFinite; case .flag: return true }
+              }) else { throw VisualContractError.invalidNode }
+    }
+}
+
 public struct VisualNode: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let kind: VisualKind
@@ -76,11 +100,13 @@ public struct VisualNode: Codable, Equatable, Sendable, Identifiable {
     public let items: [VisualChecklistItem]?
     public let gallery: VisualGallery?
     public let html: String?
+    public let submitLabel: String?
+    public let formEvent: VisualFormEvent?
     public init(id: String, kind: VisualKind, title: String, summary: String? = nil,
                 options: [VisualOption]? = nil, fields: [VisualField]? = nil,
-                items: [VisualChecklistItem]? = nil, gallery: VisualGallery? = nil, html: String? = nil) {
+                items: [VisualChecklistItem]? = nil, gallery: VisualGallery? = nil, html: String? = nil, submitLabel: String? = nil, formEvent: VisualFormEvent? = nil) {
         self.id = id; self.kind = kind; self.title = title; self.summary = summary
-        self.options = options; self.fields = fields; self.items = items; self.gallery = gallery; self.html = html
+        self.options = options; self.fields = fields; self.items = items; self.gallery = gallery; self.html = html; self.submitLabel = submitLabel; self.formEvent = formEvent
     }
 }
 
@@ -113,6 +139,13 @@ public struct VisualSurface: Codable, Equatable, Sendable {
         for node in nodes {
             guard !node.id.isEmpty, node.id.count <= 64, nodeIDs.insert(node.id).inserted,
                   !node.title.isEmpty, node.title.count <= 120 else { throw VisualContractError.invalidNode }
+            if let label = node.submitLabel {
+                guard node.kind == .askForm, !label.isEmpty, label.count <= 100 else { throw VisualContractError.invalidNode }
+            }
+            if let event = node.formEvent {
+                guard schemaVersion == 2, node.kind == .askForm, node.submitLabel != nil else { throw VisualContractError.invalidNode }
+                try event.validate(fields: node.fields ?? [])
+            }
             switch node.kind {
             case .askChoice:
                 let options = node.options ?? []
@@ -126,7 +159,7 @@ public struct VisualSurface: Codable, Equatable, Sendable {
                 }
                 for f in fields {
                     guard f.id.range(of: "^[A-Za-z][A-Za-z0-9_]{0,47}$", options: .regularExpression) != nil,
-                          !f.label.isEmpty, f.label.count <= 100,
+                          !f.label.isEmpty, f.label.count <= 100, (f.initialValue?.utf16.count ?? 0) <= 2000,
                           f.min == nil || f.max == nil || f.min! <= f.max! else {
                         throw VisualContractError.invalidNode
                     }

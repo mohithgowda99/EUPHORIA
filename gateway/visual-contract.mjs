@@ -21,6 +21,18 @@ export function validateSurface(surface){
     // These IDs participate in local flat binding paths; exclude separators/prototype names.
     if(!/^[A-Za-z0-9_-]{1,64}$/.test(n.id))fail(502,'Unsupported node identity');
     if(['askChoice','askForm','askApproval'].includes(n.kind))decisions++;
+    if(n.submitLabel!==undefined&&n.kind!=='askForm')fail(502,'Invalid form label');
+    if(n.fields?.some(f=>f.initialValue!==undefined&&f.initialValue.length>2000))fail(502,'Invalid initial value');
+    if(n.formEvent){
+      const e=n.formEvent, fields=n.fields??[];
+      const safe=k=>/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(k)&&!['__proto__','prototype','constructor'].includes(k);
+      if(surface.schemaVersion!==2||n.kind!=='askForm'||!n.submitLabel||![e.name,e.surfaceID,e.sourceComponentID].every(safe)||
+        fields.some(f=>!['text','textarea'].includes(f.type)||typeof f.initialValue!=='string')||
+        [...Object.keys(e.contextFields),...Object.keys(e.literalContext)].some(k=>!safe(k))||
+        Object.keys(e.contextFields).some(k=>Object.hasOwn(e.literalContext,k))||
+        Object.values(e.literalContext).some(v=>typeof v==='string'&&v.length>2000)||
+        Object.values(e.contextFields).some(id=>!fields.some(f=>f.id===id)))fail(502,'Invalid source form event');
+    }
     if(n.kind==='askChoice'&&(!n.options?.length||!unique(n.options)))fail(502,'Invalid choices');
     if(n.kind==='askForm'){
       if(!n.fields?.length||!unique(n.fields))fail(502,'Invalid form');
@@ -69,6 +81,12 @@ export function decisionResult(surface,action){
     return Object.hasOwn(v,'note')?{decision:v.decision,note:v.note}:{decision:v.decision};
   }
   if(node.kind==='askForm'&&action.kind==='submitForm'){
+    if(node.formEvent){
+      if(keys.length!==node.fields.length||node.fields.some(f=>typeof v[f.id]!=='string'||v[f.id].length>2000)||keys.some(k=>!node.fields.some(f=>f.id===k)))fail(422,'Invalid source form values');
+      const e=node.formEvent,context={...e.literalContext};
+      for(const [name,field] of Object.entries(e.contextFields))context[name]=v[field];
+      return {userAction:{name:e.name,surfaceId:e.surfaceID,sourceComponentId:e.sourceComponentID,context}};
+    }
     if(keys.some(k=>!node.fields.some(f=>f.id===k)))fail(422,'Unknown form field');
     for(const f of node.fields){
       if(!Object.hasOwn(v,f.id)){if(f.required)fail(422,'Required field missing');continue;}

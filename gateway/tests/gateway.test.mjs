@@ -1,4 +1,5 @@
 import {test} from 'node:test';
+import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -236,4 +237,28 @@ test('definitive provider rejections are terminal and do not strand future input
   assert.equal((await request(path,{method:'POST',body:{id:'rejected-1',message:'Try'}})).body.phase,'rejected');
   await request(path,{method:'POST',body:{id:'rejected-1',message:'Try'}});assert.equal(writes,1);
   await request(path,{method:'POST',body:{id:'rejected-2',message:'A corrected input'}});assert.equal(writes,2);
+});
+
+const sourceTrip=()=>JSON.parse(readFileSync(new URL('./fixtures/a2ui-trip-v09.json',import.meta.url)));
+test('source A2UI form uses existing owner revision and once-only action journal',async t=>{
+  const {start,request,provider,reopen}=await setup(t,sourceProvider(sourceTrip()));
+  const snapshot=await start();assert.equal(snapshot.surface.nodes[0].fields[0].initialValue,'Paris');
+  assert.notEqual(snapshot.surface.surfaceID,'trip','Source IDs never own gateway surfaces');
+  const action={id:'a2ui-answer',surfaceID:snapshot.surface.surfaceID,expectedRevision:snapshot.surface.revision,nodeID:'form',kind:'submitForm',values:{field_0:'Kyoto'}};
+  const route='/v1/surfaces/'+snapshot.surface.surfaceID+'/actions';
+  assert.equal((await request(route,{method:'POST',body:action,user:'bob'})).status,404);
+  assert.equal((await request(route,{method:'POST',body:{...action,expectedRevision:0}})).status,409);
+  assert.equal((await request(route,{method:'POST',body:action})).status,202);
+  await reopen();await request(route,{method:'POST',body:action});
+  assert.equal(provider.results.length,1);
+  const {timestamp,...event}=provider.results[0].result.output.userAction;
+  assert.ok(Number.isFinite(Date.parse(timestamp)));
+  assert.deepEqual(event,{name:'confirm_trip',surfaceId:'trip',sourceComponentId:'confirm',context:{destination:'Kyoto'}});
+});
+test('unsupported A2UI form never publishes controls or submits a tool result',async t=>{
+  const p=sourceProvider(sourceTrip());p.current.required_actions[0].arguments.a2ui[1].updateComponents.components[1].component='Row';
+  const {request,provider}=await setup(t,p);
+  await request('/v1/sessions',{method:'POST',body:{id:'create',message:'Unsupported'}});
+  assert.equal((await request('/v1/sessions/sess_test')).status,502);
+  assert.equal(provider.results.length,0);
 });

@@ -101,6 +101,14 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 64000
+        },
+        "submitLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "formEvent": {
+          "$ref": "#/$defs/formEvent"
         }
       }
     },
@@ -172,6 +180,10 @@
         },
         "max": {
           "type": "number"
+        },
+        "initialValue": {
+          "type": "string",
+          "maxLength": 2000
         }
       }
     },
@@ -395,6 +407,51 @@
       "required": [
         "kind"
       ]
+    },
+    "formEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "surfaceID",
+        "sourceComponentID",
+        "contextFields",
+        "literalContext"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+        },
+        "surfaceID": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+        },
+        "sourceComponentID": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+        },
+        "contextFields": {
+          "type": "object",
+          "maxProperties": 20,
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 48
+          }
+        },
+        "literalContext": {
+          "type": "object",
+          "maxProperties": 20,
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ],
+            "maxLength": 2000
+          }
+        }
+      }
     }
   },
   "allOf": [
@@ -413,6 +470,26 @@
               },
               "required": [
                 "kind"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "schemaVersion": {
+            "const": 2
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "nodes": {
+            "contains": {
+              "required": [
+                "formEvent"
               ]
             }
           }

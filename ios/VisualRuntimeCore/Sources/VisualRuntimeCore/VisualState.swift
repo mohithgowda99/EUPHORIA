@@ -46,26 +46,30 @@ public struct VisualState: Codable, Equatable, Sendable {
             guard requiresDisplayReceipt, node.id == surface.nodes.first?.id, action.values.isEmpty else { throw VisualContractError.invalidAction }
             values["$displayReceipt@" + String(surface.revision)] = .flag(true)
         case (.askApproval, .setField):
-            guard action.values.count == 1, let note = action.values["note"]?.string, note.count <= 2000 else { throw VisualContractError.invalidAction }
+            guard action.values.count == 1, let note = action.values["note"]?.string, note.utf16.count <= 2000 else { throw VisualContractError.invalidAction }
             values[approvalNoteKey(nodeID: node.id)] = .text(note)
         case (.askForm, .setField):
             guard action.values.count == 1, let (key, value) = action.values.first,
                   let field = node.fields?.first(where: { $0.id == key }),
-                  let raw = value.string, raw.count <= 2000 else { throw VisualContractError.invalidAction }
+                  let raw = value.string, raw.utf16.count <= 2000 else { throw VisualContractError.invalidAction }
             if field.type == .select && !(field.options ?? []).contains(raw) && !raw.isEmpty {
                 throw VisualContractError.invalidAction
             }
-            values[prefix + key] = .text(raw)
+            values[formFieldKey(node: node, fieldID: key)] = .text(raw)
         case (.askForm, .submitForm):
             guard let fields = node.fields else { throw VisualContractError.invalidAction }
+            if node.formEvent != nil {
+                guard action.values == (try proposedFormValues(nodeID: node.id)) else { throw VisualContractError.invalidAction }
+                break
+            }
             var typed: [String: VisualScalar] = [:]
             for field in fields {
-                let raw = (values[prefix + field.id]?.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                let raw = formFieldValue(nodeID: node.id, fieldID: field.id).trimmingCharacters(in: .whitespacesAndNewlines)
                 if raw.isEmpty {
                     if field.required { throw VisualContractError.invalidAction }
                     continue
                 }
-                if raw.count > 2000 { throw VisualContractError.invalidAction }
+                if raw.utf16.count > 2000 { throw VisualContractError.invalidAction }
                 if field.type == .email && (!raw.contains("@") || raw.contains(" ")) {
                     throw VisualContractError.invalidAction
                 }
@@ -93,7 +97,7 @@ public struct VisualState: Codable, Equatable, Sendable {
             guard let decision = action.values["decision"]?.string,
                   ["approved", "declined"].contains(decision),
                   Set(action.values.keys).isSubset(of: ["decision", "note"]),
-                  (!action.values.keys.contains("note") || action.values["note"]?.string.map { $0.count <= 2000 } == true) else {
+                  (!action.values.keys.contains("note") || action.values["note"]?.string.map { $0.utf16.count <= 2000 } == true) else {
                 throw VisualContractError.invalidAction
             }
             values[node.id] = .text(decision)
@@ -151,12 +155,30 @@ public struct VisualState: Codable, Equatable, Sendable {
         return values[approvalNoteKey(nodeID: nodeID)]?.string ?? ""
     }
 
+    private func formFieldKey(node: VisualNode, fieldID: String) -> String {
+        node.id + (node.formEvent == nil ? "." : ".a2ui@" + String(surface.revision) + ".") + fieldID
+    }
+    public func formFieldValue(nodeID: String, fieldID: String) -> String {
+        guard let node = surface.nodes.first(where: { $0.id == nodeID && $0.kind == .askForm }),
+              let field = node.fields?.first(where: { $0.id == fieldID }) else { return "" }
+        return values[formFieldKey(node: node, fieldID: fieldID)]?.string ?? field.initialValue ?? ""
+    }
+
     public func proposedFormValues(nodeID: String) throws -> [String: VisualScalar] {
         guard let node = surface.nodes.first(where: { $0.id == nodeID && $0.kind == .askForm }),
               let fields = node.fields else { throw VisualContractError.invalidAction }
+        if node.formEvent != nil {
+            var source: [String: VisualScalar] = [:]
+            for field in fields {
+                let raw = formFieldValue(nodeID: nodeID, fieldID: field.id)
+                guard raw.utf16.count <= 2000 else { throw VisualContractError.invalidAction }
+                source[field.id] = .text(raw)
+            }
+            return source
+        }
         var out: [String: VisualScalar] = [:]
         for field in fields {
-            let raw = (values[node.id + "." + field.id]?.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let raw = formFieldValue(nodeID: node.id, fieldID: field.id).trimmingCharacters(in: .whitespacesAndNewlines)
             if raw.isEmpty { continue }
             if field.type == .number {
                 guard let number = Double(raw), number.isFinite else { throw VisualContractError.invalidAction }

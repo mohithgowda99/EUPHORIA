@@ -161,4 +161,45 @@ final class VisualRuntimeCoreTests: XCTestCase {
         XCTAssertThrowsError(try state.apply(action(state, node: "refund", kind: .setField, values: ["note": .text("Changed")])) )
     }
 
+    func testSourceFormDefaultsEditsAndEmptyStringsSurviveReopenWithoutTrimming() throws {
+        var state = VisualState(surface: try SourceFixtures.a2uiFormSurface())
+        XCTAssertEqual(try state.proposedFormValues(nodeID: "form"), ["field_0": .text("Paris")])
+        for raw in ["Kyoto", "  Kyoto  ", "", "  "] {
+            try state.apply(VisualAction(id: UUID().uuidString, surfaceID: state.surface.surfaceID,
+                expectedRevision: 0, nodeID: "form", kind: .setField, values: ["field_0": .text(raw)]))
+            state = try JSONDecoder().decode(VisualState.self, from: JSONEncoder().encode(state))
+            XCTAssertEqual(try state.proposedFormValues(nodeID: "form"), ["field_0": .text(raw)])
+        }
+        let values = try state.proposedFormValues(nodeID: "form")
+        try state.apply(VisualAction(id: "submit", surfaceID: state.surface.surfaceID, expectedRevision: 0, nodeID: "form", kind: .submitForm, values: values))
+        XCTAssertThrowsError(try state.apply(VisualAction(id: "late", surfaceID: state.surface.surfaceID, expectedRevision: 0, nodeID: "form", kind: .setField, values: ["field_0": .text("Changed")])))
+        XCTAssertEqual(state.pending.first?.values, ["field_0": .text("  ")])
+    }
+    func testMalformedSourceEventBindingFailsBeforeNativePresentation() throws {
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(SourceFixtures.a2uiFormSurface())) as? [String: Any])
+        var nodes = try XCTUnwrap(json["nodes"] as? [[String: Any]])
+        var event = try XCTUnwrap(nodes[0]["formEvent"] as? [String: Any])
+        event["contextFields"] = ["destination":"unknown_field"]
+        nodes[0]["formEvent"] = event; json["nodes"] = nodes
+        XCTAssertThrowsError(try JSONDecoder().decode(VisualSurface.self, from: JSONSerialization.data(withJSONObject: json)))
+    }
+
+    func testNewSourceRevisionDoesNotReusePreviousFormDraft() throws {
+        var state = VisualState(surface: try SourceFixtures.a2uiFormSurface())
+        try state.apply(VisualAction(id: "edit", surfaceID: state.surface.surfaceID, expectedRevision: 0, nodeID: "form", kind: .setField, values: ["field_0": .text("Kyoto")]))
+        let next = try VisualSurface(surfaceID: state.surface.surfaceID, revision: 1, nodes: state.surface.nodes, schemaVersion: 2)
+        try state.reconcile(next, acknowledgedActionIDs: [])
+        XCTAssertEqual(try state.proposedFormValues(nodeID: "form"), ["field_0": .text("Paris")])
+    }
+
+    func testUnicodeSourceDraftLimitMatchesGatewayAndDoesNotQueueRejectedValue() throws {
+        var state = VisualState(surface: try SourceFixtures.a2uiFormSurface())
+        let accepted = String(repeating: "😀", count: 1000)
+        try state.apply(VisualAction(id: "valid", surfaceID: state.surface.surfaceID, expectedRevision: 0, nodeID: "form", kind: .setField, values: ["field_0": .text(accepted)]))
+        XCTAssertEqual(try state.proposedFormValues(nodeID: "form"), ["field_0": .text(accepted)])
+        XCTAssertThrowsError(try state.apply(VisualAction(id: "too-long", surfaceID: state.surface.surfaceID, expectedRevision: 0, nodeID: "form", kind: .setField, values: ["field_0": .text(accepted + "😀")])))
+        XCTAssertTrue(state.pending.isEmpty)
+        XCTAssertEqual(try state.proposedFormValues(nodeID: "form"), ["field_0": .text(accepted)])
+    }
+
 }

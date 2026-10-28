@@ -33,7 +33,7 @@ struct VisualNodesView: View {
                 ForEach(node.fields ?? []) { field in
                     fieldView(field, node: node)
                 }
-                Button(fixture ? "Submit form (local pending)" : "Submit form") {
+                Button(node.submitLabel ?? (fixture ? "Submit form (local pending)" : "Submit form")) {
                     do {
                         enact(node, kind: .submitForm,
                               values: try state.proposedFormValues(nodeID: node.id))
@@ -96,7 +96,7 @@ struct VisualNodesView: View {
 
     private func binding(for field: VisualField, node: VisualNode) -> Binding<String> {
         Binding(
-            get: { state.values[node.id + "." + field.id]?.string ?? "" },
+            get: { state.formFieldValue(nodeID: node.id, fieldID: field.id) },
             set: { value in enact(node, kind: .setField, values: [field.id: .text(value)]) }
         )
     }

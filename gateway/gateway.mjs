@@ -1,9 +1,10 @@
+import {normalizeRenderInput,renderInputSchema} from './a2ui-form.mjs';
 import {conversations} from './conversations.mjs';
 import {createServer} from 'node:http';
 import {DatabaseSync} from 'node:sqlite';
 import {createHash,randomUUID} from 'node:crypto';
 import {chmodSync} from 'node:fs';
-import {GatewayError,fail,identifier,stable,validateSurface,decisionResult,surfaceSchema} from './visual-contract.mjs';
+import {GatewayError,fail,identifier,stable,decisionResult} from './visual-contract.mjs';
 
 /** Single-process gateway. Authentication is mandatory and injected, never inferred from a client owner field. */
 export function createGateway({provider,authenticate,databasePath,model,verificationMode="unverified"}){
@@ -51,13 +52,13 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     if(calls.length>1||calls.some(a=>a.name!=='euphoria_render_surface'))fail(502,'Unsupported pending tool');
     if(calls.length){
       const call=calls[0];identifier(call.turn_id);identifier(call.call_id);
-      validateSurface(call.arguments);
+      const normalized=normalizeRenderInput(call.arguments);
       const fingerprint=stable(call.arguments);
       if(row.call_id===call.call_id&&row.turn_id===call.turn_id){
         if(row.call_payload!==fingerprint)fail(502,'Provider mutated a published call');
       }else{
         // Provider controls call IDs; the gateway owns surface identity and revision.
-        const surface={...call.arguments,surfaceID:row.surface_id,revision:row.revision+1};
+        const surface={...normalized,surfaceID:row.surface_id,revision:row.revision+1};
         db.prepare('UPDATE sessions SET surface=?,revision=?,turn_id=?,call_id=?,call_payload=? WHERE id=?')
           .run(JSON.stringify(surface),surface.revision,call.turn_id,call.call_id,fingerprint,id);
       }
@@ -87,8 +88,8 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     let session;
     try{
       session=await provider.createSession({model,input:input.message,
-        instructions:'Use euphoria_render_surface to present native gallery results, isolated htmlArtifact content, or one askChoice/askForm/askApproval decision. Use schemaVersion2 for gallery/htmlArtifact nodes. Do not invent a question when showing a result; display-only surfaces receive a native display receipt. Generated HTML has no external network, file, form submission, media permission or native tool authority. Follow its native JSON schema. Supply a temporary surfaceID and revision 0; the gateway assigns authoritative identity and revisions. After the human answers, continue the task and use a fresh tool call for another decision. Do not execute external effects or claim an approval executed anything.',
-        tools:[{type:'function',name:'euphoria_render_surface',description:'Present a native choice, form or approval and wait for the human response.',parameters:surfaceSchema}]},submissionKey);
+        instructions:'Use euphoria_render_surface to present native gallery results, isolated htmlArtifact content, or one askChoice/askForm/askApproval decision. Use schemaVersion2 for gallery/htmlArtifact nodes. Do not invent a question when showing a result; display-only surfaces receive a native display receipt. Generated HTML has no external network, file, form submission, media permission or native tool authority. Follow its native JSON schema. Alternatively submit {a2ui:[...]} with v0.9 createSurface/updateComponents/updateDataModel messages using the basic catalog. Supported source shape only: Card root, Column, one Text heading,1-8 TextFields bound to distinct flat string paths, one Button with Text label and event action. No other components, functions or attributes. A source form returns a userAction event with current bound context. Supply a temporary surfaceID and revision 0; the gateway assigns authoritative identity and revisions. After the human answers, continue the task and use a fresh tool call for another decision. Do not execute external effects or claim an approval executed anything.',
+        tools:[{type:'function',name:'euphoria_render_surface',description:'Present a native choice, form or approval and wait for the human response.',parameters:renderInputSchema}]},submissionKey);
       identifier(session.id);
       db.exec('BEGIN IMMEDIATE');
       try{
@@ -112,6 +113,8 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     if(!row.active)fail(409,'Decision is no longer active');
     if(db.prepare('SELECT count(*) AS n FROM actions WHERE session_id=?').get(row.id).n>=500)fail(429,'Session action limit reached');
     const output=decisionResult(JSON.parse(row.surface),action);
+    // Assigned once before journalling/sending. Repeated action IDs return the existing receipt, never a new event.
+    if(output.userAction)output.userAction.timestamp=new Date().toISOString();
     if(db.prepare('SELECT 1 FROM actions WHERE session_id=? AND call_id=?').get(row.id,row.call_id))fail(409,'Decision already submitted');
     db.prepare('INSERT INTO actions VALUES(?,?,?,?,?,?)').run(row.id,action.id,payload,'submitting',action.nodeID,row.call_id);
     try{

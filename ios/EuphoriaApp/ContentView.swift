@@ -13,7 +13,8 @@ struct ContentView: View {
                 #if DEBUG
                 Section("Visual contract proof") {
                     NavigationLink("Open gateway session") { GatewaySessionView() }
-                    NavigationLink("Open gallery and artifact fixtures") { VisualFixtureView(gallery: true) }
+                    NavigationLink("Open A2UI source form fixture") { VisualFixtureView(kind: .a2uiForm) }
+                    NavigationLink("Open gallery and artifact fixtures") { VisualFixtureView(kind: .gallery) }
                     NavigationLink("Open source-derived UI fixtures") {
                         VisualFixtureView()
                     }

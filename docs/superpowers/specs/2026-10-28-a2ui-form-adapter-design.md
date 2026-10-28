@@ -1,0 +1,11 @@
+# Source A2UI form adapter
+
+The user authorized continuing phase one and delegated implementation choices. OpenDuet `app/tests/a2ui.test.tsx` is the first conformance target: v0.9 createSurface/updateComponents/updateDataModel, Card → Column → heading/fields/button, edit Paris to Kyoto, emit confirm_trip with current destination. Pinned renderer1.77.0 uses web_core0.10.4 and an18-component basic catalog.
+
+Approaches: a full native A2UI tree/interpreter would expand scope before proving action semantics; rendering the whole catalog in WebKit violates the native-shell/standard-control choice. Our implementation choice is a strict server-side adapter for this concrete form shape into the existing askForm node. No second native renderer/store. Unsupported layouts/functions/attributes fail explicitly; do not flatten unknown layouts and call it parity.
+
+Adapter accepts one source surface, flat string model bindings, one heading,1–8 TextFields (shortText/longText) and one Button with an event action. All components must be reachable exactly once in the recognized tree. Context may reference those field paths or include scalar literals. Distinct fields may not alias a path in this first subset. Unknown/dynamic layout, expression functions, validation rules, secret/numeric inputs, nested models and unbound context paths remain unsupported.
+
+Canonical native fields gain initialValue; askForm gains an optional source event descriptor and submitLabel. Source form edits retain whitespace and empty strings; ordinary forms keep current validation. The gateway resolves event context from validated submitted values and returns {userAction:{name,surfaceId,sourceComponentId,context}}. Exact gateway revision/call/turn/idempotency and existing intent journal still apply. Source IDs identify source content, never gateway ownership.
+
+Tests: source fixture compile, defaults/edit/empty/whitespace/reopen/pending lock, source event exact shape, duplicate/stale action, invalid/unknown component/attribute/path/catalog/version and no provider effect on invalid input. Native Debug/Release and existing suites must stay green. This is partial A2UI form conformance, not full catalog, streaming or real-provider parity.

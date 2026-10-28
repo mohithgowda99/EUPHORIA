@@ -30,6 +30,7 @@
         000000000000000000000077 /* VisualGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000067 /* VisualGalleryView.swift */; };
         000000000000000000000078 /* GeneratedArtifactView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000068 /* GeneratedArtifactView.swift */; };
         000000000000000000000090 /* gallery-v2.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000080; };
+        000000000000000000000091 /* a2ui-trip-native.json in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000081; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -68,6 +69,7 @@
         000000000000000000000067 /* VisualGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VisualGalleryView.swift"; sourceTree = "<group>"; };
         000000000000000000000068 /* GeneratedArtifactView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GeneratedArtifactView.swift"; sourceTree = "<group>"; };
         000000000000000000000080 /* gallery-v2.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/Fixtures/gallery-v2.json"; sourceTree = "<group>"; };
+        000000000000000000000081 /* a2ui-trip-native.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/Fixtures/a2ui-trip-native.json"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,6 +108,7 @@
                 000000000000000000000067 /* VisualGalleryView.swift */,
                 000000000000000000000068 /* GeneratedArtifactView.swift */,
                 000000000000000000000080 /* gallery-v2.json */,
+                000000000000000000000081 /* a2ui-trip-native.json */,
                 000000000000000000000028 /* VisualSnapshot.swift */,
             );
             path = EuphoriaApp;
@@ -189,7 +192,7 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-        00000000000000000000000A /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000090 /* gallery-v2.json in Resources */); runOnlyForDeploymentPostprocessing = 0; };
+        00000000000000000000000A /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000090 /* gallery-v2.json in Resources */,000000000000000000000091 /* a2ui-trip-native.json in Resources */); runOnlyForDeploymentPostprocessing = 0; };
         00000000000000000000000D /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 

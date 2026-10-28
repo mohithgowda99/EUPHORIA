@@ -86,4 +86,25 @@ final class VisualPersistenceTests: XCTestCase {
         XCTAssertNil(try repository.load(scope: "account-b", sessionID: "sess_test"))
     }
 
+    func testSourceFormDraftAndActionRetainBindingsAcrossDiskReopen() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("source-form.store")
+        var state = VisualState(surface: try SourceFixtures.a2uiFormSurface())
+        XCTAssertEqual(try state.proposedFormValues(nodeID: "form"), ["field_0": .text("Paris")])
+        try state.apply(VisualAction(id: "edit", surfaceID: state.surface.surfaceID, expectedRevision: 0, nodeID: "form", kind: .setField, values: ["field_0": .text("Kyoto")]))
+        try autoreleasepool {
+            let container = try ModelContainer(for: VisualSnapshot.self, configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+            try VisualSnapshotRepository(context: ModelContext(container)).save(state)
+        }
+        let reopened = try ModelContainer(for: VisualSnapshot.self, configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+        var recovered = try XCTUnwrap(VisualSnapshotRepository(context: ModelContext(reopened)).load(surfaceID: state.surface.surfaceID))
+        let values = try recovered.proposedFormValues(nodeID: "form")
+        XCTAssertEqual(values, ["field_0": .text("Kyoto")])
+        XCTAssertEqual(recovered.surface.nodes.first?.formEvent?.contextFields["destination"], "field_0")
+        try recovered.apply(VisualAction(id: "confirm", surfaceID: state.surface.surfaceID, expectedRevision: 0, nodeID: "form", kind: .submitForm, values: values))
+        XCTAssertEqual(recovered.pending.first?.values, values)
+    }
+
 }

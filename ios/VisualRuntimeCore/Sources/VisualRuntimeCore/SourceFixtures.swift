@@ -3,13 +3,15 @@ import Foundation
 /// Transcribed from actual OpenDuet component previews, not synthetic agent output.
 /// See: components/gallery/decisions.tsx, form.tsx and cards.tsx; page-view.tsx.
 public enum SourceFixtures {
-    public static func gallerySurface() throws -> VisualSurface {
+    public static func a2uiFormSurface() throws -> VisualSurface { try bundledSurface("a2ui-trip-native") }
+    public static func gallerySurface() throws -> VisualSurface { try bundledSurface("gallery-v2") }
+    private static func bundledSurface(_ name: String) throws -> VisualSurface {
         #if SWIFT_PACKAGE
         let bundle = Bundle.module
         #else
         let bundle = Bundle.main
         #endif
-        guard let url = bundle.url(forResource: "gallery-v2", withExtension: "json") else { throw VisualContractError.invalidSurface }
+        guard let url = bundle.url(forResource: name, withExtension: "json") else { throw VisualContractError.invalidSurface }
         let surface = try JSONDecoder().decode(VisualSurface.self, from: Data(contentsOf: url))
         try surface.validate()
         return surface

@@ -1,0 +1,78 @@
+{
+  "a2ui": [
+    {
+      "version": "v0.9",
+      "createSurface": {
+        "surfaceId": "trip",
+        "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"
+      }
+    },
+    {
+      "version": "v0.9",
+      "updateComponents": {
+        "surfaceId": "trip",
+        "components": [
+          {
+            "id": "root",
+            "component": "Card",
+            "child": "fields"
+          },
+          {
+            "id": "fields",
+            "component": "Column",
+            "children": [
+              "title",
+              "destination",
+              "confirm"
+            ]
+          },
+          {
+            "id": "title",
+            "component": "Text",
+            "text": "Trip preferences",
+            "variant": "h3"
+          },
+          {
+            "id": "destination",
+            "component": "TextField",
+            "label": "Destination",
+            "value": {
+              "path": "/destination"
+            }
+          },
+          {
+            "id": "confirm",
+            "component": "Button",
+            "variant": "primary",
+            "child": "confirm-label",
+            "action": {
+              "event": {
+                "name": "confirm_trip",
+                "context": {
+                  "destination": {
+                    "path": "/destination"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "confirm-label",
+            "component": "Text",
+            "text": "Confirm"
+          }
+        ]
+      }
+    },
+    {
+      "version": "v0.9",
+      "updateDataModel": {
+        "surfaceId": "trip",
+        "path": "/",
+        "value": {
+          "destination": "Paris"
+        }
+      }
+    }
+  ]
+}

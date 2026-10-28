@@ -3,7 +3,8 @@ import SwiftData
 
 /// Native-only source fixture viewer. No simulated model, server, or approval execution.
 struct VisualFixtureView: View {
-    var gallery = false
+    enum Kind { case interactions, gallery, a2uiForm }
+    var kind: Kind = .interactions
     @Environment(\.modelContext) private var modelContext
     @State private var state: VisualState?
     @State private var errorMessage: String?
@@ -48,7 +49,12 @@ struct VisualFixtureView: View {
 
     private func loadSnapshot() {
         do {
-            let fixture = try gallery ? SourceFixtures.gallerySurface() : SourceFixtures.surface()
+            let fixture: VisualSurface
+            switch kind {
+            case .interactions: fixture = try SourceFixtures.surface()
+            case .gallery: fixture = try SourceFixtures.gallerySurface()
+            case .a2uiForm: fixture = try SourceFixtures.a2uiFormSurface()
+            }
             let repo = VisualSnapshotRepository(context: modelContext)
             let restored = try repo.load(surfaceID: fixture.surfaceID)
             let loaded = restored ?? VisualState(surface: fixture)

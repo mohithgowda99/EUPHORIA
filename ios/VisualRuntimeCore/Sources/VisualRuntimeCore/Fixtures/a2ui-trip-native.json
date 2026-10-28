@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "surfaceID": "trip",
+  "revision": 0,
+  "nodes": [
+    {
+      "id": "form",
+      "kind": "askForm",
+      "title": "Trip preferences",
+      "fields": [
+        {
+          "id": "field_0",
+          "label": "Destination",
+          "type": "text",
+          "required": false,
+          "initialValue": "Paris"
+        }
+      ],
+      "submitLabel": "Confirm",
+      "formEvent": {
+        "name": "confirm_trip",
+        "surfaceID": "trip",
+        "sourceComponentID": "confirm",
+        "contextFields": {
+          "destination": "field_0"
+        },
+        "literalContext": {}
+      }
+    }
+  ]
+}

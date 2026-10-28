@@ -1,9 +1,10 @@
 import SwiftUI
 import SwiftData
 
-/// Internal source-service acceptance surface, not a substitute for
-/// OpenDuet's full TasksScreen. Reads the real, authenticated /v1/tasks API.
-/// The existing gateway remains owner, provider and action authority.
+/// Real owner-scoped task records, distinct from provider session history.
+/// This is a transitional native Tasks view, pending the original OpenDuet
+/// TaskStore, Bot identity, Up Next, retry, and source navigation migration.
+/// All actions remain server-authorized and journaled; no fake task state.
 @MainActor
 struct NativeTaskAcceptanceView: View {
     @Environment(\.modelContext) private var context
@@ -17,7 +18,7 @@ struct NativeTaskAcceptanceView: View {
     var body: some View {
         List {
             Section {
-                Text("Source Tasks integration check. Real gateway Task IDs and statuses, not conversation session records. This is not the complete OpenDuet Tasks screen.")
+                Text("Real task records and reports. Up Next, Bot assignments and source TaskStore migration are not yet available on this connection.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if let error {
@@ -112,16 +113,22 @@ struct NativeTaskAcceptanceView: View {
     }
 }
 
-/// Read-only source Task detail/report. Deliberately offers no write controls
-/// until a stable task action journal and task conversation UI are accepted.
+/// Task detail and existing durable conversation route. Reply and cancel are
+/// performed by GatewaySessionModel's existing persisted input journal; we do
+/// not add a second task mutation path for those external operations.
 @MainActor
 private struct NativeTaskEvidenceView: View {
+    @Environment(\.modelContext) private var context
     let client: GatewayClient
     let taskID: String
     @State private var task: GatewayTask?
     @State private var report: GatewayTaskReport?
     @State private var error: String?
     @State private var loading = false
+    @State private var actionInFlight = false
+    @State private var conversationInFlight = false
+    @State private var showsConversation = false
+    @State private var conversationModel: GatewaySessionModel?
 
     var body: some View {
         List {
@@ -135,6 +142,21 @@ private struct NativeTaskEvidenceView: View {
                         Text("Delivery is uncertain; this view never resends actions.")
                             .foregroundStyle(.orange)
                     }
+                }
+                Section("Actions") {
+                    if task.sessionID != nil {
+                        Button("Open task conversation") { Task { await openTaskConversation() } }
+                            .disabled(conversationInFlight || actionInFlight)
+                        if conversationInFlight { ProgressView("Opening saved conversation…") }
+                        Text("Reply, stop, review generated UI and respond to the agent through the existing durable conversation journal.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Button(task.status == "resolved" ? "Reopen task" : "Mark as done") {
+                        Task { await setResolved(task.status != "resolved") }
+                    }
+                    .disabled(actionInFlight || task.deliveryPhase == "uncertain")
+                    Text("Marking done is your review decision; it does not execute or certify an external action.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
             if let report {
@@ -163,8 +185,50 @@ private struct NativeTaskEvidenceView: View {
             if loading { ProgressView("Reading task evidence…") }
         }
         .navigationTitle("Task detail")
+        .navigationDestination(isPresented: $showsConversation) {
+            if let conversationModel { GatewaySessionView(model: conversationModel) }
+        }
+        .onChange(of: showsConversation) { _, isOpen in
+            if !isOpen { Task { await refresh() } }
+        }
         .refreshable { await refresh() }
         .task(id: taskID) { await refresh() }
+    }
+
+    private func openTaskConversation() async {
+        guard !conversationInFlight, let sessionID = task?.sessionID else { return }
+        conversationInFlight = true
+        defer { conversationInFlight = false }
+        do {
+            // Recover the exact task-owned session. A new session must never
+            // be silently created when an older task conversation is opened.
+            let envelope = try await client.refresh(sessionID: sessionID)
+            guard envelope.sessionID == sessionID else { throw GatewayClientError.invalidResponse }
+            let model = try GatewaySessionModel.configured(context: context)
+            await model.selectSession(envelope)
+            guard model.liveSessionID == sessionID else { throw GatewayClientError.invalidResponse }
+            conversationModel = model
+            error = nil
+            showsConversation = true
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func setResolved(_ resolved: Bool) async {
+        guard !actionInFlight, task != nil else { return }
+        actionInFlight = true
+        defer { actionInFlight = false }
+        do {
+            let result = try await client.setTaskResolved(id: taskID, resolved: resolved)
+            guard result.task.id == taskID else { throw GatewayClientError.invalidResponse }
+            task = result.task
+            error = nil
+        } catch {
+            // An unknown reply is not success. Refresh reads the authoritative
+            // row, and the button never blindly retransmits this write.
+            self.error = "Could not confirm the review change. Refresh the task before taking another action."
+        }
     }
 
     private func refresh() async {

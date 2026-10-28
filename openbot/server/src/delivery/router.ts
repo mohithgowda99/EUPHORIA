@@ -37,6 +37,15 @@ export type ConverseResult =
     };
 /** Twilio error 21610: the recipient has opted out, so Twilio refuses the send. */
 const TWILIO_UNSUBSCRIBED = "21610";
+
+/** A provider write may already have run even if the HTTP response vanished.
+ * Keep the ORIGINAL Inbox accepted for reconciliation; neither replay nor
+ * fabricate a final reply or a failure notification.
+ */
+function managedOutcomeUnknown(error: unknown): boolean {
+  return typeof error === "object" && error !== null &&
+    "outcomeUnknown" in error && error.outcomeUnknown === true;
+}
 export type DeliveryWorkKind =
   | "delivery.inbound"
   | "delivery.outbound"
@@ -281,6 +290,11 @@ export function createDeliveryRouter(deps: {
         extras,
       };
     } catch (error) {
+      if (managedOutcomeUnknown(error)) {
+        await deps.store.setInbox(row.id, "accepted",
+          "Managed agent submission outcome is uncertain; awaiting reconciliation.");
+        return { kind: "waiting", binding, inboxId: row.id, replyText: "", extras };
+      }
       // The governed turn stopped for a person: a durable approval or hand-off is now pending.
       if (
         error instanceof Error &&
@@ -414,6 +428,11 @@ export function createDeliveryRouter(deps: {
         });
       } catch (error) {
         if (!(await owns())) return;
+        if (managedOutcomeUnknown(error)) {
+          await deps.store.setInbox(row.id, "accepted",
+            "Managed agent submission outcome is uncertain; awaiting reconciliation.");
+          return;
+        }
         await deps.store.setInbox(
           row.id,
           "failed",

@@ -39,6 +39,18 @@ struct SourceUser: Decodable, Sendable {
     let email: String
     let name: String?
 }
+struct SourceConnectedApp: Decodable, Sendable {
+    let serverId: String
+    let holder: String?
+    let scope: String?
+    let verified: Bool?
+    let connectedAt: String?
+    let checkable: Bool?
+}
+struct SourceConnectionsResponse: Decodable, Sendable {
+    let connections: [SourceConnectedApp]
+    let redirectUri: String?
+}
 struct SourceSkill: Decodable, Identifiable, Sendable {
     let slug: String
     let title: String
@@ -576,6 +588,14 @@ struct OpenDuetSourceAPI: Sendable {
         let response: SourceBotResponse = try await request(
             "api/agents/" + checkedID(id) + "/duplicate", method: "POST")
         return response.agent
+    }
+
+    /// A connection is real only when the ORIGINAL plugin broker/vault reports
+    /// it. We do not infer connection success from an OAuth web-page redirect.
+    func sourceConnections() async throws -> SourceConnectionsResponse {
+        let response: SourceConnectionsResponse = try await get("api/plugins/connections")
+        guard response.connections.count <= 2000 else { throw SourceAPIError.invalidResponse }
+        return response
     }
 
     /// Skills and tool permissions are owned by original PluginStore.

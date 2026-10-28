@@ -65,6 +65,46 @@ final class GatewaySessionTests: XCTestCase {
         XCTAssertNil(model.conversation)
         XCTAssertFalse(model.hasSession)
     }
+    func testLivePublicationsCannotRegressOrCrossConversations() async throws {
+        let (model, preferences, key, container) = try makeModel()
+        _ = container
+        defer { preferences.removePersistentDomain(forName: key) }
+        SessionTestProtocol.responses.set([("/v1/sessions/sess_old", try reply(session: "sess_old", phase: "waiting"))])
+        await model.restore()
+        func update(_ publication: Int, _ phase: String) throws -> GatewayLiveUpdate {
+            try JSONDecoder().decode(GatewayLiveUpdate.self, from: JSONSerialization.data(withJSONObject: [
+                "snapshot": ["sessionID":"sess_old", "phase":phase, "publication":publication, "surface":NSNull(), "acknowledgedActionIDs":[], "resolvedNodeIDs":[]],
+                "history":["sessionID":"sess_old", "entries":[], "hasMore":false], "inputs":["operations":[]]
+            ]))
+        }
+        try model.receiveLiveUpdate(update(3, "idle"), sessionID: "sess_old")
+        try model.receiveLiveUpdate(update(2, "waiting"), sessionID: "sess_old")
+        XCTAssertEqual(model.phase, "idle")
+        model.newConversation()
+        try model.receiveLiveUpdate(update(4, "waiting"), sessionID: "sess_old")
+        XCTAssertEqual(model.phase, "ready")
+        XCTAssertFalse(model.hasSession)
+        XCTAssertEqual(SessionTestProtocol.responses.paths.count, 1, "Notifications never replay a write")
+    }
+    func testLiveRefreshPreservesSavedLocalDraft() async throws {
+        let (model, preferences, key, container) = try makeModel()
+        _ = container
+        defer { preferences.removePersistentDomain(forName: key) }
+        let surface = try SourceFixtures.surface()
+        SessionTestProtocol.responses.set([("/v1/sessions/sess_old", try reply(session: "sess_old", phase: "waiting", surface: surface))])
+        await model.restore()
+        let node = try XCTUnwrap(model.state?.surface.nodes.first(where: { $0.id == "brief" }))
+        model.enact(node, kind: .setField, values: ["team": .text("Live QA plan")])
+        XCTAssertEqual(model.state?.formFieldValue(nodeID: "brief", fieldID: "team"), "Live QA plan")
+        var snapshot = try JSONSerialization.jsonObject(with: reply(session: "sess_old", phase: "waiting", surface: surface)) as! [String: Any]
+        snapshot["publication"] = 10
+        let update = try JSONDecoder().decode(GatewayLiveUpdate.self, from: JSONSerialization.data(withJSONObject: [
+            "snapshot":snapshot, "history":["sessionID":"sess_old", "entries":[], "hasMore":false], "inputs":["operations":[]]
+        ]))
+        try model.receiveLiveUpdate(update, sessionID: "sess_old")
+        XCTAssertEqual(model.state?.formFieldValue(nodeID: "brief", fieldID: "team"), "Live QA plan")
+        XCTAssertEqual(SessionTestProtocol.responses.paths.count, 1)
+    }
     private func makeModel() throws -> (GatewaySessionModel, UserDefaults, String, ModelContainer) {
         let suite = "euphoria.tests." + UUID().uuidString
         let prefs = try XCTUnwrap(UserDefaults(suiteName: suite))

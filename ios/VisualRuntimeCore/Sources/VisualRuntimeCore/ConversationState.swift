@@ -59,18 +59,28 @@ public struct ConversationArchive: Codable, Sendable {
             if let index = operations.firstIndex(where: { $0.id == receipt.id }) { operations[index].phase = receipt.phase }
         }
     }
+    /// Newest-page live refresh must not rewind the user's older-page frontier.
+    public mutating func mergeLatest(_ page: GatewayHistoryPage) throws {
+        let loaded = historyLoaded, cursor = nextCursor, more = hasMore, anchor = olderInsertionID
+        try apply(page, reset: true)
+        if loaded { nextCursor = cursor; hasMore = more; olderInsertionID = anchor }
+    }
     public mutating func apply(_ page: GatewayHistoryPage, reset: Bool) throws {
         guard page.sessionID == sessionID, page.entries.count <= 10, !page.hasMore || page.nextCursor != nil,
               page.entries.allSatisfy({ !$0.id.isEmpty && $0.text.count <= 8000 }) else { throw GatewayClientError.invalidResponse }
+        let incoming = page.entries.map { entry in
+            if let completed = entries.first(where: { $0.id == entry.id && $0.status == "completed" }), entry.status != "completed" { return completed }
+            return entry
+        }
         if page.order == "desc" {
-            let incomingIDs = Set(page.entries.map(\.id))
+            let incomingIDs = Set(incoming.map(\.id))
             var cached = entries.filter { !incomingIDs.contains($0.id) }
             let insertion = reset ? cached.count : cached.firstIndex { $0.id == olderInsertionID } ?? 0
-            cached.insert(contentsOf: page.entries, at: insertion)
+            cached.insert(contentsOf: incoming, at: insertion)
             entries = cached
-            if let first = page.entries.first { olderInsertionID = first.id }
+            if let first = incoming.first { olderInsertionID = first.id }
         } else {
-            for entry in page.entries {
+            for entry in incoming {
                 if let index = entries.firstIndex(where: { $0.id == entry.id }) { entries[index] = entry }
                 else { entries.append(entry) }
             }

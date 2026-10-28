@@ -1,3 +1,4 @@
+import {liveSnapshots} from './live-snapshots.mjs';
 import {normalizeRenderInput,renderInputSchema} from './a2ui-form.mjs';
 import {conversations} from './conversations.mjs';
 import {createServer} from 'node:http';
@@ -21,6 +22,7 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     UPDATE actions SET phase='uncertain' WHERE phase='submitting';`);
   if(!db.prepare('PRAGMA table_info(sessions)').all().some(c=>c.name==='active')) db.exec('ALTER TABLE sessions ADD COLUMN active INTEGER NOT NULL DEFAULT 0');
   if(!db.prepare('PRAGMA table_info(sessions)').all().some(c=>c.name==='title'))db.exec('ALTER TABLE sessions ADD COLUMN title TEXT');
+  if(!db.prepare('PRAGMA table_info(sessions)').all().some(c=>c.name==='publication'))db.exec('ALTER TABLE sessions ADD COLUMN publication INTEGER NOT NULL DEFAULT 0');
   const locks=new Map();
   async function locked(id,fn){
     const prior=locks.get(id)||Promise.resolve();let release;
@@ -33,20 +35,23 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
   };
   const conversation=conversations({db,provider,owned});
   function snapshot(row){
+    const publication=db.prepare('UPDATE sessions SET publication=publication+1 WHERE id=? RETURNING publication').get(row.id).publication;
     const actions=db.prepare('SELECT * FROM actions WHERE session_id=? ORDER BY rowid').all(row.id);
     let phase=row.active?'waiting':row.provider_phase||'unknown';
     if(row.active&&actions.some(a=>a.call_id===row.call_id&&a.phase==='accepted'))phase='accepted';
     if(actions.some(a=>['uncertain','submitting'].includes(a.phase)))phase='uncertain';
-    return {sessionID:row.id,title:row.title,phase,verificationMode,surface:row.surface?JSON.parse(row.surface):null,
+    return {sessionID:row.id,title:row.title,phase,verificationMode,publication,surface:row.surface?JSON.parse(row.surface):null,
       acknowledgedActionIDs:actions.filter(a=>a.phase==='accepted').map(a=>a.action_id),
       rejectedActionIDs:actions.filter(a=>a.phase==='cancelled').map(a=>a.action_id),
       displayAcknowledged:!row.active||actions.some(a=>a.call_id===row.call_id&&a.phase==='accepted'),
       resolvedNodeIDs:row.active?actions.filter(a=>a.call_id===row.call_id&&a.phase==='accepted'&&JSON.parse(row.surface).nodes.some(n=>n.id===a.node_id&&['askChoice','askForm','askApproval'].includes(n.kind))).map(a=>a.node_id):
         (row.surface?JSON.parse(row.surface).nodes.filter(n=>['askChoice','askForm','askApproval'].includes(n.kind)).map(n=>n.id):[])};
   }
-  async function refresh(id,owner){
+  async function refresh(id,owner,{signal}={}){
+    signal?.throwIfAborted();
     let row=owned(id,owner);
-    const current=await provider.retrieveSession(id);
+    const current=await provider.retrieveSession(id,{signal});
+    signal?.throwIfAborted();
     if(current.id!==id)fail(502,'Provider session mismatch');
     const calls=(current.required_actions||[]).filter(a=>a.type==='function_call');
     if(calls.length>1||calls.some(a=>a.name!=='euphoria_render_surface'))fail(502,'Unsupported pending tool');
@@ -127,6 +132,12 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     }
     return snapshot(owned(row.id,owner));
   }
+  const live=liveSnapshots({provider,owned,authenticate,
+    readProjection:(id,owner,signal)=>locked(id,async()=>{
+      const snapshot=await refresh(id,owner,{signal});
+      const history=await conversation.history(id,owner,{signal});
+      signal.throwIfAborted();return {snapshot,history,inputs:conversation.receipts(id,owner)};
+    })});
   const server=createServer(async(req,res)=>{
     try{
       let owner;try{owner=await authenticate(req);}catch{fail(401,'Authentication required');}
@@ -138,6 +149,8 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
         [status,result]=await locked('create:'+owner,()=>create(owner,input));
       }else if(path==='/v1/sessions'&&req.method==='GET'){
         result={sessions:db.prepare('SELECT * FROM sessions WHERE owner=? ORDER BY rowid DESC LIMIT 50').all(owner).map(snapshot)};
+      }else if(/^\/v1\/sessions\/[A-Za-z0-9_-]+\/events$/.test(path)&&req.method==='GET'){
+        await live.serve(path.split('/')[3],owner,req,res);return;
       }else if(/^\/v1\/sessions\/[A-Za-z0-9_-]+$/.test(path)&&req.method==='GET'){
         const id=path.split('/')[3];result=await locked(id,()=>refresh(id,owner));
       }else if(/^\/v1\/sessions\/[A-Za-z0-9_-]+\/(messages|cancel)$/.test(path)&&req.method==='POST'){
@@ -190,6 +203,7 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
     }
   });
   server.requestTimeout=35_000;server.headersTimeout=10_000;
+  const close=server.close.bind(server);server.close=(...args)=>{live.closeAll();return close(...args);};
   server.on('close',()=>db.close());
   return server;
 }

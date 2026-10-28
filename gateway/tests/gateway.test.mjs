@@ -16,15 +16,15 @@ function sourceProvider(surface=choice()) {
     async submitToolResult(id,result,key){this.results.push({id,result,key});},
   };return p;
 }
-async function setup(t,provider=sourceProvider()) {
+async function setup(t,provider=sourceProvider(),authOverride) {
   const directory=await mkdtemp(join(tmpdir(),'euphoria-gateway-'));
   t.after(()=>rm(directory,{recursive:true,force:true}));
   const databasePath=join(directory,'gateway.sqlite');
   let server;
   async function reopen(){
     if(server) await new Promise(resolve=>server.close(resolve));
-    server=createGateway({provider,databasePath,model:'test-model',authenticate:async req=>
-      ({'Bearer alice':'alice','Bearer bob':'bob'})[req.headers.authorization] ?? null});
+    server=createGateway({provider,databasePath,model:'test-model',authenticate:authOverride??(async req=>
+      ({'Bearer alice':'alice','Bearer bob':'bob'})[req.headers.authorization] ?? null)});
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
     return `http://127.0.0.1:${server.address().port}`;
   }
@@ -39,7 +39,7 @@ async function setup(t,provider=sourceProvider()) {
     assert.equal((await request('/v1/sessions',{method:'POST',body:{id:'create-1',message:'Help me deploy'}})).status,201);
     const response=await request('/v1/sessions/sess_test');assert.equal(response.status,200);return response.body;
   }
-  return {provider,request,start,reopen:async()=>{origin=await reopen();}};
+  return {provider,request,start,get origin(){return origin;},reopen:async()=>{origin=await reopen();}};
 }
 function answer(snapshot,id='answer-1'){return {id,surfaceID:snapshot.surface.surfaceID,
   expectedRevision:snapshot.surface.revision,nodeID:'deploy',kind:'choose',values:{choice:'staging',label:'Staging'}};}
@@ -275,4 +275,57 @@ test('mixed source controls reject forged types then submit real booleans and ar
   const {timestamp,...event}=provider.results[0].result.output.userAction;
   assert.ok(Number.isFinite(Date.parse(timestamp)));
   assert.deepEqual(event,{name:'confirm_trip',surfaceId:'trip-controls',sourceComponentId:'confirm',context:{destination:'Kyoto',notify:true,channel:['push'],activities:[]}});
+});
+
+async function liveProvider(t){
+  const {EventEmitter,on}=await import('node:events');const emitter=new EventEmitter();const p=sourceProvider();
+  p.openEventStream=async(id,{signal})=>({events:(async function*(){for await(const [event] of on(emitter,'update',{signal}))yield event;})(),close(){}});
+  p.listItems=async()=>({data:[],has_more:false,last_id:null});
+  p.notify=()=>emitter.emit('update',{type:'agent.session.requires_action',session_id:'sess_test',private:'do-not-forward'});
+  return p;
+}
+test('live stream is owner scoped and publishes authoritative state while actions remain available',async t=>{
+  const p=await liveProvider(t),{start,request}=await setup(t,p);const initial=await start();
+  // request helper buffers JSON; the SSE request uses the gateway URL exposed by a short-lived fetch wrapper below.
+  assert.ok(Number.isInteger(initial.publication),'Published snapshots need persistent monotonic ordering');
+  const result=await request('/v1/sessions/sess_test/events',{user:'bob'});assert.equal(result.status,404);
+});
+test('snapshot publications remain monotonic across HTTP operations and gateway reopen',async t=>{
+  const {start,request,reopen}=await setup(t);const first=await start();
+  const second=(await request('/v1/sessions/sess_test')).body;assert.ok(second.publication>first.publication);
+  await reopen();const third=(await request('/v1/sessions/sess_test')).body;assert.ok(third.publication>second.publication);
+});
+
+test('SSE delivers sanitized live projections without blocking action posts and closes on shutdown',async t=>{
+  const {parseSSE}=await import('../sse.mjs');const p=await liveProvider(t),api=await setup(t,p);await api.start();
+  const controller=new AbortController();t.after(()=>controller.abort());
+  const res=await fetch(api.origin+'/v1/sessions/sess_test/events',{headers:{authorization:'Bearer alice'},signal:AbortSignal.any([controller.signal,AbortSignal.timeout(5000)])});
+  assert.equal(res.status,200);const frames=parseSSE(res.body)[Symbol.asyncIterator]();
+  const first=JSON.parse((await frames.next()).value.data);assert.equal(first.snapshot.sessionID,'sess_test');
+  assert.equal((await api.request('/v1/surfaces/'+first.snapshot.surface.surfaceID+'/actions',{method:'POST',body:answer(first.snapshot)})).status,202);
+  p.notify();const second=JSON.parse((await frames.next()).value.data);
+  assert.ok(second.snapshot.publication>first.snapshot.publication);assert.equal(second.snapshot.phase,'accepted');
+  assert.equal(p.results.length,1);assert.ok(!JSON.stringify(second).includes('do-not-forward'));
+  await api.reopen(); // Must abort active subscriptions before closing SQLite.
+  controller.abort();await frames.return().catch(()=>{});
+});
+test('live projection rechecks identity and refuses new data after revocation',async t=>{
+  const {parseSSE}=await import('../sse.mjs');let allowed=true;const p=await liveProvider(t),api=await setup(t,p,async()=>allowed?'alice':null);await api.start();
+  const controller=new AbortController();t.after(()=>controller.abort());
+  const res=await fetch(api.origin+'/v1/sessions/sess_test/events',{headers:{authorization:'Bearer alice'},signal:AbortSignal.any([controller.signal,AbortSignal.timeout(5000)])});
+  const frames=parseSSE(res.body)[Symbol.asyncIterator]();assert.equal((await frames.next()).value.event,'update');
+  allowed=false;p.notify();assert.equal((await frames.next()).value.event,'reconnect');
+  assert.equal((await frames.next()).done,true);
+});
+
+test('live projection holds a coherent publication through deferred history read',async t=>{
+  const {parseSSE}=await import('../sse.mjs');const p=await liveProvider(t),api=await setup(t,p);await api.start();
+  let release,entered;const ready=new Promise(r=>entered=r);p.listItems=async()=>{entered();await new Promise(r=>release=r);return {data:[],has_more:false};};
+  const controller=new AbortController();t.after(()=>controller.abort());
+  const res=await fetch(api.origin+'/v1/sessions/sess_test/events',{headers:{authorization:'Bearer alice'},signal:AbortSignal.any([controller.signal,AbortSignal.timeout(5000)])});
+  await ready;let httpFinished=false;const http=api.request('/v1/sessions/sess_test').then(x=>{httpFinished=true;return x;});
+  await new Promise(r=>setTimeout(r,40));const finishedBeforeRelease=httpFinished;release();
+  assert.equal(finishedBeforeRelease,false);
+  const frames=parseSSE(res.body)[Symbol.asyncIterator]();const update=JSON.parse((await frames.next()).value.data);
+  assert.ok((await http).body.publication>update.snapshot.publication);controller.abort();await frames.return().catch(()=>{});
 });

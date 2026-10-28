@@ -129,3 +129,33 @@ test('saved items retain pagination and cancellation uses the documented event',
   assert.deepEqual(requests[1].body,{events:[{type:'agent.session.input.cancel'}]});
   assert.equal(requests[1].headers['idempotency-key'],'cancel-1');
 });
+
+test('event transport opens authenticated SSE before consuming and preserves session boundaries',async t=>{
+  const {client,requests}=await provider(t,(_,res)=>{
+    res.writeHead(200,{'content-type':'text/event-stream'});
+    res.end('data: '+JSON.stringify({type:'agent.session.idle',event_id:'e1',session_id:'sess_test'})+'\n\n');
+  });
+  const stream=await client.openEventStream('sess_test');const events=[];for await(const event of stream.events)events.push(event);
+  assert.equal(requests[0].path,'/v1/agents/sessions/sess_test/events?stream=true');
+  assert.equal(requests[0].headers.accept,'text/event-stream');assert.equal(requests[0].headers.authorization,'Bearer test-only-key');
+  assert.equal(events[0].type,'agent.session.idle');assert.equal(requests.length,1);
+});
+test('event transport rejects foreign events and never leaks provider errors',async t=>{
+  const {client}=await provider(t,(_,res)=>{res.writeHead(200,{'content-type':'text/event-stream'});res.end('data: {"type":"agent.session.idle","session_id":"sess_other","secret":"private"}\n\n');});
+  const stream=await client.openEventStream('sess_test');
+  await assert.rejects(async()=>{for await(const event of stream.events)void event;},e=>!e.message.includes('private')&&!e.message.includes('sess_other'));
+});
+
+test('event transport cancellation stops an active provider connection without replay',async t=>{
+  const {client,requests}=await provider(t,(_,res)=>{res.writeHead(200,{'content-type':'text/event-stream'});res.write(': connected\n\n');});
+  const controller=new AbortController();const stream=await client.openEventStream('sess_test',{signal:controller.signal});
+  const consumption=(async()=>{for await(const event of stream.events)void event;})();controller.abort();
+  await assert.rejects(consumption,/interrupted/);assert.equal(requests.length,1);
+});
+test('event transport refuses non-SSE responses and malformed payloads',async t=>{
+  const a=await provider(t,(_,res)=>json(res,{secret:'private'}));
+  await assert.rejects(a.client.openEventStream('sess_test'),/unavailable/);
+  const b=await provider(t,(_,res)=>{res.writeHead(200,{'content-type':'text/event-stream'});res.end('data: private-invalid-json\n\n');});
+  const stream=await b.client.openEventStream('sess_test');
+  await assert.rejects(async()=>{for await(const event of stream.events)void event;},/interrupted/);
+});

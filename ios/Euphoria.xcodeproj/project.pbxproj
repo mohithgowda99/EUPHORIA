@@ -7,6 +7,7 @@
     objects = {
 
 /* Begin PBXBuildFile section */
+        000000000000000000000093 = {isa = PBXBuildFile; fileRef = 000000000000000000000083; };
         000000000000000000000014 /* EuphoriaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000000E /* EuphoriaApp.swift */; };
         000000000000000000000015 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000000F /* ContentView.swift */; };
         000000000000000000000016 /* OpenBotEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000010 /* OpenBotEndpoint.swift */; };
@@ -45,6 +46,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+        000000000000000000000083 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/GatewayLiveUpdate.swift"; sourceTree = "<group>"; };
         00000000000000000000000E /* EuphoriaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EuphoriaApp.swift; sourceTree = "<group>"; };
         00000000000000000000000F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
         000000000000000000000010 /* OpenBotEndpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenBotEndpoint.swift; sourceTree = "<group>"; };
@@ -100,6 +102,7 @@
                 000000000000000000000026 /* SourceFixtures.swift */,
                 000000000000000000000027 /* VisualFixtureView.swift */,
                 000000000000000000000040 /* GatewayClient.swift */,
+                000000000000000000000083,
                 000000000000000000000041 /* VisualNodesView.swift */,
                 000000000000000000000042 /* GatewaySessionModel.swift */,
                 000000000000000000000043 /* GatewaySessionView.swift */,
@@ -212,6 +215,7 @@
                 000000000000000000000032 /* SourceFixtures.swift in Sources */,
                 000000000000000000000033 /* VisualFixtureView.swift in Sources */,
                 000000000000000000000050 /* GatewayClient.swift in Sources */,
+                000000000000000000000093,
                 000000000000000000000051 /* VisualNodesView.swift in Sources */,
                 000000000000000000000052 /* GatewaySessionModel.swift in Sources */,
                 000000000000000000000053 /* GatewaySessionView.swift in Sources */,

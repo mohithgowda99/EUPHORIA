@@ -15,6 +15,11 @@ final class GatewaySessionModel {
     var hasPending: Bool { pendingRequestID != nil || !(state?.pending.isEmpty ?? true) || !(conversation?.pendingOperations.isEmpty ?? true) }
     private(set) var errorMessage: String?
     private(set) var isBusy = false
+    private(set) var liveSessionID: String?
+    private(set) var liveStatus = "Not connected"
+    @ObservationIgnored private var publicationSession: String?
+    @ObservationIgnored private var publication = 0
+    @ObservationIgnored private var bufferedLiveUpdate: GatewayLiveUpdate?
     private let client: GatewayClient
     private let repository: VisualSnapshotRepository
     private let conversationRepository: ConversationSnapshotRepository
@@ -33,6 +38,7 @@ final class GatewaySessionModel {
         self.client = client; repository = VisualSnapshotRepository(context: context)
         conversationRepository = ConversationSnapshotRepository(context: context); scope = storageKey
         self.prefix = "euphoria.gateway." + storageKey; self.preferences = preferences
+        liveSessionID = preferences.string(forKey: prefix + ".session")
     }
     func restore() async {
         do {
@@ -44,7 +50,7 @@ final class GatewaySessionModel {
     func start(message: String) async {
         guard !isBusy, !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard pendingRequestID == nil else { errorMessage = "Refresh the pending request before starting another task."; return }
-        isBusy = true; defer { isBusy = false }
+        isBusy = true; defer { isBusy = false; drainLiveUpdate() }
         let id = UUID().uuidString
         // Persist the submission identity before HTTP. A lost response must never create another session automatically.
         pendingRequestID = id
@@ -61,7 +67,7 @@ final class GatewaySessionModel {
     }
     func refresh() async {
         guard !isBusy else { return }
-        isBusy = true; defer { isBusy = false }
+        isBusy = true; defer { isBusy = false; drainLiveUpdate() }
         do {
             if let requestID = pendingRequestID {
                 let response = try await client.recover(requestID: requestID)
@@ -83,7 +89,7 @@ final class GatewaySessionModel {
     /// Explicit resolution records cancellation at the gateway before unlocking an unsent intent.
     func resolvePending() async {
         guard !isBusy else { return }
-        isBusy = true; defer { isBusy = false }
+        isBusy = true; defer { isBusy = false; drainLiveUpdate() }
         do {
             if let id = pendingRequestID {
                 let response = try await client.cancelCreation(requestID: id)
@@ -110,7 +116,7 @@ final class GatewaySessionModel {
     }
     private func sendInput(_ kind: GatewayInputKind, message: String? = nil, sessionID: String) async {
         guard !isBusy else { return }
-        isBusy = true; defer { isBusy = false }
+        isBusy = true; defer { isBusy = false; drainLiveUpdate() }
         do {
             var archive = try conversation ?? conversationRepository.load(scope: scope, sessionID: sessionID) ?? ConversationArchive(sessionID: sessionID)
             guard !archive.pendingOperations.contains(where: { $0.kind == kind }) else {
@@ -127,7 +133,7 @@ final class GatewaySessionModel {
     }
     func loadHistory(more: Bool = false) async {
         guard !isBusy, let sessionID else { return }
-        isBusy = true; defer { isBusy = false }
+        isBusy = true; defer { isBusy = false; drainLiveUpdate() }
         do {
             var archive = try conversation ?? conversationRepository.load(scope: scope, sessionID: sessionID) ?? ConversationArchive(sessionID: sessionID)
             let page = try await client.history(sessionID: sessionID, after: more ? archive.nextCursor : nil)
@@ -141,7 +147,7 @@ final class GatewaySessionModel {
     }
     func selectSession(_ selected: GatewayEnvelope) async {
         guard !isBusy, let id = selected.sessionID, pendingRequestID == nil else { return }
-        sessionID = id; state = nil; conversation = nil
+        sessionID = id; liveSessionID = id; bufferedLiveUpdate = nil; state = nil; conversation = nil
         preferences.removeObject(forKey: prefix + ".surface")
         do { conversation = try conversationRepository.load(scope: scope, sessionID: id) }
         catch { historyError = "Could not read saved conversation." }
@@ -149,7 +155,7 @@ final class GatewaySessionModel {
     }
     func newConversation() {
         guard !isBusy, pendingRequestID == nil else { return }
-        sessionID = nil; state = nil; conversation = nil; phase = "ready"
+        sessionID = nil; liveSessionID = nil; bufferedLiveUpdate = nil; state = nil; conversation = nil; phase = "ready"
         errorMessage = nil; historyError = nil
         preferences.removeObject(forKey: prefix + ".surface")
     }
@@ -171,12 +177,59 @@ final class GatewaySessionModel {
         if kind == .setField { return }
         isBusy = true
         Task {
-            defer { isBusy = false }
+            defer { isBusy = false; drainLiveUpdate() }
             do { try accept(try await client.submit(action)); errorMessage = nil }
             catch { errorMessage = error.localizedDescription }
         }
     }
-    private func accept(_ response: GatewayEnvelope) throws {
+    /// A single latest projection waits behind an in-flight local operation. No intents are replayed.
+    func receiveLiveUpdate(_ update: GatewayLiveUpdate, sessionID sourceID: String) throws {
+        guard !Task.isCancelled, sessionID == sourceID, update.snapshot.sessionID == sourceID else { return }
+        if isBusy {
+            if (update.snapshot.publication ?? 0) > (bufferedLiveUpdate?.snapshot.publication ?? 0) { bufferedLiveUpdate = update }
+            return
+        }
+        var archive = try conversation ?? conversationRepository.load(scope: scope, sessionID: sourceID) ?? ConversationArchive(sessionID: sourceID)
+        try archive.mergeLatest(update.history)
+        try archive.reconcile(update.inputs.operations)
+        guard try accept(update.snapshot) else { return }
+        try saveConversation(archive)
+        historyError = nil
+    }
+    private func drainLiveUpdate() {
+        guard let update = bufferedLiveUpdate else { return }
+        bufferedLiveUpdate = nil
+        do { try receiveLiveUpdate(update, sessionID: update.snapshot.sessionID ?? "") }
+        catch { liveStatus = "Live update unavailable; refresh to recover" }
+    }
+    func followCurrentSession() async {
+        guard let id = liveSessionID else { return }
+        var delay: UInt64 = 1
+        while !Task.isCancelled, sessionID == id, phase != "failed" {
+            liveStatus = delay == 1 ? "Connecting live updates…" : "Reconnecting live updates…"
+            do {
+                try await client.watch(sessionID: id) { [weak self] update in
+                    try await self?.receiveLiveUpdate(update, sessionID: id)
+                    await self?.markLive(id)
+                }
+            } catch {
+                guard !Task.isCancelled, sessionID == id else { return }
+                if case GatewayClientError.httpStatus(let code) = error, [401,403,404,503].contains(code) {
+                    liveStatus = "Live updates unavailable; refresh manually"; return
+                }
+                liveStatus = "Reconnecting live updates…"
+            }
+            guard phase != "failed" else { break }
+            do { try await Task.sleep(nanoseconds: delay * 1_000_000_000) } catch { return }
+            delay = min(delay * 2, 15)
+        }
+    }
+    private func markLive(_ id: String) {
+        if !Task.isCancelled, sessionID == id { liveStatus = "Live updates connected" }
+    }
+    @discardableResult
+    private func accept(_ response: GatewayEnvelope) throws -> Bool {
+        if let number = response.publication, response.sessionID == publicationSession, number <= publication { return false }
         if let id = response.sessionID, id != sessionID, response.surface == nil {
             state = nil; conversation = nil
             preferences.removeObject(forKey: prefix + ".surface")
@@ -191,8 +244,10 @@ final class GatewaySessionModel {
             state = next
             preferences.set(incoming.surfaceID, forKey: prefix + ".surface")
         }
-        if let id = response.sessionID { sessionID = id }
+        if let id = response.sessionID { sessionID = id; liveSessionID = id }
+        if let number = response.publication { publicationSession = response.sessionID; publication = number }
         phase = response.phase
         verificationMode = response.verificationMode
+        return true
     }
 }

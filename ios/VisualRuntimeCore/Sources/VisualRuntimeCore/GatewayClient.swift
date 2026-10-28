@@ -28,6 +28,7 @@ public struct GatewayConnection: Sendable {
 public struct GatewayEnvelope: Decodable, Sendable {
     public let sessionID: String?
     public let phase: String
+    public let publication: Int?
     public let title: String?
     public let surface: VisualSurface?
     public let acknowledgedActionIDs: Set<String>
@@ -35,11 +36,13 @@ public struct GatewayEnvelope: Decodable, Sendable {
     public let verificationMode: String
     public let displayAcknowledged: Bool
     public let resolvedNodeIDs: Set<String>
-    private enum CodingKeys: String, CodingKey { case sessionID, phase, title, surface, acknowledgedActionIDs, resolvedNodeIDs, rejectedActionIDs, verificationMode, displayAcknowledged }
+    private enum CodingKeys: String, CodingKey { case sessionID, phase, publication, title, surface, acknowledgedActionIDs, resolvedNodeIDs, rejectedActionIDs, verificationMode, displayAcknowledged }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         sessionID = try c.decodeIfPresent(String.self, forKey: .sessionID)
         phase = try c.decode(String.self, forKey: .phase)
+        publication = try c.decodeIfPresent(Int.self, forKey: .publication)
+        guard publication == nil || publication! >= 0 else { throw GatewayClientError.invalidResponse }
         title = try c.decodeIfPresent(String.self, forKey: .title)
         verificationMode = try c.decodeIfPresent(String.self, forKey: .verificationMode) ?? "unverified"
         displayAcknowledged = try c.decodeIfPresent(Bool.self, forKey: .displayAcknowledged) ?? false
@@ -101,6 +104,32 @@ public struct GatewayClient: Sendable {
     public func submit(_ action: VisualAction) async throws -> GatewayEnvelope {
         try await request("v1/surfaces/" + validatedID(action.surfaceID) + "/actions", method: "POST", data: JSONEncoder().encode(action))
     }
+    #if canImport(Darwin)
+    @available(macOS 12.0, *)
+    public func watch(sessionID: String, onUpdate: @Sendable (GatewayLiveUpdate) async throws -> Void) async throws {
+        let id = try validatedID(sessionID)
+        var req = URLRequest(url: connection.url.appendingPathComponent("v1/sessions/" + id + "/events"), timeoutInterval: 65)
+        req.setValue("Bearer " + connection.token, forHTTPHeaderField: "Authorization")
+        req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        let (bytes, response) = try await session.bytes(for: req)
+        guard let http = response as? HTTPURLResponse else { throw GatewayClientError.invalidResponse }
+        guard http.statusCode == 200 else { throw GatewayClientError.httpStatus(http.statusCode) }
+        guard http.mimeType?.lowercased() == "text/event-stream" else { throw GatewayClientError.invalidResponse }
+        var parser = GatewaySSEDecoder()
+        for try await byte in bytes {
+            try Task.checkCancellation()
+            guard let frame = try parser.append(byte) else { continue }
+            if frame.event == "reconnect" || frame.event == "error" { throw GatewayClientError.transport }
+            if frame.event == "update" {
+                let update = try JSONDecoder().decode(GatewayLiveUpdate.self, from: frame.data)
+                guard update.snapshot.sessionID == id else { throw GatewayClientError.invalidResponse }
+                try await onUpdate(update)
+            }
+        }
+        throw GatewayClientError.transport // EOF is never a successful turn/action.
+    }
+    #endif
+
     private func validatedID(_ id: String) throws -> String {
         guard id.range(of: "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", options: .regularExpression) != nil else { throw GatewayClientError.invalidConnection }
         return id

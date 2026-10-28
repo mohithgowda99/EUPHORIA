@@ -1,3 +1,5 @@
+import {parseSSE} from './sse.mjs';
+
 /** Server-side Agents API transport. No user authentication, tool execution, or retries here. */
 export class AgentsClient {
   #apiKey;
@@ -17,8 +19,8 @@ export class AgentsClient {
       environment: {type: 'none'}, input, stream: false}, submissionKey);
   }
 
-  async retrieveSession(sessionID) {
-    const session = await this.#request('GET', '/' + identifier(sessionID));
+  async retrieveSession(sessionID,{signal}={}) {
+    const session = await this.#request('GET', '/' + identifier(sessionID),undefined,undefined,signal);
     if (session?.id !== sessionID) throw new Error('Agents API session identity mismatch');
     return session;
   }
@@ -31,12 +33,36 @@ export class AgentsClient {
     }]}, submissionKey);
   }
 
-  async listItems(sessionID, {after, limit = 10, order = 'asc'} = {}) {
+  async listItems(sessionID, {after, limit = 10, order = 'asc',signal} = {}) {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid item limit');
     if (!['asc','desc'].includes(order)) throw new Error('Invalid item order');
     const query = new URLSearchParams({order, limit: String(limit)});
     if (after !== undefined) query.set('after', identifier(after));
-    return this.#request('GET', '/' + identifier(sessionID) + '/items?' + query);
+    return this.#request('GET', '/' + identifier(sessionID) + '/items?' + query,undefined,undefined,signal);
+  }
+  async openEventStream(sessionID,{signal}={}) {
+    identifier(sessionID);
+    const controller=new AbortController();
+    const combined=AbortSignal.any([controller.signal,AbortSignal.timeout(60_000),...(signal?[signal]:[])]);
+    let response;
+    try {
+      response=await this.#fetch('https://api.openai.com/v1/agents/sessions/'+sessionID+'/events?stream=true',{
+        method:'GET',headers:{Authorization:'Bearer '+this.#apiKey,'OpenAI-Beta':'agents=v1',Accept:'text/event-stream'},redirect:'error',signal:combined});
+      if(!response.ok||response.headers.get('content-type')?.split(';')[0].trim().toLowerCase()!=='text/event-stream'||!response.body)throw Error('Invalid stream');
+    }catch{
+      controller.abort();try{await response?.body?.cancel();}catch{}
+      throw Error('Agents event stream unavailable');
+    }
+    return {close:()=>controller.abort(),events:(async function*(){
+      try{
+        for await(const frame of parseSSE(response.body)){
+          const event=JSON.parse(frame.data);
+          if(!event||typeof event.type!=='string'||event.type==='error'||event.session_id!==sessionID)throw Error('Invalid event');
+          yield event;
+        }
+      }catch{throw Error('Agents event stream interrupted; restore saved state');}
+      finally{controller.abort();}
+    })()};
   }
   async cancelTurn(sessionID, submissionKey) {
     return this.#request('POST', '/' + identifier(sessionID) + '/events',
@@ -61,7 +87,7 @@ export class AgentsClient {
     }]}, submissionKey);
   }
 
-  async #request(method, path, body, submissionKey) {
+  async #request(method, path, body, submissionKey,signal) {
     const headers = {'Authorization': 'Bearer ' + this.#apiKey,
       'OpenAI-Beta': 'agents=v1', 'Content-Type': 'application/json'};
     if (method === 'POST') headers['Idempotency-Key'] = key(submissionKey);
@@ -69,7 +95,7 @@ export class AgentsClient {
     let response;
     try {
       response = await this.#fetch('https://api.openai.com/v1/agents/sessions' + path,
-        {method, headers, body: encoded, redirect: 'error', signal: AbortSignal.timeout(30_000)});
+        {method, headers, body: encoded, redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(30_000),...(signal?[signal]:[])])});
     } catch {
       // Never expose a provider URL, body, credentials, or raw exception to the app/logs.
       const error = new Error(method === 'POST'

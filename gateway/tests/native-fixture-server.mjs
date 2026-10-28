@@ -1,4 +1,5 @@
 // Explicit native QA fixture. Never an inference fallback or a real external action executor.
+import {EventEmitter,on} from 'node:events';
 import {createGateway} from '../gateway.mjs';
 import {mkdtempSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -6,7 +7,8 @@ import {join} from 'node:path';
 import assert from 'node:assert/strict';
 const token='euphoria-explicit-local-fixture-token';
 const gallery=JSON.parse(readFileSync(new URL('../../ios/VisualRuntimeCore/Sources/VisualRuntimeCore/Fixtures/gallery-v2.json',import.meta.url)));
-const sessions=new Map();let serial=0;
+const sessions=new Map(),events=new EventEmitter();let serial=0;const boot=Date.now().toString(36);
+const notify=id=>events.emit(id,{type:'agent.session.requires_action',session_id:id});
 function surface(s){return s.step===3?gallery:{schemaVersion:1,surfaceID:'fixture-model-id',revision:0,nodes:[
   s.step===0?{id:'focus',kind:'askChoice',title:'Choose a focus',options:[{id:'training',label:'Training'},{id:'planning',label:'Planning'}]}:
   s.step===1?{id:'details',kind:'askForm',title:'Session details',fields:[{id:'name',label:'Session name',type:'text',required:true}]}:
@@ -14,10 +16,11 @@ function surface(s){return s.step===3?gallery:{schemaVersion:1,surfaceID:'fixtur
 ]};}
 function add(s,item){s.items.push({id:'item_'+s.items.length,status:'completed',...item});}
 const provider={
-  async createSession(){const id='sess_native_fixture_'+(++serial);sessions.set(id,{step:0,items:[]});return {id};},
+  async openEventStream(id,{signal}){return {events:(async function*(){for await(const [event] of on(events,id,{signal}))yield event;})(),close(){}};},
+  async createSession(){const id='sess_native_fixture_'+boot+'_'+(++serial);sessions.set(id,{step:0,items:[]});return {id};},
   async sendMessage(id,message){const s=sessions.get(id);add(s,{type:'message',role:'user',content:[{type:'input_text',text:message}]});
-    add(s,{type:'message',role:'assistant',content:[{type:'output_text',text:'Explicit QA acknowledgement — no inference.'}]});},
-  async cancelTurn(id){sessions.get(id).step=4;console.log('QA cancel accepted');},
+    add(s,{type:'message',role:'assistant',content:[{type:'output_text',text:'Explicit QA acknowledgement — no inference.'}]});notify(id);},
+  async cancelTurn(id){sessions.get(id).step=4;notify(id);console.log('QA cancel accepted');},
   async listItems(id,{after,limit,order}){let items=[...sessions.get(id).items];if(order==='desc')items.reverse();
     if(after){const at=items.findIndex(x=>x.id===after);assert.ok(at>=0);items=items.slice(at+1);}
     const data=items.slice(0,limit);return {data,has_more:items.length>limit,first_id:data[0]?.id??null,last_id:data.at(-1)?.id??null};},
@@ -30,7 +33,7 @@ const provider={
     if(s.step===1){assert.equal(result.output.status,'submitted');assert.equal(typeof result.output.values.name,'string');}
     if(s.step===2)assert.ok(['approved','declined'].includes(result.output.decision));
     if(s.step===3)assert.deepEqual(result.output,{status:'shown'});
-    s.step++;console.log('QA result accepted for step',s.step);
+    s.step++;notify(id);console.log('QA result accepted for step',s.step);
   }
 };
 const directory=mkdtempSync(join(tmpdir(),'euphoria-native-fixture-'));

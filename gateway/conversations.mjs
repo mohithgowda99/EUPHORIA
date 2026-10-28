@@ -40,11 +40,12 @@ export function conversations({db,provider,owned}) {
     for(const key of input.ids)db.prepare('INSERT OR IGNORE INTO inputs VALUES(?,?,NULL,NULL,?)').run(id,key,'cancelled');
     return receipts(id,owner);
   }
-  async function history(id,owner,{after,limit=10}={}) {
+  async function history(id,owner,{after,limit=10,signal}={}) {
     owned(id,owner);
     if(!Number.isInteger(limit)||limit<1||limit>10)fail(422,'Invalid history page size');
     if(after!==undefined)identifier(after);
-    const page=await provider.listItems(id,{after,limit,order:'desc'});
+    const page=await provider.listItems(id,{after,limit,order:'desc',signal});
+    signal?.throwIfAborted();
     if(!page||!Array.isArray(page.data)||page.data.length>limit||typeof page.has_more!=='boolean')fail(502,'Invalid provider history');
     if(page.has_more)identifier(page.last_id);
     const entries=page.data.map((item,index)=>{

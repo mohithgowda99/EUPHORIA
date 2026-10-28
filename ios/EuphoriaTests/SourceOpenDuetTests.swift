@@ -8,6 +8,21 @@ import Foundation
 final class SourceOpenDuetTests: XCTestCase, @unchecked Sendable {
     private let botJSON = #"{"id":"bot1","name":"Planner","title":"Organizes work","roleDescription":"Work safely","visibility":"private","mine":true,"canManage":true,"systemOwned":false,"hidden":false,"pinned":false,"hasAuth":false,"hasCallbackToken":false,"endpoint":null}"#
 
+    func testCompletedNativeChoiceIsAReceiptBeforeTheReply() throws {
+        let json = #"""
+        {"afterMessageID":"source_user","selectedLabel":"Leg day",
+         "surface":{"schemaVersion":1,"surfaceID":"call_legs","revision":0,
+         "nodes":[{"id":"day","kind":"askChoice","title":"Choose workout",
+         "options":[{"id":"pull","label":"Pull day"},{"id":"legs","label":"Leg day"}]}]}}
+        """#
+        let receipt = try JSONDecoder().decode(SourceCompletedVisual.self, from: Data(json.utf8))
+        XCTAssertEqual(receipt.afterMessageID, "source_user")
+        XCTAssertEqual(receipt.selectedLabel, "Leg day")
+        let legacyJSON = json.replacingOccurrences(of: #""selectedLabel":"Leg day","#, with: "")
+        let legacy = try JSONDecoder().decode(SourceCompletedVisual.self, from: Data(legacyJSON.utf8))
+        XCTAssertNil(legacy.selectedLabel, "Old saved surfaces stay readable without fabricated selections")
+    }
+
     func testExpoStateCookieTransferMatchesOriginalBetterAuthNativeProxy() throws {
         XCTAssertEqual(SourceOAuthStateCookie.extract(
             from: "better-auth.oauth_state=source-123; Path=/; HttpOnly; SameSite=Lax"),

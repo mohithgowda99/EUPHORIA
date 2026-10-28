@@ -28,6 +28,18 @@ public struct A2UICompositionView: View {
                     .accessibilityIdentifier("a2ui.validation-error")
             }
         }
+        .onChange(of: document.surfaceId) { _, _ in
+            // Do not carry transient UI choices into an unrelated surface.
+            selectedTabChildren.removeAll()
+            presentedModalIDs.removeAll()
+        }
+        .onChange(of: document.components) { _, components in
+            // An ID deleted by a server update must not retain stale sheet state.
+            let validTabs = Set(components.filter { $0.component == "Tabs" }.map(\.id))
+            let validModals = Set(components.filter { $0.component == "Modal" }.map(\.id))
+            selectedTabChildren = selectedTabChildren.filter { validTabs.contains($0.key) }
+            presentedModalIDs.formIntersection(validModals)
+        }
     }
 
     @ViewBuilder

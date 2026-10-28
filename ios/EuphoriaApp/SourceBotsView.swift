@@ -198,6 +198,7 @@ struct SourceBotsView: View {
                 errorMessage = nil
             }
         } catch {
+            client = nil; user = nil; bots = []; builtInAvailable = false
             errorMessage = error.localizedDescription
         }
     }
@@ -224,14 +225,16 @@ struct SourceBotsView: View {
             let source = OpenDuetSourceAPI(endpoint: currentEndpoint, cookie: cookie)
             let account = try await source.sourceSession()
             guard !account.user.id.isEmpty else { throw SourceAPIError.invalidResponse }
+            let capabilities = try await source.botCapabilities()
+            let accountsBots = try await source.bots()
             try SourceSessionKeychain.store(cookie, origin: currentEndpoint.baseURL)
             client = source
             user = account.user
-            builtInAvailable = try await source.botCapabilities().builtInAvailable
-            bots = try await source.bots()
+            builtInAvailable = capabilities.builtInAvailable
+            bots = accountsBots
             errorMessage = nil
         } catch {
-            errorMessage = "Original OpenDuet sign-in could not be verified. No session was stored."
+            errorMessage = "Original OpenDuet sign-in or account access could not be verified. No new session was stored."
         }
     }
 

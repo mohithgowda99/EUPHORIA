@@ -309,6 +309,7 @@ private struct NativeTaskEvidenceView: View {
             guard result.task.id == taskID else { throw GatewayClientError.invalidResponse }
             task = result.task
             error = nil
+            await refresh()
         } catch {
             // An unknown reply is not success. Refresh reads the authoritative
             // row, and the button never blindly retransmits this write.

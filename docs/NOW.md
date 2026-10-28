@@ -1,15 +1,17 @@
 # Current state — 2026-10-28
 
-Project: EUPHORIA. Branch: `feature/agents-native-visual-contract-spike`. Current implementation `c126000`, following `3b8941b`. Context baseline `d7f3aa8`; inspect Git for the latest documentation HEAD. Phase one remains unfinished.
+Project: EUPHORIA. Branch: `feature/agents-native-visual-contract-spike`. Latest implementation `423ab32`, following `c126000`. Inspect Git for the latest documentation HEAD. Phase one remains unfinished.
 
-Implemented: durable approval notes; owned conversation continuation/cancellation/paginated history; account-scoped SwiftData projections; native gallery; isolated HTML/JavaScript; durable display receipts. The existing renderer and operation journals are reused.
+Implemented: durable approval notes; owned conversation continuation/cancellation/paginated history; account-scoped SwiftData projections; native gallery; isolated HTML/JavaScript; durable display receipts. Existing renderer and operation journals are reused.
 
-**Latest slice:** strict source A2UI v0.9 form normalization. The source Card/Column/Text/TextField/Button trip form becomes the existing native askForm, initialized with Paris. Edited context (including empty/whitespace strings) emits source userAction metadata through the same authenticated, revision-checked, once-only tool-result path. Source drafts are revision scoped and survive disk reopen. Unknown source layouts/features fail explicitly; no additional runtime dependency.
+**Latest slice:** source A2UI boolean/single/multiple selection bindings. CheckBox remains a boolean; ChoicePicker remains an array even in single-choice mode. Native Toggle and labelled selection buttons preserve false, empty arrays, stable option values and selection order. Typed initial values retain compatibility with old encoded string defaults. Source-only bounded lists/metadata are validated by both native state and gateway; no new runtime/store/dependency.
 
-Executed checks: **42 gateway tests,37 Swift core tests,17 iOS XCTest**, Debug/Release and plist checks passed. Fresh review's Unicode-boundary and event-timestamp findings were fixed with regressions. Reference renderer1.77.0 tarball integrity matched the committed lock. No live OpenAI request or real external action verified. Expanded manual source-form/gallery flows remain unverified.
+Executed: **49 gateway tests,42 Swift core tests,18 iOS XCTest**, Debug/Release and plist checks passed. Final-build native fixture trace: toggle reminder on, choose Push, add Running, terminate/relaunch restores edits; Confirm queues one local action and terminate/relaunch preserves all control locks. This is local QA, not inference or external execution. On-disk tests and HTTP fixtures separately prove typed recovery/output and once-only submission.
 
-Still required: remaining A2UI bindings/actions/catalog and dynamic grants, rich pages, tasks/routines/bots/skills/memory, channels/media, integrations/computer workflows, production identity/deployment/admin and streaming. A key gates live-provider acceptance, not this implementation work.
+Review: fresh Terra/medium reviewer was attempted but hit a service usage limit; independent review is **pending**. Local review found an offline fixture identity collision, covered by an observed RED regression and fixed with separate source IDs. No user archives deleted.
 
-**Next:** extend the source-backed binding adapter to boolean/selection controls through the same native state and action boundary, with source conformance and re-entry tests.
+Still required: nested/shared model bindings and remaining A2UI/catalog/dynamic grants, rich pages, tasks/routines/bots/skills/memory, channels/media, integrations/computer workflows, production identity/deployment/admin and streaming. No live OpenAI request or real external action verified. A key gates live-provider acceptance, not independent implementation.
 
-Details: [handoff](agents/SPIKE_HANDOFF.md), [evidence](agents/TEST_EVIDENCE.md), [full parity inventory](ios/FEATURE_PARITY.md), [protocol](agents/NATIVE_VISUAL_PARITY.md), [latest design](superpowers/specs/2026-10-28-a2ui-form-adapter-design.md).
+**Next:** complete the pending independent review of the boolean/selection slice when reviewer capacity is available.
+
+Details: [handoff](agents/SPIKE_HANDOFF.md), [evidence](agents/TEST_EVIDENCE.md), [full parity inventory](ios/FEATURE_PARITY.md), [protocol](agents/NATIVE_VISUAL_PARITY.md), [latest design](superpowers/specs/2026-10-28-a2ui-choice-bindings-design.md).

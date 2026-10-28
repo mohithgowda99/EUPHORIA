@@ -4,7 +4,7 @@ Native SwiftUI application target `Euphoria`, iOS27. Standard controls remain na
 
 ## Current implementation
 
-Shared native decisions/forms/checklists and typed gallery; revision-scoped persisted notes and source-form drafts; owner-scoped gateway sessions/messages/history/cancel; isolated offline HTML/JavaScript artifacts. The first source A2UI adapter reproduces the source trip-form binding/action test through the existing native form and journal. It is not a general A2UI renderer.
+Shared native decisions/forms/checklists and typed gallery; revision-scoped persisted notes and source-form drafts; owner-scoped gateway sessions/messages/history/cancel; isolated offline HTML/JavaScript artifacts. The source A2UI adapter reproduces text, boolean and single/multiple selection binding/actions through the existing native form and journal. Native Toggle and labelled selection controls retain actual boolean/array values and survive reopening. It is not a general A2UI renderer.
 
 Debug entries include gateway connection proof, source-derived controls, gallery/artifact fixtures and an A2UI form fixture. Fixture controls queue local intentions; they perform no inference or real external action. Gateway launch setup is in [gateway/README](../gateway/README.md).
 

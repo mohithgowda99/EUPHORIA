@@ -39,6 +39,31 @@ struct SourceUser: Decodable, Sendable {
     let email: String
     let name: String?
 }
+struct SourceSkill: Decodable, Identifiable, Sendable {
+    let slug: String
+    let title: String
+    let summary: String
+    var id: String { slug }
+}
+struct SourcePluginCatalogue: Decodable, Sendable {
+    let skills: [SourceSkill]
+}
+struct SourceBotGrantedTool: Decodable, Sendable {
+    let ref: String
+    let description: String
+}
+struct SourceBotGrants: Decodable, Sendable {
+    let tools: [SourceBotGrantedTool]
+    let skills: [SourceSkill]
+}
+private struct SourceSkillGrant: Encodable {
+    let kind: String
+    let ref: String
+    let agentId: String
+}
+private struct SourceGrantReceipt: Decodable {
+    let ok: Bool
+}
 struct SourcePageSummary: Decodable, Identifiable, Sendable {
     let id: String
     let botId: String
@@ -530,6 +555,32 @@ struct OpenDuetSourceAPI: Sendable {
         let response: SourceBotResponse = try await request(
             "api/agents/" + checkedID(id) + "/duplicate", method: "POST")
         return response.agent
+    }
+
+    /// Skills and tool permissions are owned by original PluginStore.
+    /// No direct model-managed tool gets access merely from a UI checkbox.
+    func sourceSkills() async throws -> [SourceSkill] {
+        let response: SourcePluginCatalogue = try await get("api/plugins")
+        return response.skills
+    }
+    func sourceBotGrants(botID: String) async throws -> SourceBotGrants {
+        try await get("api/plugins/for/" + checkedID(botID))
+    }
+    func setSourceSkillGrant(botID: String, slug: String, enabled: Bool) async throws {
+        guard (1...200).contains(slug.count),
+              slug.range(of: "^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$", options: .regularExpression) != nil
+        else { throw SourceAPIError.invalidInput }
+        let result: SourceGrantReceipt
+        if enabled {
+            result = try await request("api/plugins/grants", method: "POST",
+                body: SourceSkillGrant(kind: "skill", ref: slug, agentId: checkedID(botID)))
+        } else {
+            result = try await request("api/plugins/grants", method: "DELETE",
+                queryItems: [URLQueryItem(name: "kind", value: "skill"),
+                    URLQueryItem(name: "ref", value: slug),
+                    URLQueryItem(name: "agentId", value: checkedID(botID))])
+        }
+        guard result.ok else { throw SourceAPIError.invalidResponse }
     }
 
     /// Original OpenDuet PageStore owns generated Make pages, previews, decks

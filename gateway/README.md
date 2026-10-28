@@ -1,22 +1,49 @@
-# Agents provider boundary
+# EUPHORIA Agents gateway
 
-Internal server-side adapter for the future authenticated EUPHORIA gateway. Node 22+ built-ins; no packages, Docker, HTTP listener, public endpoint, or deployment. The existing OpenBot implementation is unchanged. This is not yet wired to the iOS app.
+Native phase-one connection proof, not complete OpenDuet parity or production infrastructure. Node24+ (`node:sqlite`), AJV over the existing native JSON Schema, and built-in HTTP/fetch. Existing OpenBot remains untouched.
 
-Run offline protocol tests from the repository root:
+## Verify
 
 ```sh
+npm ci --prefix gateway --ignore-scripts
 node --test gateway/tests/*.test.mjs
 ```
 
-Tests use a local HTTP provider stub, never OpenAI. Default production requests target only `https://api.openai.com/v1/agents/sessions` and include `OpenAI-Beta: agents=v1`. The injectable fetch exists to test that network boundary.
+28 tests use a local provider or HTTP stub, not OpenAI. The real `AgentsClient` targets the official Agents API with its beta header. It never automatically retries writes and handles empty202 acceptance separately from completion.
 
-`AgentsClient({apiKey})` creates sessions (explicit model, environment `none`), retrieves sessions, sends user messages, and returns JSON function results only for a matching current `required_actions` entry. The caller must persist each submission key and payload before sending. The adapter never retries writes. A lost response remains uncertain, and a HTTP202 is acceptance, not completion, and provider success is not proof an external action executed. A read-before-submit check cannot eliminate races; the provider must still accept the referenced pending call.
+## Run with a real provider
 
-**This is transport, not authorization.** A gateway must authenticate the person, verify session ownership and tool grants, durably record pending operations, validate visual schemas and source-specific action payloads, and reconcile revisions before using this adapter. Do not expose it directly as a public proxy. A function result is not an instruction to execute a computer/browser effect.
+Configure these as **server process secrets/settings**, then run from the repository root:
 
-Personal records stay on-device by default. Model input and provider session history are remote data, so selected context is necessarily sent off-device. A minimal gateway still needs ownership, credential and operation state; unattended work cannot depend on an open iPhone app. Sign in with Apple is a candidate for identity, not a substitute for server verification. Login, OAuth integrations, stream forwarding, durable gateway state, and deployment are unimplemented.
+```sh
+node gateway/server.mjs
+```
 
-An application API key will be configured as a server secret, never committed or bundled in iOS. Live account access/model compatibility are unverified. Official protocol references checked 2026-10-28:
+Required environment: `OPENAI_API_KEY`, explicit `EUPHORIA_MODEL`, and `EUPHORIA_DEV_TOKEN` (at least32 characters). Optional: `EUPHORIA_STATE_DIR`, `EUPHORIA_PORT` (default8787). Nothing prints credentials. The launcher binds127.0.0.1 only. It uses development identity and is not production Sign in with Apple, a public proxy or a phone-independent deployment. Real OpenAI access is unverified until a key is available.
+
+In the iOS Debug scheme's launch environment set `EUPHORIA_GATEWAY_URL` to the development gateway URL and `EUPHORIA_GATEWAY_TOKEN` to the development token. Open **Visual contract proof → Open gateway session**. The app receives no OpenAI key. Local HTTP is permitted only for an explicitly enabled loopback connection. Release does not enable this Debug connection UI or local ATS exception.
+
+## Explicit native QA only
+
+```sh
+node gateway/tests/native-fixture-server.mjs
+```
+
+This deliberately labelled fixture binds127.0.0.1:8788, using the non-secret test token `euphoria-explicit-local-fixture-token`. It returns choice → form → approval and performs no inference or external effect. Configure the Debug scheme for that address/token. The app displays **Local test provider — no model inference**. This fixture is never selected by the real server and is not an inference fallback. State lives in a temporary directory printed at launch.
+
+## Implemented boundary
+
+- All routes require an injected authentication verifier before accessing state. Local launcher uses a constant-time development-token comparison. Native production login, token verification and cloud deployment remain pending.
+- `POST /v1/sessions` accepts `{id,message}`; an owner-scoped creation journal is written before the provider call. `GET /v1/requests/:id` recovers creation state. `DELETE` atomically records cancellation only for an unreceived request, blocking late delivery of the same ID; accepted/uncertain creates remain accepted/uncertain.
+- `GET /v1/sessions` lists only owned sessions. `GET /v1/sessions/:id` retrieves current provider required actions, validates their surface, and assigns gateway-owned identity/revision. This is manual snapshot refresh, not streamed history replay.
+- `POST /v1/surfaces/:id/actions` checks owner, revision, current active decision, exact action schema and source-equivalent result. It journals before provider submission. Unique call/action constraints plus serialized per-session operations prevent concurrent duplicate sends. Unknown outcomes survive restart and are not replayed.202 means accepted, not completed.
+- `POST /v1/surfaces/:id/reconcile` accepts `{pendingActionIDs:[...]}` and records cancellation for unreceived intents before returning `rejectedActionIDs`. Known uncertain writes stay blocked; resolution does not execute or resend them. Native code removes only server-rejected/acknowledged queued intents.
+- One active choice, form or approval per function call, with optional read-only checklist context. Full basicCatalog, editable pages, generic HTML, bots, files, integrations and routines remain source-parity work. A UI approval is only a response, never a business-effect executor.
+
+SQLite is a single-process local service journal, with owner/session mapping, active submitted surfaces and action receipts. Personal archives stay on-device; submitted model context and provider history are remote processing. Store directory/DB are private locally; deployment encryption, quotas, retention/deletion, production identity, streaming, webhooks and distributed concurrency are not qualified. Action journal limit500 per session. Provider-outcome reconciliation for genuinely uncertain writes still requires authoritative evidence; there is no unsafe retry button.
+
+Protocol references checked2026-10-28:
 - https://developers.openai.com/api/docs/guides/agents-api/quickstart
 - https://developers.openai.com/api/docs/guides/agents-api/sessions
 - https://developers.openai.com/api/docs/guides/agents-api/tools/functions
+- https://developers.openai.com/api/reference/typescript/resources/beta/subresources/agents/subresources/sessions/subresources/events/methods/create

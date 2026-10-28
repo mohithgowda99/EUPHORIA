@@ -1,0 +1,72 @@
+import Ajv from 'ajv/dist/2020.js';
+import {readFileSync} from 'node:fs';
+export const surfaceSchema=JSON.parse(readFileSync(new URL('../docs/agents/visual-surface-v1.schema.json',import.meta.url)));
+const validate=new Ajv({strict:false,allErrors:false}).compile(surfaceSchema);
+export class GatewayError extends Error {constructor(status,message){super(message);this.status=status;}}
+export function fail(status,message){throw new GatewayError(status,message);}
+export function identifier(value){
+  if(typeof value!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value))fail(422,'Invalid identifier');return value;
+}
+export function stable(value){
+  if(Array.isArray(value))return '['+value.map(stable).join(',')+']';
+  if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+stable(value[k])).join(',')+'}';
+  return JSON.stringify(value);
+}
+export function validateSurface(surface){
+  if(!validate(surface))fail(502,'Unsupported visual surface');
+  const unique=items=>new Set(items.map(x=>x.id)).size===items.length;
+  if(!unique(surface.nodes))fail(502,'Duplicate node identity');
+  let decisions=0;
+  for(const n of surface.nodes){
+    // These IDs participate in local flat binding paths; exclude separators/prototype names.
+    if(!/^[A-Za-z0-9_-]{1,64}$/.test(n.id))fail(502,'Unsupported node identity');
+    if(['askChoice','askForm','askApproval'].includes(n.kind))decisions++;
+    if(n.kind==='askChoice'&&(!n.options?.length||!unique(n.options)))fail(502,'Invalid choices');
+    if(n.kind==='askForm'){
+      if(!n.fields?.length||!unique(n.fields))fail(502,'Invalid form');
+      for(const f of n.fields){
+        if(f.min!==undefined&&f.max!==undefined&&f.min>f.max)fail(502,'Invalid field bounds');
+        if(f.type==='select'&&(!f.options?.length||new Set(f.options).size!==f.options.length))fail(502,'Invalid field choices');
+      }
+    }
+    if(n.items&&!unique(n.items))fail(502,'Duplicate item identity');
+    if(n.kind==='pageChecklist')fail(502,'Editable pages are not supported by this tool yet');
+  }
+  if(decisions!==1)fail(502,'This tool requires exactly one active decision');
+  return surface;
+}
+export function decisionResult(surface,action){
+  if(!action||Array.isArray(action)||Object.keys(action).sort().join(',')!=='expectedRevision,id,kind,nodeID,surfaceID,values')fail(422,'Invalid action');
+  identifier(action.id);
+  if(action.surfaceID!==surface.surfaceID||action.expectedRevision!==surface.revision)fail(409,'Surface revision changed');
+  const node=surface.nodes.find(n=>n.id===action.nodeID),v=action.values;
+  if(!node||!v||Array.isArray(v)||typeof v!=='object')fail(422,'Invalid decision');
+  const keys=Object.keys(v);
+  const text=x=>typeof x==='string'&&x.length<=2000;
+  if(node.kind==='askChoice'&&action.kind==='choose'){
+    const option=node.options.find(o=>o.id===v.choice);
+    if(keys.length!==2||!option||v.label!==option.label)fail(422,'Invalid choice');
+    return {choice:v.choice,label:v.label};
+  }
+  if(node.kind==='askApproval'&&action.kind==='decide'){
+    if(!['approved','declined'].includes(v.decision)||keys.some(k=>!['decision','note'].includes(k))||
+      (Object.hasOwn(v,'note')&&!text(v.note)))fail(422,'Invalid approval');
+    return Object.hasOwn(v,'note')?{decision:v.decision,note:v.note}:{decision:v.decision};
+  }
+  if(node.kind==='askForm'&&action.kind==='submitForm'){
+    if(keys.some(k=>!node.fields.some(f=>f.id===k)))fail(422,'Unknown form field');
+    for(const f of node.fields){
+      if(!Object.hasOwn(v,f.id)){if(f.required)fail(422,'Required field missing');continue;}
+      const x=v[f.id];
+      if(f.type==='number'){
+        if(typeof x!=='number'||!Number.isFinite(x)||(f.min!==undefined&&x<f.min)||(f.max!==undefined&&x>f.max))fail(422,'Invalid number');
+      }else{
+        if(!text(x)||!x.trim()||x!==x.trim())fail(422,'Invalid field value');
+        if(f.type==='select'&&!f.options.includes(x))fail(422,'Invalid selection');
+        if(f.type==='email'&&(!x.includes('@')||x.includes(' ')))fail(422,'Invalid email');
+      }
+    }
+    return {status:'submitted',values:v};
+  }
+  fail(422,'Unsupported operation');
+}

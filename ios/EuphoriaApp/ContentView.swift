@@ -12,6 +12,7 @@ struct ContentView: View {
             Form {
                 #if DEBUG
                 Section("Visual contract proof") {
+                    NavigationLink("Open gateway session") { GatewaySessionView() }
                     NavigationLink("Open source-derived UI fixtures") {
                         VisualFixtureView()
                     }

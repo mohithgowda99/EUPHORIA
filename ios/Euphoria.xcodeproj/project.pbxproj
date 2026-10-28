@@ -17,6 +17,11 @@
         000000000000000000000033 /* VisualFixtureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000027 /* VisualFixtureView.swift */; };
         000000000000000000000034 /* VisualSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000028 /* VisualSnapshot.swift */; };
         000000000000000000000035 /* VisualPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000029 /* VisualPersistenceTests.swift */; };
+        000000000000000000000050 /* GatewayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000040 /* GatewayClient.swift */; };
+        000000000000000000000051 /* VisualNodesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000041 /* VisualNodesView.swift */; };
+        000000000000000000000052 /* GatewaySessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000042 /* GatewaySessionModel.swift */; };
+        000000000000000000000053 /* GatewaySessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000043 /* GatewaySessionView.swift */; };
+        000000000000000000000054 /* GatewaySessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000044 /* GatewaySessionTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -42,6 +47,11 @@
         000000000000000000000027 /* VisualFixtureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VisualFixtureView.swift"; sourceTree = "<group>"; };
         000000000000000000000028 /* VisualSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VisualSnapshot.swift"; sourceTree = "<group>"; };
         000000000000000000000029 /* VisualPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VisualPersistenceTests.swift"; sourceTree = "<group>"; };
+        000000000000000000000040 /* GatewayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/GatewayClient.swift"; sourceTree = "<group>"; };
+        000000000000000000000041 /* VisualNodesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VisualNodesView.swift"; sourceTree = "<group>"; };
+        000000000000000000000042 /* GatewaySessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GatewaySessionModel.swift"; sourceTree = "<group>"; };
+        000000000000000000000043 /* GatewaySessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GatewaySessionView.swift"; sourceTree = "<group>"; };
+        000000000000000000000044 /* GatewaySessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GatewaySessionTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -69,6 +79,10 @@
                 000000000000000000000025 /* VisualState.swift */,
                 000000000000000000000026 /* SourceFixtures.swift */,
                 000000000000000000000027 /* VisualFixtureView.swift */,
+                000000000000000000000040 /* GatewayClient.swift */,
+                000000000000000000000041 /* VisualNodesView.swift */,
+                000000000000000000000042 /* GatewaySessionModel.swift */,
+                000000000000000000000043 /* GatewaySessionView.swift */,
                 000000000000000000000028 /* VisualSnapshot.swift */,
             );
             path = EuphoriaApp;
@@ -76,7 +90,7 @@
         };
         000000000000000000000004 /* EuphoriaTests */ = {
             isa = PBXGroup;
-            children = (000000000000000000000011 /* OpenBotEndpointTests.swift */, 000000000000000000000029 /* VisualPersistenceTests.swift */);
+            children = (000000000000000000000044 /* GatewaySessionTests.swift */, 000000000000000000000011 /* OpenBotEndpointTests.swift */, 000000000000000000000029 /* VisualPersistenceTests.swift */);
             path = EuphoriaTests;
             sourceTree = "<group>";
         };
@@ -168,6 +182,10 @@
                 000000000000000000000031 /* VisualState.swift in Sources */,
                 000000000000000000000032 /* SourceFixtures.swift in Sources */,
                 000000000000000000000033 /* VisualFixtureView.swift in Sources */,
+                000000000000000000000050 /* GatewayClient.swift in Sources */,
+                000000000000000000000051 /* VisualNodesView.swift in Sources */,
+                000000000000000000000052 /* GatewaySessionModel.swift in Sources */,
+                000000000000000000000053 /* GatewaySessionView.swift in Sources */,
                 000000000000000000000034 /* VisualSnapshot.swift in Sources */,
             );
             runOnlyForDeploymentPostprocessing = 0;
@@ -175,7 +193,7 @@
         00000000000000000000000B /* Sources */ = {
             isa = PBXSourcesBuildPhase;
             buildActionMask = 2147483647;
-            files = (000000000000000000000017 /* OpenBotEndpointTests.swift in Sources */, 000000000000000000000035 /* VisualPersistenceTests.swift in Sources */);
+            files = (000000000000000000000054 /* GatewaySessionTests.swift in Sources */, 000000000000000000000017 /* OpenBotEndpointTests.swift in Sources */, 000000000000000000000035 /* VisualPersistenceTests.swift in Sources */);
             runOnlyForDeploymentPostprocessing = 0;
         };
 /* End PBXSourcesBuildPhase section */

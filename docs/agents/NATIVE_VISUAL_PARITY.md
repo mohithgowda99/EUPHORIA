@@ -36,7 +36,7 @@ Gallery names are a source snapshot, **not the entire CopilotKit A2UI basic cata
 
 For v2, implement typed layout tree and stable binding IDs after source A2UI catalog audit; schema migrations must be explicit (`schemaVersion` compatibility window, server-side upgrade and read-only fallback). Unknown renderers should be presented as unsupported, preserving raw state safely and avoiding tool execution. In V1 unknown kinds are rejected rather than dropped.
 
-## Minimum gateway boundary (routes remain design-only; internal provider transport implemented)
+## Gateway boundary (local single-process subset implemented; production deployment pending)
 
 - `POST /v1/sessions` authenticates EUPHORIA identity, enforces quotas, creates OpenAI Agents API session, persists owner/session mapping; never forwards API credentials to iOS.
 - `GET /v1/sessions/{id}` and `GET /v1/sessions/{id}/events` verify per-user ownership; stream sanitized Agents event envelopes, preserve event/item IDs and real turn status. On disconnect, reread authoritative Agents session/items and reconcile; streams have no full event replay.
@@ -75,3 +75,7 @@ The bundled `visual-surface-v1.schema.json` formalizes the currently supported *
 ## User-directed data scope (2026-10-28)
 
 Personal records stay on-device by default. Submitted model context and hosted agent history remain remote processing. The gateway still needs minimal identity/session ownership, integration credential and durable operation state; this does not require mirroring all personal records. Sign in with Apple is a candidate, not implemented or accepted as a complete authentication design. No auth/storage vendor adopted. `gateway/agents-client.mjs` is internal transport only, not a public authorization boundary.
+
+## Native gateway milestone (2026-10-28)
+
+Supersedes the older next-slice status above: local authenticated HTTP gateway and native Debug session connection are implemented. Shared SwiftUI renderer, strict incoming validation, SQLite owner/action journal, native persistence, explicit cancellation recovery and manual provider snapshot refresh are verified against a labelled local provider.28 Node,19 Swift core and12 iOS tests passed with Debug/Release builds. Connected HITL types: choice/form/approval, optional read-only checklist context. Editable page mutation, general native chat/history, full catalog and integration parity remain pending. No live OpenAI session or production login/deployment was exercised. See TEST_EVIDENCE.md and gateway/README.md for exact boundaries.

@@ -4,3 +4,5 @@ node_modules/
 .copilotkit/
 /ios/.build-logs/
 /ios/VisualRuntimeCore/.build/
+
+/gateway/.state/

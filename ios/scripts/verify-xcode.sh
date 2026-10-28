@@ -97,8 +97,8 @@ print("Xcode xcresult:",
       f"status={summary.get('result')}")
 if counts["totalTestCount"] != sum(counts[k] for k in fields[1:]):
     raise SystemExit("FAIL: xcresult test counts are inconsistent.")
-if counts != dict(totalTestCount=9, passedTests=9, failedTests=0, skippedTests=0):
-    raise SystemExit("FAIL: expected exactly 9 XCTest passes, with no failures or skips.")
+if counts != dict(totalTestCount=12, passedTests=12, failedTests=0, skippedTests=0):
+    raise SystemExit("FAIL: expected exactly 12 XCTest passes, with no failures or skips.")
 if str(summary.get("result", "")).strip().lower() not in ("passed", "success", "succeeded"):
     raise SystemExit("FAIL: xcresult overall test action was not successful.")
 PY
@@ -107,6 +107,6 @@ if (( test_exit != 0 )); then
   echo "FAIL: xcodebuild test exited with status $test_exit despite xcresult summary." >&2
   exit "$test_exit"
 fi
-echo "PASS: Debug and Release builds, built-plist checks, and all 9 XCTest cases."
+echo "PASS: Debug and Release builds, built-plist checks, and all 12 XCTest cases."
 echo "Evidence retained locally in $LOG_DIR (ignored by Git)."
 echo "NOTE: Actual simulator-to-local-OpenBot HTTP and HTTPS ATS smoke tests remain separate."

@@ -69,15 +69,73 @@ final class VisualRuntimeCoreTests: XCTestCase {
             values: ["item": .text("review"), "checked": .flag(false)])))
     }
     func testRejectsUnknownKindsAndUnsupportedVersions() throws {
-        var s = try fixture()
+        let s = try fixture()
         var encoded = try JSONEncoder().encode(s)
         var json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         json["schemaVersion"] = 99
         encoded = try JSONSerialization.data(withJSONObject: json)
-        s = try JSONDecoder().decode(VisualSurface.self, from: encoded)
-        XCTAssertThrowsError(try s.validate())
+        XCTAssertThrowsError(try JSONDecoder().decode(VisualSurface.self, from: encoded))
         json["nodes"] = [["id":"x", "kind":"script", "title":"Run arbitrary JS"]]
         encoded = try JSONSerialization.data(withJSONObject: json)
         XCTAssertThrowsError(try JSONDecoder().decode(VisualSurface.self, from: encoded))
     }
+    func testDecodeRejectsInvalidSurfaceBeforeRendering() throws {
+        let invalid = Data(#"{"schemaVersion":1,"surfaceID":"x","revision":0,"nodes":[]}"#.utf8)
+        XCTAssertThrowsError(try JSONDecoder().decode(VisualSurface.self, from: invalid))
+    }
+    func testSameRevisionCannotReplaceContent() throws {
+        var state = VisualState(surface: try fixture())
+        let changed = try VisualSurface(surfaceID: state.surface.surfaceID, revision: state.surface.revision,
+            nodes: [VisualNode(id: "changed", kind: .askApproval, title: "Changed")])
+        XCTAssertThrowsError(try state.reconcile(changed, acknowledgedActionIDs: []))
+    }
+    func testAcknowledgedCheckboxOverlayYieldsToServerButLaterEditSurvives() throws {
+        var state = VisualState(surface: try fixture())
+        try state.apply(action(state, node: "page_tasks", kind: .toggle,
+            values: ["item": .text("review"), "checked": .flag(true)], id: "first"))
+        let next = try VisualSurface(surfaceID: state.surface.surfaceID, revision: 2, nodes: state.surface.nodes)
+        try state.reconcile(next, acknowledgedActionIDs: ["first"])
+        XCTAssertNil(state.values["page_tasks.review"])
+        try state.apply(action(state, node: "page_tasks", kind: .toggle,
+            values: ["item": .text("review"), "checked": .flag(true)], id: "second"))
+        try state.apply(action(state, node: "page_tasks", kind: .toggle,
+            values: ["item": .text("review"), "checked": .flag(false)], id: "third"))
+        try state.reconcile(next, acknowledgedActionIDs: ["second"])
+        XCTAssertEqual(state.values["page_tasks.review"], .flag(false))
+        XCTAssertEqual(state.pending.map(\.id), ["third"])
+    }
+
+    func testAcceptedDecisionRemainsLockedAcrossSnapshotRestore() throws {
+        var state = VisualState(surface: try fixture())
+        let a = action(state, node: "deployment", kind: .choose,
+            values: ["choice": .text("staging"), "label": .text("Staging")], id: "accepted")
+        try state.apply(a)
+        try state.reconcile(state.surface, acknowledgedActionIDs: ["accepted"], resolvedNodeIDs: ["deployment"])
+        XCTAssertTrue(state.pending.isEmpty)
+        let restored = try JSONDecoder().decode(VisualState.self, from: JSONEncoder().encode(state))
+        XCTAssertEqual(restored.resolvedNodeIDs, ["deployment"])
+        var copy = restored
+        XCTAssertThrowsError(try copy.apply(action(copy, node: "deployment", kind: .choose,
+            values: ["choice": .text("staging"), "label": .text("Staging")], id: "other")))
+    }
+    func testLegacySnapshotWithoutResolvedNodesStillRestores() throws {
+        let state = VisualState(surface: try fixture())
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(state)) as? [String: Any])
+        json.removeValue(forKey: "resolvedNodeIDs")
+        let restored = try JSONDecoder().decode(VisualState.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertEqual(restored.surface, state.surface)
+        XCTAssertTrue(restored.resolvedNodeIDs.isEmpty)
+    }
+
+    func testRejectedDecisionUnlocksWithoutReplayingIt() throws {
+        var state = VisualState(surface: try fixture())
+        try state.apply(action(state, node: "deployment", kind: .choose,
+            values: ["choice": .text("staging"), "label": .text("Staging")], id: "unsent"))
+        try state.reconcile(state.surface, acknowledgedActionIDs: [], rejectedActionIDs: ["unsent"])
+        XCTAssertTrue(state.pending.isEmpty)
+        XCTAssertNil(state.values["deployment"])
+        XCTAssertNoThrow(try state.apply(action(state, node: "deployment", kind: .choose,
+            values: ["choice": .text("staging"), "label": .text("Staging")], id: "fresh")))
+    }
+
 }

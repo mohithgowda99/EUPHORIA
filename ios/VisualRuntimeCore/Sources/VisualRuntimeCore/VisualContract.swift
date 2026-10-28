@@ -96,6 +96,13 @@ public struct VisualSurface: Codable, Equatable, Sendable {
         self.revision = revision; self.nodes = nodes
         try validate()
     }
+    private enum CodingKeys: String, CodingKey { case schemaVersion, surfaceID, revision, nodes }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(surfaceID: c.decode(String.self, forKey: .surfaceID),
+            revision: c.decode(Int.self, forKey: .revision), nodes: c.decode([VisualNode].self, forKey: .nodes),
+            schemaVersion: c.decode(Int.self, forKey: .schemaVersion))
+    }
     public func validate() throws {
         guard schemaVersion == 1 else { throw VisualContractError.unsupportedVersion }
         guard !surfaceID.isEmpty, surfaceID.count <= 128, revision >= 0,

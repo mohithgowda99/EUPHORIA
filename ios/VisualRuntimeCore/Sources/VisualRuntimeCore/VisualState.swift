@@ -7,7 +7,17 @@ public struct VisualState: Codable, Equatable, Sendable {
     public private(set) var values: [String: VisualScalar] = [:]
     public private(set) var pending: [VisualAction] = []
 
+    public private(set) var resolvedNodeIDs: Set<String> = []
     public init(surface: VisualSurface) { self.surface = surface }
+    private enum CodingKeys: String, CodingKey { case surface, values, pending, resolvedNodeIDs }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        surface = try c.decode(VisualSurface.self, forKey: .surface)
+        values = try c.decode([String: VisualScalar].self, forKey: .values)
+        pending = try c.decode([VisualAction].self, forKey: .pending)
+        resolvedNodeIDs = try c.decodeIfPresent(Set<String>.self, forKey: .resolvedNodeIDs) ?? []
+        guard resolvedNodeIDs.isSubset(of: Set(surface.nodes.map(\.id))) else { throw VisualContractError.invalidSurface }
+    }
 
     public mutating func apply(_ action: VisualAction) throws {
         try surface.validate()
@@ -22,6 +32,7 @@ public struct VisualState: Codable, Equatable, Sendable {
             pending.contains(where: { $0.nodeID == action.nodeID && $0.kind == action.kind }) {
             throw VisualContractError.duplicateAction
         }
+        guard !resolvedNodeIDs.contains(node.id) else { throw VisualContractError.duplicateAction }
         let prefix = node.id + "."
         if node.kind == .askForm && action.kind == .setField &&
             pending.contains(where: { $0.nodeID == node.id && $0.kind == .submitForm }) {
@@ -92,12 +103,26 @@ public struct VisualState: Codable, Equatable, Sendable {
     }
 
     /// Only a server response may advance revision or clear delivered actions.
-    public mutating func reconcile(_ next: VisualSurface, acknowledgedActionIDs: Set<String>) throws {
+    public mutating func reconcile(_ next: VisualSurface, acknowledgedActionIDs: Set<String>, resolvedNodeIDs: Set<String> = [], rejectedActionIDs: Set<String> = []) throws {
         try next.validate()
-        guard next.surfaceID == surface.surfaceID, next.revision >= surface.revision else {
+        guard next.surfaceID == surface.surfaceID, next.revision >= surface.revision,
+              next.revision != surface.revision || next == surface else {
             throw VisualContractError.staleRevision
         }
-        pending.removeAll { acknowledgedActionIDs.contains($0.id) }
+        guard resolvedNodeIDs.isSubset(of: Set(next.nodes.map(\.id))) else { throw VisualContractError.invalidSurface }
+        let rejected = pending.filter { rejectedActionIDs.contains($0.id) }
+        let acknowledged = pending.filter { acknowledgedActionIDs.contains($0.id) }
+        pending.removeAll { acknowledgedActionIDs.contains($0.id) || rejectedActionIDs.contains($0.id) }
+        for action in rejected where [.choose, .decide].contains(action.kind) {
+            if !pending.contains(where: { $0.nodeID == action.nodeID }) { values.removeValue(forKey: action.nodeID) }
+        }
+        for action in acknowledged where action.kind == .toggle {
+            guard let item = action.values["item"]?.string else { continue }
+            let laterEdit = pending.contains { $0.nodeID == action.nodeID && $0.kind == .toggle && $0.values["item"]?.string == item }
+            if !laterEdit { values.removeValue(forKey: action.nodeID + "." + item) }
+        }
+
+        self.resolvedNodeIDs = resolvedNodeIDs
         surface = next
     }
 

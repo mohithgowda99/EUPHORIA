@@ -39,6 +39,119 @@ struct SourceUser: Decodable, Sendable {
     let email: String
     let name: String?
 }
+struct SourcePageSummary: Decodable, Identifiable, Sendable {
+    let id: String
+    let botId: String
+    let kind: String
+    let title: String
+    let summary: String?
+    let updatedAt: String
+    let slideCount: Int
+    let preview: SourcePagePreview
+}
+struct SourcePagePreview: Decodable, Sendable {
+    let title: String?
+    let blocks: [SourcePageBlock]
+}
+struct SourcePageRecord: Decodable, Identifiable, Sendable {
+    let id: String
+    let botId: String
+    let kind: String
+    let title: String
+    let summary: String?
+    let updatedAt: String
+    let checklistRevision: String
+    let content: SourcePageContent
+}
+struct SourcePageContent: Decodable, Sendable {
+    let blocks: [SourcePageBlock]?
+    let slides: [SourcePageSlide]?
+}
+struct SourcePageSlide: Decodable, Sendable {
+    let title: String
+    let blocks: [SourcePageBlock]
+}
+struct SourcePageBlock: Decodable, Sendable {
+    let type: String
+    let text: String?
+    let title: String?
+    let items: [SourcePageItem]?
+    let columns: [String]?
+    let rows: [[String]]?
+    let question: String?
+    let pick: String?
+    let alt: String?
+    let options: [SourcePageDecisionOption]?
+
+    private enum CodingKeys: String, CodingKey {
+        case type, text, title, items, columns, rows, question, pick, alt, options
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        type = try c.decode(String.self, forKey: .type)
+        text = try c.decodeIfPresent(String.self, forKey: .text)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        if let strings = try? c.decode([String].self, forKey: .items) {
+            items = strings.map { SourcePageItem(text: $0) }
+        } else {
+            items = try? c.decode([SourcePageItem].self, forKey: .items)
+        }
+        columns = try? c.decode([String].self, forKey: .columns)
+        rows = try? c.decode([[String]].self, forKey: .rows)
+        question = try c.decodeIfPresent(String.self, forKey: .question)
+        pick = try c.decodeIfPresent(String.self, forKey: .pick)
+        alt = try c.decodeIfPresent(String.self, forKey: .alt)
+        options = try? c.decode([SourcePageDecisionOption].self, forKey: .options)
+    }
+}
+struct SourcePageDecisionOption: Decodable, Sendable {
+    let title: String
+    let pros: [String]
+    let cons: [String]
+}
+struct SourcePageItem: Decodable, Sendable {
+    let id: String?
+    let text: String?
+    let checked: Bool?
+    let label: String?
+    let value: String?
+    let note: String?
+    let title: String?
+    let date: String?
+
+    init(text: String) {
+        id = nil; self.text = text; checked = nil; label = nil
+        value = nil; note = nil; title = nil; date = nil
+    }
+    private enum CodingKeys: String, CodingKey {
+        case id, text, checked, label, value, note, title, date
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id)
+        text = try c.decodeIfPresent(String.self, forKey: .text)
+        checked = try c.decodeIfPresent(Bool.self, forKey: .checked)
+        label = try c.decodeIfPresent(String.self, forKey: .label)
+        if let raw = try? c.decode(String.self, forKey: .value) {
+            value = raw
+        } else if let number = try? c.decode(Double.self, forKey: .value) {
+            value = String(number)
+        } else { value = nil }
+        note = try c.decodeIfPresent(String.self, forKey: .note)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        date = try c.decodeIfPresent(String.self, forKey: .date)
+    }
+}
+struct SourcePagesResponse: Decodable, Sendable { let pages: [SourcePageSummary] }
+struct SourcePageResponse: Decodable, Sendable { let page: SourcePageRecord }
+private struct SourceChecklistChange: Encodable {
+    let block: Int
+    let slide: Int?
+    let item: String
+    let checked: Bool
+    let expectedChecklistRevision: String
+}
+
 struct SourceRoutine: Decodable, Identifiable, Sendable {
     let id: String
     let agentId: String
@@ -417,6 +530,33 @@ struct OpenDuetSourceAPI: Sendable {
         let response: SourceBotResponse = try await request(
             "api/agents/" + checkedID(id) + "/duplicate", method: "POST")
         return response.agent
+    }
+
+    /// Original OpenDuet PageStore owns generated Make pages, previews, decks
+    /// and checklist revision. This is not a replacement artifact database.
+    func sourcePages() async throws -> [SourcePageSummary] {
+        let response: SourcePagesResponse = try await get("api/openduet/pages")
+        guard response.pages.count <= 2000,
+              Set(response.pages.map(\.id)).count == response.pages.count
+        else { throw SourceAPIError.invalidResponse }
+        return response.pages
+    }
+    func sourcePage(id: String) async throws -> SourcePageRecord {
+        let response: SourcePageResponse = try await get("api/openduet/pages/" + checkedID(id))
+        guard response.page.id == id else { throw SourceAPIError.invalidResponse }
+        return response.page
+    }
+    func setSourceChecklistItem(pageID: String, block: Int, slide: Int?, itemID: String,
+                                checked: Bool, revision: String) async throws -> SourcePageRecord {
+        guard block >= 0, block < 100, slide.map({ $0 >= 0 && $0 < 50 }) ?? true,
+              (1...64).contains(itemID.count), (1...64).contains(revision.count)
+        else { throw SourceAPIError.invalidInput }
+        let response: SourcePageResponse = try await request(
+            "api/openduet/pages/" + checkedID(pageID) + "/checklist",
+            method: "PATCH", body: SourceChecklistChange(block: block, slide: slide,
+                item: itemID, checked: checked, expectedChecklistRevision: revision))
+        guard response.page.id == pageID else { throw SourceAPIError.invalidResponse }
+        return response.page
     }
 
     /// Existing OpenDuet routine metadata, run history and pause controls.

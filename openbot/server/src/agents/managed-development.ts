@@ -110,6 +110,22 @@ export async function createManagedDevelopment(input:{database:Database;provider
    if(!page.last_id||page.last_id===after)throw Error('Invalid turn cursor');after=page.last_id;
   }throw Error('Managed turn exceeds development history limit');
  }
+
+ // Completed choices are read from the ORIGINAL, finished response work item,
+ // never inferred from a rendered button, model text, or unacknowledged iOS draft.
+ async function completedSelectionLabel(surface:unknown,owner:{ownerUserId:string;channelId:string;agentId:string}):Promise<string|null>{
+  if(!surface||typeof surface!=='object')return null;
+  const view=surface as {surfaceID?:string;nodes?:{id:string;kind:string;options?:{id:string;label:string}[]}[]};
+  if(typeof view.surfaceID!=='string'||!Array.isArray(view.nodes)||!view.nodes.some(n=>n.kind==='askChoice'))return null;
+  const [row]=await database.select({payload:workItems.payload}).from(workItems)
+   .where(and(eq(workItems.kind,'managed.native-response'),eq(workItems.key,view.surfaceID),isNotNull(workItems.finishedAt))).limit(1);
+  const receipt=row?.payload as {scope?:{ownerUserId?:string;channelId?:string;agentId?:string};action?:{kind?:string;nodeID?:string;values?:{choice?:string;label?:string}}}|undefined;
+  if(receipt?.scope?.ownerUserId!==owner.ownerUserId||receipt.scope?.channelId!==owner.channelId||
+     receipt.scope?.agentId!==owner.agentId||receipt.action?.kind!=='choose')return null;
+  const node=view.nodes.find(n=>n.kind==='askChoice'&&n.id===receipt.action?.nodeID);
+  return node?.options?.find(o=>o.id===receipt.action?.values?.choice&&o.label===receipt.action?.values?.label)?.label??null;
+ }
+
  const visualPath='/api/delivery/conversations/:id/visual';
  async function pendingVisual(owner:string,channelId:string,botId:string){
   const scope=await scopeFor(owner,channelId,botId);if(!scope)throw Error('Source access revoked');
@@ -143,7 +159,13 @@ export async function createManagedDevelopment(input:{database:Database;provider
    .innerJoin(managedAgentInboxTurns,eq(deliveryInbox.id,managedAgentInboxTurns.inboxId))
    .where(and(eq(deliveryInbox.ownerUserId,c.var.actor.id),eq(deliveryInbox.channelId,c.req.param('id')??''),eq(deliveryInbox.agentId,c.req.query('agentId')??''),eq(deliveryInbox.state,'sent')))
    .orderBy(desc(deliveryInbox.createdAt)).limit(100);
-  const completedSurfaces=saved.reverse().flatMap(row=>(row.output?.surfaces??[]).map(surface=>({afterMessageID:'reply_'+row.inboxID,surface})));
+  const completedSurfaces=[];
+  for(const row of saved.reverse())for(const surface of row.output?.surfaces??[]){
+   const selectedLabel=row.output?.selectedLabels?.[(surface as {surfaceID?:string}).surfaceID??'']??
+    await completedSelectionLabel(surface,{ownerUserId:c.var.actor.id,channelId:c.req.param('id')??'',agentId:c.req.query('agentId')??''});
+   // The choice occurred during this source turn, BEFORE its final assistant reply.
+   completedSurfaces.push({afterMessageID:row.inboxID,surface,selectedLabel});
+  }
   return c.json({surface:result.surface,completedSurfaces,submissionUncertain:result.submissionUncertain??false,
    deliveryState:latest?.state??null,deliveryError:latest?.error??null});
  });
@@ -206,7 +228,12 @@ export async function createManagedDevelopment(input:{database:Database;provider
       const args=typeof call.arguments==='string'?JSON.parse(call.arguments):call.arguments;argumentFingerprint(args);
       return{...normalizeRenderInput(args),surfaceID:call.call_id,revision:0};
      });
-     await database.update(managedAgentInboxTurns).set({completedOutput:{replyText:text,surfaces}})
+     const selectedLabels:Record<string,string>={};
+     for(const surface of surfaces){
+      const selected=await completedSelectionLabel(surface,{ownerUserId:scope.ownerUserId,channelId:scope.channelId,agentId:scope.agentId});
+      if(selected)selectedLabels[surface.surfaceID]=selected;
+     }
+     await database.update(managedAgentInboxTurns).set({completedOutput:{replyText:text,surfaces,selectedLabels}})
       .where(and(eq(managedAgentInboxTurns.inboxId,row.inboxId),eq(managedAgentInboxTurns.rootTurnId,row.rootTurnID!),isNull(managedAgentInboxTurns.completedOutput)));
      await channels.recordActivity(actor,scope.channelId,{text,agentId:scope.agentId,at:new Date()},{id});
     }});}catch{console.error('Managed source receipt awaiting reconciliation');}

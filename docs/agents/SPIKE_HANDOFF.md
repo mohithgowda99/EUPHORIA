@@ -1,8 +1,14 @@
 # EUPHORIA phase-one handoff
 
-Updated 2026-10-28. Branch `feature/agents-native-visual-contract-spike`, latest implementation `e51621b`, following `423ab32`. Main and OpenBot/CopilotKit are untouched.
+Updated 2026-10-28. Branch `feature/agents-native-visual-contract-spike`, latest implementation `511b6a9`, following `8e20317`. Main and OpenBot/CopilotKit are untouched.
 
 Phase one ports OpenDuet functionality to iOS with OpenAI Agents API behind an authenticated gateway. Phase two applies ETERNAL's visual experience. **Phase one remains unfinished.** User approved isolated generated HTML artifacts on 2026-10-28; the shell and standard interface remain native SwiftUI.
+
+## Live follow milestone
+
+Native foreground sessions subscribe to the owned bounded gateway SSE feed. Provider events are notifications; the gateway reads coherent canonical surface/history/receipts under its existing session lock. Persistent publication ordering and native busy buffering prevent stale mutation rollback. Reconnect resubscribes before restoring and never replays input; EOF is not turn success. Older pagination and completed history survive live updates. Not token-by-token text streaming.
+
+63 gateway /49 Swift core /20 native tests and Debug/Release/plist gates pass. Independent review fixes are covered. Simulator confirmed automatic choice-to-form and relaunch live restoration; full keyboard form flow remains inconclusive. Actual-provider/key acceptance remains open.
 
 ## Implemented locally
 

@@ -1,15 +1,21 @@
 # Current verification evidence — 2026-10-28
 
-Latest implementation `e51621b`, following `423ab32`, branch `feature/agents-native-visual-contract-spike`. No API key, live OpenAI request or real external effect. Main and OpenBot are untouched. Phase one is incomplete.
+Latest implementation `511b6a9`, following `8e20317`, branch `feature/agents-native-visual-contract-spike`. No API key, live OpenAI request or real external effect. Main and OpenBot are untouched. Phase one is incomplete.
 
 | Layer | Executed | Result | Limit |
 |---|---|---|---|
-| Gateway/provider adapter | `node --test gateway/tests/*.test.mjs` | 52 passed, zero failed/skipped | Local HTTP/provider fixtures |
-| Swift core | `swift test --package-path ios/VisualRuntimeCore --scratch-path /private/tmp/euphoria-core-build --disable-sandbox` with temporary module caches | 45 XCTest passed, zero failures | Contracts/state/client on macOS |
-| Native | `EUPHORIA_BUILD_LOG_DIR=/private/tmp/euphoria-review-closure EUPHORIA_SIMULATOR_ID=<installed iOS27 UDID> bash ios/scripts/verify-xcode.sh` | Debug/Release + plist checks; 18 XCTest passed, no failures/skips; xcresult Passed | No physical device/signing or actual provider |
+| Gateway/provider adapter | `node --test gateway/tests/*.test.mjs` | 63 passed, zero failed/skipped | Local HTTP/provider fixtures |
+| Swift core | `swift test --package-path ios/VisualRuntimeCore --scratch-path /private/tmp/euphoria-core-build --disable-sandbox` with temporary module caches | 49 XCTest passed, zero failures | Contracts/state/client on macOS |
+| Native | `EUPHORIA_BUILD_LOG_DIR=/private/tmp/euphoria-live-verified EUPHORIA_SIMULATOR_ID=<installed iOS27 UDID> bash ios/scripts/verify-xcode.sh` | Debug/Release + plist checks; 20 XCTest passed, no failures/skips; xcresult Passed | No physical device/signing or actual provider |
 | Shared gallery fixture | Passed gateway schema/semantic validator and Swift fixture test | All nine supported gallery kinds plus HTML; 10 nodes | Fixture validation is not live generation or manual visual QA |
-| Current manual native QA | Request reached labelled localhost provider, Training choice accepted, refreshed into form | Real SwiftUI/HTTP + existing journal | Keyboard/input automation unreliable; no claimed full new gallery/manual flow |
+| Current manual native QA | Request reached labelled localhost provider, Training choice automatically advanced into form without Refresh; terminate/relaunch restored form and live connection | Real SwiftUI/HTTP + existing journal | Keyboard/input automation unreliable; no claimed full new gallery/manual flow |
 | Prior native trace, base ccc37ca | Request → choice → form → decline → idle; form draft survived terminate/relaunch | Three source-equivalent results once each | Prior milestone evidence, not a fresh expanded-catalog trace |
+
+## Live snapshot milestone
+
+Provider SSE tests cover fragmented UTF-8/CRLF, multiline data, byte bounds, malformed/non-SSE/foreign events and cancellation without retries. Actual local HTTP gateway tests cover ownership/revocation, publications across restart, action posts during subscription, coherent projection under deferred history and shutdown cleanup. Swift/native tests cover framing, session/publication validation, completed-item non-regression, pagination frontier preservation, stale/cross-session rejection and saved form drafts surviving live refresh.
+
+Fresh independent Terra/medium review identified pagination and projection ordering/receipt issues. The important findings were fixed in one regression-driven pass. Full native keyboard flow remains inconclusive; no live OpenAI inference or external effects are claimed. Raw logs and xcresults are retained in temporary local directories, not committed.
 
 ## Behavior verified by tests
 
@@ -60,4 +66,4 @@ No production identity, streaming, cloud restoration, webhooks/APNs, scheduled w
 
 Terra/medium review resumed after user reported restored capacity. It found an Important Swift/JS Unicode identity mismatch and Minor explicit-null label coercion. Both were verified with failing tests; related null event context was also covered. Native selection equality, uniqueness, membership, toggling and SwiftUI row identity now preserve distinct UTF-16 sequences, including composed/decomposed Unicode options. Scalar string/list and option metadata equality retain exact wire identity. Null label/context are rejected rather than treated as absent.
 
-Fresh checks:52 gateway tests,45 Swift core tests,18 iOS tests passed, Debug/Release/plist passed; native script exited0. Logs `/private/tmp/euphoria-review-closure-node.log`, `/private/tmp/euphoria-review-closure-core.log`, `/private/tmp/euphoria-review-closure-native.log`; native xcresult `/private/tmp/euphoria-review-closure/Debug-tests-20261028T123358-38900.xcresult`. RED logs use the same prefix with `red-node`, `red-core` and `null-context-red`. The earlier independent-review-pending statements describe the prior milestone and are superseded by this completed review/fix pass. No second review claimed; no live provider or external execution qualified.
+Fresh checks:52 gateway tests,45 Swift core tests,18 iOS tests passed, Debug/Release/plist passed; native script exited0. Logs `/private/tmp/euphoria-live-verified-node.log`, `/private/tmp/euphoria-live-verified-core.log`, `/private/tmp/euphoria-live-verified-native.log`; native xcresult `/private/tmp/euphoria-live-verified/Debug-tests-20261028T123358-38900.xcresult`. RED logs use the same prefix with `red-node`, `red-core` and `null-context-red`. The earlier independent-review-pending statements describe the prior milestone and are superseded by this completed review/fix pass. No second review claimed; no live provider or external execution qualified.

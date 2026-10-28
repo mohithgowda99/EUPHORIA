@@ -42,7 +42,7 @@ This deliberately labelled fixture binds127.0.0.1:8788, using the non-secret tes
 - Conversation routes: POST sessions/:id/messages or /cancel; GET sessions/:id/inputs; POST sessions/:id/inputs/reconcile. Same journal/ownership rules apply. Definitive provider rejections are terminal; unknown effects stay uncertain and are not resent.
 - GET sessions/:id/items supports bounded newest-first provider pages with after cursor. Native pages return chronological entries and order=desc. Known message/tool/surface projections only; unsupported raw tool data is not exposed. A UI approval is a response, never a business-effect executor.
 
-SQLite is a single-process local service journal, with owner/session mapping, active submitted surfaces and action receipts. Personal archives stay on-device; submitted model context and provider history are remote processing. Store directory/DB are private locally; deployment encryption, quotas, retention/deletion, production identity, streaming, webhooks and distributed concurrency are not qualified. Action journal limit500 per session. Provider-outcome reconciliation for genuinely uncertain writes still requires authoritative evidence; there is no unsafe retry button.
+SQLite is a single-process local service journal, with owner/session mapping, active submitted surfaces and action receipts. Personal archives stay on-device; submitted model context and provider history are remote processing. Store directory/DB are private locally; deployment encryption, quotas, retention/deletion, production identity, token-delta streaming, webhooks and distributed concurrency are not qualified. Action journal limit500 per session. Provider-outcome reconciliation for genuinely uncertain writes still requires authoritative evidence; there is no unsafe retry button.
 
 Protocol references checked2026-10-28:
 - https://developers.openai.com/api/docs/guides/agents-api/quickstart
@@ -57,3 +57,9 @@ The existing `euphoria_render_surface` function also accepts `{a2ui:[...]}` with
 The adapter publishes canonical native askForm data. Submitted edits preserve empty strings/whitespace, booleans and empty/single/multiple selection arrays and produce a source userAction event with resolved context and a once-assigned timestamp. Existing ownership, revision, exact call/turn IDs and journal/idempotency rules apply. No React/A2UI runtime dependency is added to the iOS app. This is partial form conformance, not full A2UI support.
 
 Checkboxes use actual booleans. ChoicePicker values are arrays even in mutuallyExclusive mode; labelled option values are validated, unique and bounded to20 items. Omitted variant matches the pinned renderer's multiple-selection behavior. Filters, chips, dynamic labels, nested/shared bindings and validators remain unsupported. These are source-form capabilities, not a claim of the entire basic catalog.
+
+## Live canonical snapshots
+
+`GET /v1/sessions/:id/events` requires the same owner authentication. It opens provider SSE before canonical restoration reads and emits `event: update` JSON `{snapshot,history,inputs}`. Provider event bodies stay server-side. Snapshot `publication` is a persistent per-session monotonic projection sequence, separate from surface revision. Projection reads share the existing session lock; subscriptions do not hold that lock between publications. Frames cap at1MiB, provider frames128KiB; at most2 streams per owner/session,55-second lease,10-second heartbeat and2-second backpressure deadline. EOF/reconnect is not successful execution. Clients resubscribe/restore, never resend effects. No model token deltas are exposed yet.
+
+Official protocol: https://developers.openai.com/api/docs/guides/agents-api/sessions/events

@@ -1,3 +1,7 @@
+# Current Agents API native validation
+
+On `feature/agents-native-visual-contract-spike`, implementation `511b6a9` adds foreground live canonical snapshots/reconnection to the Debug gateway session proof. `ios/scripts/verify-xcode.sh` now requires **20 XCTest passes**, Debug/Release builds and built-plist checks. Core suite:49; gateway suite:63. No live provider/key execution is verified. Native local QA confirms automatic choice-to-form plus relaunch restoration; keyboard automation did not establish a full form flow. The sections below describe earlier archived milestones; use `docs/NOW.md` and `docs/agents/TEST_EVIDENCE.md` for current status.
+
 # Euphoria native iOS
 
 Native SwiftUI application target `Euphoria`, iOS27. Standard controls remain native; generated artifacts alone use isolated WebKit. OpenDuet under `openbot/app/` is the behavioral reference.

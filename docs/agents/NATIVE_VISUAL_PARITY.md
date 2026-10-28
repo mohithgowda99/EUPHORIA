@@ -2,6 +2,10 @@
 
 Status: **source-backed inventory with local native/gateway continuation, gallery and isolated-artifact proof; NOT full feature parity or live Agents API verification.** Reviewed OpenDuet baseline `5b0e15f9719db0628c02a3fe6386dcad683c8302`; starting native foundation `ba91291e75b84c71e18a00edec2db42f079cf4a5`. CopilotKit implementation remains untouched. Canonical route inventory: `docs/ios/FEATURE_PARITY.md` (79 TSX route files, including layouts). This specification extends, rather than silently replaces, that ledger.
 
+## Live snapshot transport — implementation511b6a9
+
+Owned `GET /v1/sessions/:id/events` emits bounded sanitized `update` frames containing snapshot/history/input receipts. Two subscriptions per owner/session, finite lease, backpressure timeout, cancellation, reauthentication before publication and shutdown cleanup. A per-session persistent publication sequences coherent canonical projection reads. The Swift client validates frames/session IDs and applies through existing native state and archives, buffers the latest update during local operations and reconnects only for the active selected screen. No raw provider event authority or automatic write retries. Token-delta text, live-provider execution and production background continuation remain unverified/unimplemented.
+
 ## Mapped contracts from source
 
 | Contract family | Exact source reference | Behavioral contract | Native milestone |

@@ -7,6 +7,7 @@
     objects = {
 
 /* Begin PBXBuildFile section */
+        0000000000000000000000ED /* SourceOpenDuetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000EC /* SourceOpenDuetTests.swift */; };
         0000000000000000000000E9 /* SourceMessageIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000E8 /* SourceMessageIntent.swift */; };
         0000000000000000000000EB /* SourceConversationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000EA /* SourceConversationsView.swift */; };
         0000000000000000000000E7 /* SourceApprovalsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000E6 /* SourceApprovalsView.swift */; };
@@ -59,6 +60,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+        0000000000000000000000EC /* SourceOpenDuetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceOpenDuetTests.swift; sourceTree = "<group>"; };
         0000000000000000000000E8 /* SourceMessageIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceMessageIntent.swift; sourceTree = "<group>"; };
         0000000000000000000000EA /* SourceConversationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceConversationsView.swift; sourceTree = "<group>"; };
         0000000000000000000000E6 /* SourceApprovalsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceApprovalsView.swift; sourceTree = "<group>"; };
@@ -161,7 +163,7 @@
         };
         000000000000000000000004 /* EuphoriaTests */ = {
             isa = PBXGroup;
-            children = (000000000000000000000064 /* ArtifactIsolationTests.swift */, 000000000000000000000044 /* GatewaySessionTests.swift */, 000000000000000000000011 /* OpenBotEndpointTests.swift */, 000000000000000000000029 /* VisualPersistenceTests.swift */);
+            children = (0000000000000000000000EC /* SourceOpenDuetTests.swift */, 000000000000000000000064 /* ArtifactIsolationTests.swift */,  000000000000000000000044 /* GatewaySessionTests.swift */, 000000000000000000000011 /* OpenBotEndpointTests.swift */, 000000000000000000000029 /* VisualPersistenceTests.swift */);
             path = EuphoriaTests;
             sourceTree = "<group>";
         };
@@ -282,7 +284,7 @@
         00000000000000000000000B /* Sources */ = {
             isa = PBXSourcesBuildPhase;
             buildActionMask = 2147483647;
-            files = (000000000000000000000074 /* ArtifactIsolationTests.swift in Sources */, 000000000000000000000054 /* GatewaySessionTests.swift in Sources */, 000000000000000000000017 /* OpenBotEndpointTests.swift in Sources */, 000000000000000000000035 /* VisualPersistenceTests.swift in Sources */);
+            files = (0000000000000000000000ED /* SourceOpenDuetTests.swift in Sources */, 000000000000000000000074 /* ArtifactIsolationTests.swift in Sources */,  000000000000000000000054 /* GatewaySessionTests.swift in Sources */, 000000000000000000000017 /* OpenBotEndpointTests.swift in Sources */, 000000000000000000000035 /* VisualPersistenceTests.swift in Sources */);
             runOnlyForDeploymentPostprocessing = 0;
         };
 /* End PBXSourcesBuildPhase section */

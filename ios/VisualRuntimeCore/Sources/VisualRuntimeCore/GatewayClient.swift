@@ -101,6 +101,17 @@ public struct GatewayClient: Sendable {
         if let after { path += "&after=" + (try validatedID(after)) }
         return try await request(path)
     }
+    /// Actual task identities from /v1/tasks, not the gateway's session roster.
+    /// This is a transition adapter until OpenDuet's original TaskRecord service
+    /// runs with Agents execution. No second task cache or action journal.
+    public func listTasks(after: String? = nil) async throws -> GatewayTaskList {
+        var path = "v1/tasks?limit=20"
+        if let after { path += "&after=" + (try validatedID(after)) }
+        return try await request(path)
+    }
+    public func task(id: String) async throws -> GatewayTaskDetail {
+        try await request("v1/tasks/" + validatedID(id))
+    }
     public func sendMessage(sessionID: String, message: String, id: String) async throws -> GatewayInputReceipt {
         struct Input: Encodable { let id: String; let message: String }
         return try await request("v1/sessions/" + validatedID(sessionID) + "/messages", method: "POST",
@@ -180,6 +191,65 @@ public struct GatewayClient: Sendable {
         catch { throw GatewayClientError.invalidResponse }
     }
 }
+/// Native read projection of the real, owned task v1 contract.
+/// This is NOT an OpenDuet TaskRecord: source bot/channel/next fields are
+/// unavailable in the transitional gateway and must not be invented.
+public struct GatewayTask: Decodable, Sendable, Identifiable {
+    public let id: String
+    public let title: String
+    public let instruction: String
+    public let sessionID: String?
+    public let status: String
+    public let deliveryPhase: String
+    public let pendingNodeIDs: [String]
+    public let failure: String?
+    public let createdAt: String
+    public let updatedAt: String
+    public let resolvedAt: String?
+    private enum CodingKeys: String, CodingKey {
+        case id, title, instruction, sessionID, status, deliveryPhase,
+             pendingNodeIDs, failure, createdAt, updatedAt, resolvedAt
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        instruction = try c.decode(String.self, forKey: .instruction)
+        sessionID = try c.decodeIfPresent(String.self, forKey: .sessionID)
+        status = try c.decode(String.self, forKey: .status)
+        deliveryPhase = try c.decode(String.self, forKey: .deliveryPhase)
+        pendingNodeIDs = try c.decode([String].self, forKey: .pendingNodeIDs)
+        failure = try c.decodeIfPresent(String.self, forKey: .failure)
+        createdAt = try c.decode(String.self, forKey: .createdAt)
+        updatedAt = try c.decode(String.self, forKey: .updatedAt)
+        resolvedAt = try c.decodeIfPresent(String.self, forKey: .resolvedAt)
+        guard id.range(of: "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", options: .regularExpression) != nil,
+              title.count <= 160, instruction.count <= 4000,
+              failure.map({ $0.count <= 2000 }) ?? true,
+              ["needs_input", "working", "resolved", "failed", "ready_for_review"].contains(status),
+              pendingNodeIDs.count <= 200,
+              sessionID.map({ $0.range(of: "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", options: .regularExpression) != nil }) ?? true
+        else { throw GatewayClientError.invalidResponse }
+    }
+}
+public struct GatewayTaskList: Decodable, Sendable {
+    public let tasks: [GatewayTask]
+    public let hasMore: Bool
+    public let nextCursor: String?
+    private enum CodingKeys: String, CodingKey { case tasks, hasMore, nextCursor }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        tasks = try c.decode([GatewayTask].self, forKey: .tasks)
+        hasMore = try c.decode(Bool.self, forKey: .hasMore)
+        nextCursor = try c.decodeIfPresent(String.self, forKey: .nextCursor)
+        guard tasks.count <= 20,
+              Set(tasks.map(\.id)).count == tasks.count,
+              hasMore ? (!tasks.isEmpty && nextCursor == tasks.last?.id) : nextCursor == nil
+        else { throw GatewayClientError.invalidResponse }
+    }
+}
+public struct GatewayTaskDetail: Decodable, Sendable { public let task: GatewayTask }
+
 private final class RejectGatewayRedirects: NSObject, URLSessionTaskDelegate, Sendable {
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) { completionHandler(nil) }

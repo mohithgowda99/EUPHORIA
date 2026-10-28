@@ -357,6 +357,22 @@ export function createDeliveryStore(database: Database) {
         .set({ state, error })
         .where(eq(deliveryInbox.id, id));
     },
+    /**
+     * Finalize only an accepted managed turn, never a merely submitted or
+     * possibly re-running delivery. A concurrent recovery can settle once,
+     * with the existing source Inbox as the single state authority.
+     */
+    async settleAcceptedInbox(
+      id: string,
+      state: "sent" | "failed",
+      error: string | null = null,
+    ): Promise<boolean> {
+      const rows = await database.update(deliveryInbox)
+        .set({ state, error })
+        .where(and(eq(deliveryInbox.id, id), eq(deliveryInbox.state, "accepted")))
+        .returning({ id: deliveryInbox.id });
+      return rows.length === 1;
+    },
     async outbox(id: string) {
       return (
         (

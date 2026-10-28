@@ -143,13 +143,26 @@ For every tool record: exact name; offered conditions; parameter schema; read vs
 | Debug/Release native builds | Passed; 18 iOS XCTest passed, no failures/skips | Signing/physical-device qualification |
 | Approval-note draft recovery | Core and on-disk SwiftData reopen passed; node/revision scoped and locked after submission | Full live external approval workflow |
 | Native choice/form/approval result | Gateway fixture tests and prior native three-step trace; current request/choice trace accepted | Real provider and external executor |
-| Conversation follow-up/cancel/history | 49 gateway and 42 core suite totals; owned endpoints, intent journal, newest-window pagination and persisted re-entry | Live API, streaming, attachments/grouped/rich AG-UI parity; new full native manual trace incomplete |
-| A2UI source form | Source text/boolean/single/multiple controls → native edit/reopen/locking → typed source event through the existing journal;49 gateway/42 core/18 iOS totals | Nested/shared bindings and remaining basic catalog, dynamic layouts/functions/bindings/grants; full source parity |
+| Conversation follow-up/cancel/history | 52 gateway and 45 core suite totals; owned endpoints, intent journal, newest-window pagination and persisted re-entry | Live API, streaming, attachments/grouped/rich AG-UI parity; new full native manual trace incomplete |
+| A2UI source form | Source text/boolean/single/multiple controls → native edit/reopen/locking → typed source event through the existing journal;52 gateway/45 core/18 iOS totals | Nested/shared bindings and remaining basic catalog, dynamic layouts/functions/bindings/grants; full source parity |
 | Gallery/HTML | Nine native gallery types and isolated HTML; shared 10-node fixture validates in Swift and gateway; real WebKit tests execute inline interaction and block fetch | Dynamic grants/registries, A2UI bindings, source formatting options, full online sandboxed tools |
 | Production auth/deployment | Development-token owner isolation tests | Real identity verifier, login/revoke, hosted deployment, distributed state |
 | Computer/integrations/routines/admin and all other routes | Source inventory only | Native/service implementation and end-to-end traces |
 
 Counts are totals, not per-feature coverage. Exact commands, failed attempts and retained local evidence: `../agents/TEST_EVIDENCE.md`.
+
+## Recommended phase-one closure order
+
+The current native interaction foundation is tested. The following are product milestones, not completed features or a percentage estimate. Existing source routes/tools remain the full reference; changing that scope requires an explicit user decision.
+
+1. [ ] **Live agent vertical journey:** actual provider session, native streaming, supported interactive UI, real tool-result continuation, cancellation/interruption and authoritative restoration. The adapter code exists; live behavior remains unverified.
+2. [ ] **Generated interface coverage:** nested/shared model bindings, remaining catalog/layout/actions, rich persisted pages, dynamic component/tool grants and full sandboxed-tool behavior. Current form/gallery/artifact support is partial.
+3. [ ] **Usable native product workflows:** actual app navigation, inbox/channels/groups, bots/skills/memory, tasks/questions, routines/responsibilities/reachability, attachments/voice/notifications and team/admin/policy flows. Debug fixture menus are development proof, not these workflows.
+4. [ ] **Real execution and integrations:** OAuth/grants/credentials and tool adapters; hosted computer/browser/files/commands, takeover/secret entry and durable server-owned approvals/audit. Rendering an approval is not executor implementation.
+5. [ ] **Account and deployed service readiness:** production login/token verification/revocation, ownership/access controls, secure hosted gateway, durable background schedules/task state, privacy/retention/deletion and deployment/device configuration. Personal data remains device-first; minimal ownership/operation/credential services are still required.
+6. [ ] **Acceptance against the full source inventory:** native traces for supported routes/tools including failure, denied/revoked access, network interruption, duplicate delivery, cancel/reopen and physical-device use; actual provider and server effects. Test totals and compilation cannot close these gates alone.
+
+Custom ETERNAL visual treatment is phase two. Phase one still needs coherent native product screens and working source behavior. Provider credentials unlock live verification; most missing implementation can proceed independently.
 
 ## Definition of "complete"
 

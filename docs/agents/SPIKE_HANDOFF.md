@@ -1,6 +1,6 @@
 # EUPHORIA phase-one handoff
 
-Updated 2026-10-28. Branch `feature/agents-native-visual-contract-spike`, latest implementation `423ab32`, following `c126000`. Main and OpenBot/CopilotKit are untouched.
+Updated 2026-10-28. Branch `feature/agents-native-visual-contract-spike`, latest implementation `e51621b`, following `423ab32`. Main and OpenBot/CopilotKit are untouched.
 
 Phase one ports OpenDuet functionality to iOS with OpenAI Agents API behind an authenticated gateway. Phase two applies ETERNAL's visual experience. **Phase one remains unfinished.** User approved isolated generated HTML artifacts on 2026-10-28; the shell and standard interface remain native SwiftUI.
 
@@ -25,4 +25,4 @@ Remaining A2UI data bindings/actions and dynamic per-Bot grants; rich page block
 
 These are code and service gaps, not all API-key blockers. A key is needed only for real-provider acceptance. No real OpenAI request or external action has been verified. Development bearer identity and single-process SQLite are not production authentication or distributed execution.
 
-Next: obtain the pending independent review of423ab32 when reviewer capacity is available. The fresh reviewer attempt hit a service usage limit; local review and all tests passed. Further implementation is nested/shared bindings through the same boundary. Do not restart or adopt another runtime merely to expand the catalog.
+Independent review resumed and completed; Unicode wire-identity and explicit-null defects were fixed with RED→GREEN regressions. Fresh52 gateway/45 core/18 iOS tests and Debug/Release pass. Next: a real streamed native agent journey and authoritative reopen through the existing gateway, with live credentials for acceptance. Broader UI/workflow/service parity remains required; see the recommended closure order in FEATURE_PARITY.md. Do not restart or adopt another runtime merely to expand the catalog.

@@ -353,7 +353,9 @@ private struct SourceBotDetailView: View {
                             editing = false
                             Task {
                                 await mutate {
-                                    let changes = try SourceBotInput(name: name, title: title, instructions: instructions)
+                                    guard let original = bot else { throw SourceAPIError.invalidResponse }
+                                    let changes = try SourceBotChange(previous: original,
+                                        name: name, title: title, instructions: instructions)
                                     _ = try await client.updateBot(id: botID, input: changes)
                                 }
                             }

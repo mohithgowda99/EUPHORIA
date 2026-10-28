@@ -10,8 +10,11 @@ struct GatewaySessionView: View {
     @State private var setupError: String?
     @State private var showsDevelopmentTools = false
     private let showsRoster: Bool
-    init(model: GatewaySessionModel? = nil) {
-        _model = State(initialValue: model); showsRoster = model == nil
+    private let screenTitle: String
+    init(model: GatewaySessionModel? = nil, title: String = "Chat") {
+        _model = State(initialValue: model)
+        showsRoster = model == nil
+        screenTitle = title
     }
     var body: some View {
         List {
@@ -69,7 +72,7 @@ struct GatewaySessionView: View {
                 }
             }
         }
-        .navigationTitle("Chat")
+        .navigationTitle(screenTitle)
         #if DEBUG
         .toolbar {
             ToolbarItem(placement: .secondaryAction) {

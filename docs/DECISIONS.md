@@ -8,3 +8,5 @@ These record explicit user choices from the project conversation, not proposed a
 - **Personal data:** keep personal records on-device by default. Authentication, app data and integration credentials still need working boundaries; Sign in with Apple was suggested for exploration, not selected as an implemented auth solution.
 - **Execution:** continue phase one without waiting for an API key; verify the actual provider when one is available. No fake inference fallback.
 - **Source control, 2026-10-28:** push implementation and context to the EUPHORIA repository, then continue the next work. This authorizes feature-branch pushes, not an implicit main merge.
+
+- **Live testing, 2026-10-28:** user selected GPT-6 Luna (`gpt-6-luna`) and requested a local environment file for entering the server-side API key. Do not put the key in app code or Git.

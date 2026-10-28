@@ -143,7 +143,7 @@ For every tool record: exact name; offered conditions; parameter schema; read vs
 | Debug/Release native builds | Passed; 18 iOS XCTest passed, no failures/skips | Signing/physical-device qualification |
 | Approval-note draft recovery | Core and on-disk SwiftData reopen passed; node/revision scoped and locked after submission | Full live external approval workflow |
 | Native choice/form/approval result | Gateway fixture tests and prior native three-step trace; current request/choice trace accepted | Real provider and external executor |
-| Conversation follow-up/cancel/history | 63 gateway /49 core /20 native suite totals; owned endpoints, intent journal, newest-window pagination, bounded live snapshots/reconnect and persisted re-entry | Live API, token-delta text, attachments/grouped/rich AG-UI parity; complete new manual flow remains incomplete |
+| Conversation follow-up/cancel/history | 77 gateway /49 core /20 native suite totals; owned endpoints, intent journal, newest-window pagination, bounded live snapshots/reconnect and persisted re-entry | Bounded real Luna/native continuation verified; fully native-created journey has an uncertain-refusal negative case. Token-delta text and attachments/grouped/rich parity remain open |
 | A2UI source form | Source text/boolean/single/multiple controls → native edit/reopen/locking → typed source event through the existing journal;52 gateway/45 core/18 iOS totals | Nested/shared bindings and remaining basic catalog, dynamic layouts/functions/bindings/grants; full source parity |
 | Gallery/HTML | Nine native gallery types and isolated HTML; shared 10-node fixture validates in Swift and gateway; real WebKit tests execute inline interaction and block fetch | Dynamic grants/registries, A2UI bindings, source formatting options, full online sandboxed tools |
 | Production auth/deployment | Development-token owner isolation tests | Real identity verifier, login/revoke, hosted deployment, distributed state |
@@ -167,3 +167,7 @@ Custom ETERNAL visual treatment is phase two. Phase one still needs coherent nat
 ## Definition of "complete"
 
 No silent omissions; every route, modal, tool registration, background process, permission and error branch has an entry and a real native trace. Tests must show equivalent server effects, not pixel-identical browser output. All unverified items stay unverified after a compile-only milestone.
+
+## Current actual-provider acceptance —2026-10-28
+
+Implementation5e5d6e0, gpt-6-luna. Actual gateway-created session produced corrected native choice, accepted one native response, delivered completed text and restored idle/locked state after relaunch. A native-created second session became uncertain while reporting malformed render; no replay. Thus the live-agent closure checkbox remains open. No live external computer/file/integration action, production login, phone hosting, background or full catalog claim. Nested absolute object paths are now supported; shared aliases remain missing. Full counts/evidence are in docs/agents/TEST_EVIDENCE.md.

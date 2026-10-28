@@ -1,14 +1,20 @@
 # EUPHORIA phase-one handoff
 
-Updated 2026-10-28. Branch `feature/agents-native-visual-contract-spike`, latest implementation `511b6a9`, following `8e20317`. Main and OpenBot/CopilotKit are untouched.
+Updated 2026-10-28. Branch `feature/agents-native-visual-contract-spike`, latest implementation `5e5d6e0`, following `a81d2cb`. Main and OpenBot/CopilotKit are untouched.
 
 Phase one ports OpenDuet functionality to iOS with OpenAI Agents API behind an authenticated gateway. Phase two applies ETERNAL's visual experience. **Phase one remains unfinished.** User approved isolated generated HTML artifacts on 2026-10-28; the shell and standard interface remain native SwiftUI.
+
+## Current nested/live milestone
+
+User configured the ignored server key and chose gpt-6-luna. Nested object paths normalize through the same native form contract with bounded replacement semantics. Shared control aliases/relative/array paths still fail explicitly. Unsupported render calls can receive bounded durable error feedback via existing action journal; no automatic retry after uncertain delivery and no false decision acknowledgment. Review identity bypasses are fixed and covered.
+
+77 gateway /49 core /20 native tests, Debug/Release/plist gates pass. Real positive journey: gateway HTTP request → corrected supported choice → native Staging tap → real completed response → locked/idle/live relaunch. Real negative journey: native-created request's malformed-render error delivery uncertain and not replayed. Next is diagnosing that delivery case and accepting a fully native-created journey; full parity remains open. See TEST_EVIDENCE.md before any live capability claim.
 
 ## Live follow milestone
 
 Native foreground sessions subscribe to the owned bounded gateway SSE feed. Provider events are notifications; the gateway reads coherent canonical surface/history/receipts under its existing session lock. Persistent publication ordering and native busy buffering prevent stale mutation rollback. Reconnect resubscribes before restoring and never replays input; EOF is not turn success. Older pagination and completed history survive live updates. Not token-by-token text streaming.
 
-63 gateway /49 Swift core /20 native tests and Debug/Release/plist gates pass. Independent review fixes are covered. Simulator confirmed automatic choice-to-form and relaunch live restoration; full keyboard form flow remains inconclusive. Actual-provider/key acceptance remains open.
+77 gateway /49 Swift core /20 native tests and Debug/Release/plist gates pass. Independent review fixes are covered. Simulator confirmed automatic choice-to-form and relaunch live restoration; full keyboard form flow remains inconclusive. The broader actual-provider acceptance gate remains open; bounded positive/negative traces are recorded above.
 
 ## Implemented locally
 

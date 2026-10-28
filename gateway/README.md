@@ -19,7 +19,7 @@ Configure these as **server process secrets/settings**, then run from the reposi
 node gateway/server.mjs
 ```
 
-Required environment: `OPENAI_API_KEY`, explicit `EUPHORIA_MODEL`, and `EUPHORIA_DEV_TOKEN` (at least32 characters). Optional: `EUPHORIA_STATE_DIR`, `EUPHORIA_PORT` (default8787). Nothing prints credentials. The launcher binds127.0.0.1 only. It uses development identity and is not production Sign in with Apple, a public proxy or a phone-independent deployment. Real OpenAI access is unverified until a key is available.
+Required environment: `OPENAI_API_KEY`, explicit `EUPHORIA_MODEL`, and `EUPHORIA_DEV_TOKEN` (at least32 characters). Optional: `EUPHORIA_STATE_DIR`, `EUPHORIA_PORT` (default8787). Nothing prints credentials. The launcher binds127.0.0.1 only. It uses development identity and is not production Sign in with Apple, a public proxy or a phone-independent deployment. Bounded actual GPT-6 Luna/native interaction is verified; full native-created/failure recovery acceptance remains open (see docs/NOW.md).
 
 In the iOS Debug scheme's launch environment set `EUPHORIA_GATEWAY_URL` to the development gateway URL and `EUPHORIA_GATEWAY_TOKEN` to the development token. Open **Visual contract proof → Open gateway session**. The app receives no OpenAI key. Local HTTP is permitted only for an explicitly enabled loopback connection. Release does not enable this Debug connection UI or local ATS exception.
 
@@ -52,7 +52,7 @@ Protocol references checked2026-10-28:
 
 ## Source A2UI form adapter
 
-The existing `euphoria_render_surface` function also accepts `{a2ui:[...]}` with source v0.9 createSurface/updateComponents/updateDataModel messages. The supported shape is the source-tested Card → Column → heading/1–8 bound TextField, CheckBox or ChoicePicker controls/one event Button. Flat text/boolean/string-list model paths only; unsupported catalog features fail explicitly. See `tests/fixtures/a2ui-trip-v09.json` and the [adapter design](../docs/superpowers/specs/2026-10-28-a2ui-form-adapter-design.md).
+The existing `euphoria_render_surface` function also accepts `{a2ui:[...]}` with source v0.9 createSurface/updateComponents/updateDataModel messages. The supported shape is the source-tested Card → Column → heading/1–8 bound TextField, CheckBox or ChoicePicker controls/one event Button. Bounded absolute nested-object text/boolean/string-list model paths; unsupported catalog features fail explicitly. See `tests/fixtures/a2ui-trip-v09.json` and the [adapter design](../docs/superpowers/specs/2026-10-28-a2ui-form-adapter-design.md).
 
 The adapter publishes canonical native askForm data. Submitted edits preserve empty strings/whitespace, booleans and empty/single/multiple selection arrays and produce a source userAction event with resolved context and a once-assigned timestamp. Existing ownership, revision, exact call/turn IDs and journal/idempotency rules apply. No React/A2UI runtime dependency is added to the iOS app. This is partial form conformance, not full A2UI support.
 
@@ -63,3 +63,11 @@ Checkboxes use actual booleans. ChoicePicker values are arrays even in mutuallyE
 `GET /v1/sessions/:id/events` requires the same owner authentication. It opens provider SSE before canonical restoration reads and emits `event: update` JSON `{snapshot,history,inputs}`. Provider event bodies stay server-side. Snapshot `publication` is a persistent per-session monotonic projection sequence, separate from surface revision. Projection reads share the existing session lock; subscriptions do not hold that lock between publications. Frames cap at1MiB, provider frames128KiB; at most2 streams per owner/session,55-second lease,10-second heartbeat and2-second backpressure deadline. EOF/reconnect is not successful execution. Clients resubscribe/restore, never resend effects. No model token deltas are exposed yet.
 
 Official protocol: https://developers.openai.com/api/docs/guides/agents-api/sessions/events
+
+## Private local configuration and current live evidence
+
+The user-requested `gateway/.env` is Git-ignored with mode0600. Set OPENAI_API_KEY there, with EUPHORIA_MODEL=gpt-6-luna and the generated local EUPHORIA_DEV_TOKEN; never copy the provider key into iOS. From repo root run `node --env-file=gateway/.env gateway/server.mjs`. Node reads the env file as configuration, not shell code. No secrets are printed.
+
+Nested bindings permit1–8 safe named segments and object data bounded at32 entries/object,128 total/depth8. Root/subtree updates replace previous values. Relative paths, array indexing, escaped/prototype keys, shared aliases and arbitrary functions are unsupported.
+
+Invalid euphoria_render_surface arguments can receive a once-only provider error, journaled before submission. Cap3 corrections per turn/500 actions per session; uncertain error delivery is never retried automatically. Published/refused call identities cannot mutate into a new decision. No accepted human action receipt is fabricated for a refusal. Actual test1 corrected and completed through native selection; test2's error delivery is uncertain, so full acceptance stays open. Official wire semantics: https://developers.openai.com/api/docs/guides/agents-api/tools/functions

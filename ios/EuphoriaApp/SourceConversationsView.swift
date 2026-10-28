@@ -14,6 +14,7 @@ struct SourceConversationsHomeView: View {
     @State private var error: String?
     @State private var choosingBot = false
     @State private var createdConversation: SourceConversation?
+    @State private var opensCreatedConversation = false
 
     var body: some View {
         List {
@@ -74,13 +75,13 @@ struct SourceConversationsHomeView: View {
         } message: {
             Text("OpenDuet creates a real, owned channel for the selected Bot.")
         }
-        .navigationDestination(item: $createdConversation) { conversation in
-            if let client, let ownerScope {
-                SourceConversationDetailView(client: client, ownerScope: ownerScope, conversation: conversation)
+        .navigationDestination(isPresented: $opensCreatedConversation) {
+            if let client, let ownerScope, let createdConversation {
+                SourceConversationDetailView(client: client, ownerScope: ownerScope, conversation: createdConversation)
             }
         }
         .refreshable { await refresh() }
-        .task { await refresh() }
+        .onAppear { Task { await refresh() } }
     }
 
     private func refresh() async {
@@ -123,6 +124,7 @@ struct SourceConversationsHomeView: View {
             let created = try await client.createSourceConversation(withBot: botID)
             conversations = try await client.sourceConversations().conversations
             createdConversation = created
+            opensCreatedConversation = true
             error = nil
         } catch {
             // A lost response can have created a channel. Never blindly create
@@ -216,6 +218,7 @@ struct SourceConversationDetailView: View {
             if selectedBotID.isEmpty { selectedBotID = conversation.agentIds.first ?? "" }
             await reload()
         }
+        .onChange(of: selectedBotID) { _, _ in Task { await reload() } }
     }
 
     private func reload() async {

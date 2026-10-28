@@ -128,6 +128,70 @@ final class SourceOpenDuetTests: XCTestCase, @unchecked Sendable {
         XCTAssertThrowsError(try SourceSessionCookie.extract(from: url))
     }
 
+    func testOriginalTaskStoreCreationAndReplyNeverUseProviderSessionIDs() async throws {
+        let task = #"{"id":"source_task","botId":"bot1","channelId":"source_channel","title":"Prepare analysis","why":null,"status":"working","next":null,"failure":null,"resolvedAt":null,"createdAt":"2026-10-28T00:00:00Z","updatedAt":"2026-10-28T00:00:00Z"}"#
+        let observed = SourceRequestBox()
+        SourceTestProtocol.box.set { req in
+            observed.record(req)
+            switch (req.httpMethod, req.url?.path) {
+            case ("GET", "/api/openduet/tasks"):
+                return (200, Data("{\"tasks\":[\\(task)]}".utf8))
+            case ("POST", "/api/openduet/tasks"):
+                return (201, Data("{\"task\":\\(task)}".utf8))
+            case ("POST", "/api/openduet/tasks/source_task/reply"):
+                return (202, Data("{\"task\":\\(task)}".utf8))
+            default:
+                return (404, Data("{}".utf8))
+            }
+        }
+        let source = try client()
+        let first = try await source.sourceTasks()
+        XCTAssertEqual(first.first?.channelId, "source_channel")
+        let created = try await source.createSourceTask(botID: "bot1", title: "Prepare analysis",
+            instruction: "Prepare a safe analysis")
+        XCTAssertEqual(created.id, "source_task")
+        let creationBody = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: XCTUnwrap(observed.last?.httpBody)) as? [String:String])
+        XCTAssertEqual(creationBody, ["botId":"bot1","title":"Prepare analysis",
+                                       "instruction":"Prepare a safe analysis"])
+        let id = "b2f04541-d95f-4852-9a13-87ee4bc1a1cb"
+        let replied = try await source.sourceTaskReply(id: "source_task", message: "Continue", messageID: id)
+        XCTAssertEqual(replied.id, "source_task")
+        XCTAssertEqual(observed.last?.url?.path, "/api/openduet/tasks/source_task/reply")
+        let replyBody = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: XCTUnwrap(observed.last?.httpBody)) as? [String:String])
+        XCTAssertEqual(replyBody, ["reply":"Continue","messageId":id])
+        // Crucially original source request has NO provider sessionID and
+        // NO alternate task-execution or journal contract.
+    }
+
+    func testOriginalSkillGrantsStayScopedToBotAndNeverBecomeManagedMCPPermission() async throws {
+        let observed = SourceRequestBox()
+        SourceTestProtocol.box.set { req in
+            observed.record(req)
+            if req.httpMethod == "POST" || req.httpMethod == "DELETE" {
+                return (200, Data(#"{"ok":true}"#.utf8))
+            }
+            if req.url?.path == "/api/plugins" {
+                return (200, Data(#"{"skills":[{"slug":"research","title":"Research","summary":"Use read-only sources"}]}"#.utf8))
+            }
+            return (200, Data(#"{"tools":[],"skills":[]}"#.utf8))
+        }
+        let api = try client()
+        let skills = try await api.sourceSkills()
+        XCTAssertEqual(skills.first?.slug, "research")
+        _ = try await api.sourceBotGrants(botID: "bot1")
+        XCTAssertEqual(observed.last?.url?.path, "/api/plugins/for/bot1")
+        try await api.setSourceSkillGrant(botID: "bot1", slug: "research", enabled: true)
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: XCTUnwrap(observed.last?.httpBody)) as? [String:String])
+        XCTAssertEqual(payload, ["kind":"skill","ref":"research","agentId":"bot1"])
+        try await api.setSourceSkillGrant(botID: "bot1", slug: "research", enabled: false)
+        XCTAssertEqual(observed.last?.url?.path, "/api/plugins/grants")
+        XCTAssertEqual(observed.last?.url?.query, "kind=skill&ref=research&agentId=bot1")
+        XCTAssertNil(observed.last?.httpBody)
+    }
+
     @MainActor
     func testSourceNativeDeliveryIntentSurvivesNewModelContext() throws {
         let container = try ModelContainer(for: SourceMessageIntent.self,

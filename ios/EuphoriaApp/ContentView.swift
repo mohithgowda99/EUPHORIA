@@ -23,14 +23,9 @@ struct ContentView: View {
             .tabItem { Label("Bots", systemImage: "person.2.crop.square.stack") }
 
             NavigationStack {
-                SourceMemoryView()
+                SourceMoreView()
             }
-            .tabItem { Label("Memory", systemImage: "brain.head.profile") }
-
-            NavigationStack {
-                SourceApprovalsView()
-            }
-            .tabItem { Label("Approvals", systemImage: "checkmark.shield") }
+            .tabItem { Label("More", systemImage: "ellipsis.circle") }
         }
     }
 }

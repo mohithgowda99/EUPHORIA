@@ -123,6 +123,40 @@ test('artifact requests reject untrusted session, IDs and cursor before HTTP',as
  assert.equal(calls,0);
 });
 
+test('single initial managed session stream carries real session-created then root-turn-created events',async t=>{
+ const events=[
+  {type:'agent.session.created',event_id:'evt_created',session:{id:'sess_new'}},
+  {type:'agent.session.turn.created',event_id:'evt_turn',session_id:'sess_new',
+   turn_id:'turn_root',turn:{id:'turn_root',session_id:'sess_new',subagent_id:null}},
+ ];
+ const {client,requests}=await provider(t,(_,res)=>{
+  res.writeHead(200,{'content-type':'text/event-stream'});
+  res.end(events.map(e=>'data: '+JSON.stringify(e)+'\\n\\n').join(''));
+ });
+ const stream=await client.createSessionStream({model:'test-model',instructions:'Work',
+  input:'Hello'},'stream_create_1');
+ const seen=[];
+ for await(const event of stream.events){
+  seen.push(event);
+  if(seen.length===2)break;
+ }
+ assert.deepEqual(seen,events);
+ assert.equal(requests[0].headers['idempotency-key'],'stream_create_1');
+ assert.equal(requests[0].body.stream,true);
+ assert.equal(requests[0].body.spend_control.limit,50);
+ assert.equal(requests[0].body.environment.type,'none');
+});
+
+test('initial stream transport outage is uncertain and must not authorize a second provider create',async()=>{
+ let requests=0;
+ const client=new AgentsClient({apiKey:'test-only-key',fetchImpl:async()=>{
+  requests++;throw Error('interrupted connection');
+ }});
+ await assert.rejects(client.createSessionStream({model:'test',instructions:'Work',
+  input:'Hello'},'stream_create_1'),error=>error.outcomeUnknown===true&&error.failureStage==='submission');
+ assert.equal(requests,1);
+});
+
 test('user messages retain exact content and caller submission key', async t => {
   const {client,requests} = await provider(t, (_,res)=>{res.writeHead(202);res.end();});
   await client.sendMessage('sess_test','Keep my text exactly.','message-1');

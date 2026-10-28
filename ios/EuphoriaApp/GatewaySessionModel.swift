@@ -28,6 +28,9 @@ final class GatewaySessionModel {
     @ObservationIgnored private var publication = 0
     @ObservationIgnored private var bufferedLiveUpdate: GatewayLiveUpdate?
     private let client: GatewayClient
+    /// Reuse the existing authenticated transport for source Tasks acceptance.
+    /// No second networking client, task store or journal.
+    var taskServiceClient: GatewayClient { client }
     private let repository: VisualSnapshotRepository
     private let conversationRepository: ConversationSnapshotRepository
     private let scope: String

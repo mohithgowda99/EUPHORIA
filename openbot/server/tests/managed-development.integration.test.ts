@@ -64,7 +64,8 @@ for(const fails of [false,true])test.skipIf(!address)('native decision uses orig
  const visual=await source.app.request(path+'/visual?agentId='+bot.id,{headers});expect(visual.status).toBe(200);
  const surface=(await visual.json()).surface;expect(surface.nodes[0].title).toBe('Choose a plan');
  const before=await source.app.request(path+'/history?agentId='+bot.id,{headers});
- expect((await before.json()).history.messages.some((v:any)=>v.role==='assistant')).toBe(false);
+ const originalHistory=(await before.json()).history.messages;
+ expect(originalHistory.some((v:any)=>v.role==='assistant')).toBe(false);
  const action={id:crypto.randomUUID(),surfaceID:surface.surfaceID,expectedRevision:surface.revision,nodeID:'choice',kind:'choose',values:{choice:'pull',label:'Pull day'}};
  const submit=(value:unknown)=>source.app.request(path+'/visual/actions?agentId='+bot.id,{method:'POST',headers,body:JSON.stringify(value)});
  expect((await submit({...action,values:{choice:'invented',label:'Bad'}})).status).toBe(422);
@@ -77,7 +78,11 @@ for(const fails of [false,true])test.skipIf(!address)('native decision uses orig
  const reopened=await restored.app.request(path+'/visual?agentId='+bot.id,{headers});expect(reopened.status).toBe(200);
  const saved=await reopened.json();
  if(fails)expect(saved.surface.surfaceID).toBe(callID);
- else expect(saved.completedSurfaces[0].surface.surfaceID).toBe(callID);
+ else {
+  expect(saved.completedSurfaces[0].surface.surfaceID).toBe(callID);
+  expect(saved.completedSurfaces[0].afterMessageID).toBe(originalHistory[0].id);
+  expect(saved.completedSurfaces[0].selectedLabel).toBe('Pull day');
+ }
  if(fails){expect(saved.submissionUncertain).toBe(true);expect((await submit(action)).status).toBe(503);}
  else expect(saved.surface).toBeNull();
  }finally{await database.$client.close();}

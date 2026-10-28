@@ -30,6 +30,7 @@ function fixture() {
   let items = [item];
   let requirements: unknown[] = [];
   let linked = "session";
+  let correctTurn = true;
   const replies: { text: string; source: string; scope: unknown }[] = [];
   const settled: string[] = [];
   const deps = {
@@ -59,6 +60,9 @@ function fixture() {
       listTurns: async () => ({data: [root]}),
       listItems: async () => ({data: items}),
     },
+    turnBelongsToInbox: async (request: { inboxId: string; sessionID: string; rootTurnID: string }) =>
+      correctTurn && request.inboxId === "inbox" &&
+      request.sessionID === "session" && request.rootTurnID === "root",
     authorise: async () => {
       checks++;
       return access;
@@ -76,6 +80,7 @@ function fixture() {
     setAccess(value: boolean) { access = value; },
     setBot(value: boolean) { bot = value; },
     setLink(value: string) { linked = value; },
+    setTurnBinding(value: boolean) { correctTurn = value; },
     setRoot(value: typeof turn) { root = value; },
     setItems(value: typeof items) { items = value; },
     setActions(value: unknown[]) { requirements = value; },
@@ -102,6 +107,14 @@ test("provider session ID cannot be swapped across owner-scoped source channels"
   expect(f.providerReads).toBe(0);
   expect(f.replies).toHaveLength(0);
 });
+test("different completed root turn in the same provider session cannot impersonate the original inbox", async () => {
+  const f = fixture();
+  f.setTurnBinding(false);
+  await expect(reconcileManagedSourceInbox(f.deps)).rejects.toThrow(/not bound/);
+  expect(f.providerReads).toBe(0);
+  expect(f.replies).toHaveLength(0);
+});
+
 test("revoked channel or deleted Bot refuses completion before any provider read", async () => {
   for (const revoke of ["channel", "bot"]) {
     const f = fixture();

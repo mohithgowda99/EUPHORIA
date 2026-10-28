@@ -6,6 +6,24 @@ import type { ManagedSourceScope } from "./managed-session-links";
 
 const valid = (id: string) => /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(id);
 
+export type ManagedRootCreatedEvent = {
+  type: string; event_id: string; session_id: string; turn_id: string;
+  turn: {id: string; session_id: string; subagent_id: string | null};
+};
+
+/** Validate the official, exact root-turn creation event. Not an idle event,
+ * a model suggestion, a tool payload or a subagent's completed turn.
+ */
+export function checkedRootCreatedEvent(sessionID: string, event: ManagedRootCreatedEvent) {
+  if (!valid(sessionID) || !event || event.type !== "agent.session.turn.created" ||
+      !valid(event.event_id) || !valid(event.turn_id) ||
+      event.session_id !== sessionID ||
+      event.turn?.id !== event.turn_id || event.turn.session_id !== sessionID ||
+      event.turn.subagent_id !== null)
+    throw new Error("Unverified managed root-created event");
+  return event.turn_id;
+}
+
 /** Immutable source-owned correlation, NOT an execution journal or runner.
  *
  * The caller must observe agent.session.turn.created from the authenticated
@@ -57,21 +75,12 @@ export function createManagedInboxTurnStore(database: Database, links: {
      */
     async bindRootCreatedEvent(input: {
       inboxId:string; scope:DeliveryScope; sessionID:string;
-      event: {
-        type:string; event_id:string; session_id:string; turn_id:string;
-        turn:{id:string;session_id:string;subagent_id:string|null};
-      };
+      event: ManagedRootCreatedEvent;
     }) {
       await original(input.inboxId,input.scope);
       await providerOwned(input.scope,input.sessionID);
       const event=input.event;
-      if (event.type !== "agent.session.turn.created" ||
-          !valid(event.event_id) || !valid(event.turn_id) ||
-          event.session_id !== input.sessionID ||
-          event.turn.id !== event.turn_id ||
-          event.turn.session_id !== input.sessionID ||
-          event.turn.subagent_id !== null)
-        throw new Error("Unverified managed root-created event");
+      checkedRootCreatedEvent(input.sessionID,event);
       const [updated] = await database.update(managedAgentInboxTurns)
         .set({rootTurnId:event.turn_id, createdEventId:event.event_id})
         .where(and(eq(managedAgentInboxTurns.inboxId,input.inboxId),

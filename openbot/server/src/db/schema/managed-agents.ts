@@ -47,7 +47,7 @@ export const managedAgentInboxTurns = pgTable(
     createdEventId: text("created_event_id"),
     // Validated completed-root presentation, owned by this original Inbox receipt.
     // Provider reads are for reconciliation, never required to reopen saved work.
-    completedOutput: jsonb("completed_output").$type<{replyText:string;surfaces:unknown[]}>(),
+    completedOutput: jsonb("completed_output").$type<{replyText:string;surfaces:unknown[];selectedLabels?:Record<string,string>}>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

@@ -21,6 +21,11 @@ struct ContentView: View {
                 SourceBotsView()
             }
             .tabItem { Label("Bots", systemImage: "person.2.crop.square.stack") }
+
+            NavigationStack {
+                SourceMemoryView()
+            }
+            .tabItem { Label("Memory", systemImage: "brain.head.profile") }
         }
     }
 }

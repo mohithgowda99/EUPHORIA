@@ -112,6 +112,11 @@ public struct GatewayClient: Sendable {
     public func task(id: String) async throws -> GatewayTaskDetail {
         try await request("v1/tasks/" + validatedID(id))
     }
+    public func taskReport(id: String, after: String? = nil) async throws -> GatewayTaskReportEnvelope {
+        var path = "v1/tasks/" + (try validatedID(id)) + "/report"
+        if let after { path += "?historyAfter=" + (try validatedID(after)) }
+        return try await request(path)
+    }
     public func sendMessage(sessionID: String, message: String, id: String) async throws -> GatewayInputReceipt {
         struct Input: Encodable { let id: String; let message: String }
         return try await request("v1/sessions/" + validatedID(sessionID) + "/messages", method: "POST",
@@ -249,6 +254,18 @@ public struct GatewayTaskList: Decodable, Sendable {
     }
 }
 public struct GatewayTaskDetail: Decodable, Sendable { public let task: GatewayTask }
+/// Read-only portion of the authoritative report. Unknown decision data is
+/// not falsely interpreted as an accepted effect; the source gateway remains
+/// responsible for all action receipts and permission checks.
+public struct GatewayTaskReportEnvelope: Decodable, Sendable {
+    public let report: GatewayTaskReport
+}
+public struct GatewayTaskReport: Decodable, Sendable {
+    public let task: GatewayTask
+    public let messages: [GatewayHistoryEntry]
+    public let historyHasMore: Bool
+    public let historyCursor: String?
+}
 
 private final class RejectGatewayRedirects: NSObject, URLSessionTaskDelegate, Sendable {
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,

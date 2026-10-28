@@ -10,6 +10,10 @@ public struct A2UICompositionView: View {
     @Binding private var document: A2UIDocument
     private let onAction: (A2UIActionIntent) -> Void
     @State private var errorMessage: String?
+    // Ephemeral presentation only; component IDs scope choices to one A2UI surface.
+    // No second authoritative model or action store is created.
+    @State private var selectedTabChildren: [String: String] = [:]
+    @State private var presentedModalIDs: Set<String> = []
 
     public init(document: Binding<A2UIDocument>, onAction: @escaping (A2UIActionIntent) -> Void) {
         _document = document
@@ -68,29 +72,31 @@ public struct A2UICompositionView: View {
             case "Tabs":
                 let tabs = tabEntries(node)
                 if !tabs.isEmpty {
-                    Picker("Sections",selection:$selectedTabIndex) {
-                        ForEach(tabs.indices,id:\.self) { index in
-                            Text(tabs[index].title).tag(index)
+                    Picker("Sections", selection: tabSelection(for: id, entries: tabs)) {
+                        ForEach(tabs, id: \.child) { tab in
+                            Text(tab.title).tag(tab.child)
                         }
                     }.pickerStyle(.segmented)
-                    if let chosen=tabs.indices.contains(selectedTabIndex) ? tabs[selectedTabIndex] : tabs.first { content(for:chosen.child) }
+                    if let chosen = selectedTab(for: id, entries: tabs) {
+                        content(for: chosen.child)
+                    }
                 }
             case "Modal":
                 if let trigger = node.properties["trigger"]?.text,
                    let target = node.properties["content"]?.text {
                     Button {
-                        isModalPresented = true
+                        presentedModalIDs.insert(id)
                     } label: {
                         if let triggerNode=document.components.first(where:{$0.id==trigger}),
                            triggerNode.component == "Button",
                            let labelID=triggerNode.properties["child"]?.text { content(for:labelID) }
                         else {content(for:trigger)}
                     }
-                    .sheet(isPresented:$isModalPresented) {
+                    .sheet(isPresented: modalPresentation(for: id)) {
                         NavigationStack {
                             ScrollView {content(for:target).padding()}
                                 .toolbar { ToolbarItem(placement:.confirmationAction) {
-                                    Button("Done") {isModalPresented=false}
+                                    Button("Done") { presentedModalIDs.remove(id) }
                                 }}
                         }
                     }
@@ -190,6 +196,36 @@ public struct A2UICompositionView: View {
         } else {
             Text("Missing A2UI component").foregroundStyle(.red)
         }
+    }
+
+    // Keep selection by child ID, not position: incoming graph updates may reorder
+    // tabs. A removed selection falls back to the first valid child without
+    // dispatching an action or changing the canonical SwiftData snapshot.
+    private func selectedTab(for id: String, entries: [TabEntry]) -> TabEntry? {
+        let child = A2UIControlSelection.resolvedChild(
+            selected: selectedTabChildren[id], available: entries.map(\.child))
+        return entries.first(where: { $0.child == child })
+    }
+
+    private func tabSelection(for id: String, entries: [TabEntry]) -> Binding<String> {
+        Binding(
+            get: { selectedTab(for: id, entries: entries)?.child ?? "" },
+            set: { newChild in
+                if entries.contains(where: { $0.child == newChild }) {
+                    selectedTabChildren[id] = newChild
+                }
+            }
+        )
+    }
+
+    private func modalPresentation(for id: String) -> Binding<Bool> {
+        Binding(
+            get: { presentedModalIDs.contains(id) },
+            set: { presented in
+                if presented { presentedModalIDs.insert(id) }
+                else { presentedModalIDs.remove(id) }
+            }
+        )
     }
 
     private struct TabEntry { let title:String;let child:String }

@@ -222,7 +222,7 @@ struct SourceTaskDetailView: View {
                 Section("Actions") {
                     if let channel {
                         NavigationLink("Task conversation") {
-                            SourceConversationDetailView(client: client, ownerScope: ownerScope, conversation: channel)
+                            SourceConversationDetailView(client: client, ownerScope: ownerScope, conversation: channel, allowsSending: false)
                         }
                     }
                     if task.status == "needs_input" {

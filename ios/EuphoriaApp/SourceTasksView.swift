@@ -9,6 +9,8 @@ struct SourceTasksView: View {
     @State private var client: OpenDuetSourceAPI?
     @State private var ownerScope: String?
     @State private var tasks: [SourceTask] = []
+    @State private var suggestions: [SourceSuggestion] = []
+    @State private var uncertainSuggestionIDs: Set<String> = []
     @State private var bots: [SourceBot] = []
     @State private var loading = false
     @State private var error: String?
@@ -48,6 +50,31 @@ struct SourceTasksView: View {
                                 Text("The original task intake does not accept a client idempotency key. Check the original Tasks list before doing anything else; this request will not be sent again automatically.")
                                     .font(.caption).foregroundStyle(.secondary)
                                 Button("I have checked the source list", role: .destructive) { pendingClear = true }
+                            }
+                        }
+                    }
+                }
+                let upNext = suggestions.filter { $0.status == "open" }
+                if !upNext.isEmpty {
+                    Section("Up Next") {
+                        ForEach(upNext) { suggestion in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(suggestion.title).font(.headline)
+                                Text(suggestion.detail).font(.subheadline).foregroundStyle(.secondary)
+                                if let source = suggestion.sourceApp {
+                                    Text(source).font(.caption).foregroundStyle(.secondary)
+                                }
+                                HStack {
+                                    Button("Start") { Task { await changeSuggestion(suggestion.id, start: true) } }
+                                        .disabled(loading || uncertainSuggestionIDs.contains(suggestion.id))
+                                    Spacer()
+                                    Button("Hide") { Task { await changeSuggestion(suggestion.id, start: false) } }
+                                        .disabled(loading || uncertainSuggestionIDs.contains(suggestion.id))
+                                }
+                                if uncertainSuggestionIDs.contains(suggestion.id) {
+                                    Text("Outcome uncertain. Refresh Up Next before repeating this action.")
+                                        .font(.caption).foregroundStyle(.orange)
+                                }
                             }
                         }
                     }
@@ -153,15 +180,39 @@ struct SourceTasksView: View {
             let service = try SavedOpenDuetAccount.client()
             let account = try await service.sourceSession()
             let fresh = try await service.sourceTasks()
+            let next = try await service.sourceSuggestions()
             let roster = try await service.bots()
             ownerScope = service.endpoint.baseURL.absoluteString + ":" + account.user.id
             client = service
             tasks = fresh
+            suggestions = next
+            uncertainSuggestionIDs = []
             bots = roster
             error = nil
         } catch {
             client = nil
             error = "Original Tasks cannot be loaded. Sign in through Bots or check the OpenDuet server."
+        }
+    }
+
+    private func changeSuggestion(_ id: String, start: Bool) async {
+        guard !loading, let client, !uncertainSuggestionIDs.contains(id) else { return }
+        loading = true
+        defer { loading = false }
+        do {
+            if start {
+                let result = try await client.startSourceSuggestion(id: id)
+                guard result.suggestion.id == id else { throw SourceAPIError.invalidResponse }
+            } else {
+                let result = try await client.dismissSourceSuggestion(id: id)
+                guard result.id == id else { throw SourceAPIError.invalidResponse }
+            }
+            suggestions = try await client.sourceSuggestions()
+            tasks = try await client.sourceTasks()
+            error = nil
+        } catch {
+            uncertainSuggestionIDs.insert(id)
+            error = "Up Next action could not be confirmed. Refresh the original cards before trying again."
         }
     }
 

@@ -8,6 +8,17 @@ import Foundation
 final class SourceOpenDuetTests: XCTestCase, @unchecked Sendable {
     private let botJSON = #"{"id":"bot1","name":"Planner","title":"Organizes work","roleDescription":"Work safely","visibility":"private","mine":true,"canManage":true,"systemOwned":false,"hidden":false,"pinned":false,"hasAuth":false,"hasCallbackToken":false,"endpoint":null}"#
 
+    func testExpoStateCookieTransferMatchesOriginalBetterAuthNativeProxy() throws {
+        XCTAssertEqual(SourceOAuthStateCookie.extract(
+            from: "better-auth.oauth_state=source-123; Path=/; HttpOnly; SameSite=Lax"),
+            "source-123")
+        XCTAssertEqual(SourceOAuthStateCookie.extract(
+            from: "other=1; Path=/, __Secure-better-auth.oauth_state=secure-state456; Secure"),
+            "secure-state456")
+        XCTAssertNil(SourceOAuthStateCookie.extract(from: "other.oauth_state=wrong; Secure"))
+        XCTAssertNil(SourceOAuthStateCookie.extract(from: nil))
+    }
+
     func testNativeCookieCallbackExtractsOnlyOriginalBetterAuthSession() throws {
         let callback = try XCTUnwrap(URL(string:
             "openbotmobile://?cookie=better-auth.session_token%3Dabc123%3B%20Path%3D%2F%3B%20HttpOnly"))

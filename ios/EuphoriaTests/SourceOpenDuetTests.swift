@@ -59,6 +59,28 @@ final class SourceOpenDuetTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(observed.last?.httpMethod, "POST")
     }
 
+    func testEditingRemoteBotPreservesOriginalEndpointAndVisibility() async throws {
+        let remote = botJSON
+            .replacingOccurrences(of: #""visibility":"private""#, with: #""visibility":"public""#)
+            .replacingOccurrences(of: #""endpoint":null"#, with: #""endpoint":"https://managed.example/agent""#)
+        let box = SourceRequestBox()
+        SourceTestProtocol.box.set { req in
+            box.record(req)
+            return (200, Data("{\"agent\":\(remote)}".utf8))
+        }
+        let api = try client()
+        let current = try await api.bot(id: "bot1")
+        let change = try SourceBotChange(previous: current, name: "Planner",
+            title: "Better organizer", instructions: "Updated instructions")
+        _ = try await api.updateBot(id: "bot1", input: change)
+        let sent = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: XCTUnwrap(box.last?.httpBody)) as? [String: String])
+        XCTAssertEqual(sent["visibility"], "public")
+        XCTAssertEqual(sent["endpoint"], "https://managed.example/agent")
+        XCTAssertEqual(sent["roleDescription"], "Updated instructions")
+        XCTAssertEqual(box.last?.url?.path, "/api/agents/bot1")
+    }
+
     func testSourceBotMutationsAcceptActualHTTP204WithoutFakeBodies() async throws {
         let observed = SourceRequestBox()
         SourceTestProtocol.box.set { req in observed.record(req); return (204, Data()) }

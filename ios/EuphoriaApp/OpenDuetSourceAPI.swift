@@ -512,7 +512,12 @@ struct OpenDuetSourceAPI: Sendable {
         try await get("api/capabilities")
     }
     func sourceSession() async throws -> SourceAuthenticatedSession {
-        try await get("api/auth/get-session")
+        // Better Auth answers JSON null on expiry, not necessarily HTTP 401.
+        // Treat both as unauthenticated, so a stale Keychain session cannot
+        // expose cached source-owned Bots, tasks or messages after revocation.
+        let response: SourceAuthenticatedSession? = try await get("api/auth/get-session")
+        guard let response, !response.user.id.isEmpty else { throw SourceAPIError.unauthenticated }
+        return response
     }
     func botCapabilities() async throws -> SourceBotCapabilities {
         let response: SourceBotCapabilitiesEnvelope = try await get("api/agents/capabilities")

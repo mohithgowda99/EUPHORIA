@@ -8,6 +8,7 @@ struct GatewaySessionView: View {
     @State private var model: GatewaySessionModel?
     @State private var message = ""
     @State private var setupError: String?
+    @State private var showsDevelopmentTools = false
     private let showsRoster: Bool
     init(model: GatewaySessionModel? = nil) {
         _model = State(initialValue: model); showsRoster = model == nil
@@ -15,7 +16,7 @@ struct GatewaySessionView: View {
     var body: some View {
         List {
             Section {
-                Text("Native gateway connection proof. Development authentication; live provider status depends on the configured server.")
+                Text("Development connection: agent conversations are real, but original OpenDuet Bot identities and production sign-in are not connected yet.")
                     .font(.caption).foregroundStyle(.secondary)
                 if let setupError { Text(setupError).foregroundStyle(.secondary) }
                 if let model {
@@ -43,11 +44,12 @@ struct GatewaySessionView: View {
                         }
                     }
                 }
-                Section(model.hasSession ? "Continue the conversation" : "New task") {
+                Section(model.hasSession ? "Continue the conversation" : "Start a conversation") {
                     TextField("Ask Euphoria", text: $message, axis: .vertical)
                         .accessibilityIdentifier("gateway.message")
                     Button(model.hasSession ? "Send message" : "Send request") {
                         let input = message
+                        message = "" // Never leave the exact request armed for an accidental duplicate tap.
                         Task { await model.send(message: input); await model.refresh(); await model.loadHistory(); await model.loadSessions() }
                     }
                     .disabled(model.isBusy || message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -67,7 +69,15 @@ struct GatewaySessionView: View {
                 }
             }
         }
-        .navigationTitle("Task")
+        .navigationTitle("Chat")
+        #if DEBUG
+        .toolbar {
+            ToolbarItem(placement: .secondaryAction) {
+                Button("Development tools", systemImage: "hammer") { showsDevelopmentTools = true }
+            }
+        }
+        .sheet(isPresented: $showsDevelopmentTools) { DevelopmentToolsView() }
+        #endif
         .task(id: scenePhase == .active ? model?.liveSessionID : nil) {
             if scenePhase == .active { await model?.followCurrentSession() }
         }

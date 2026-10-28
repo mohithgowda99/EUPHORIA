@@ -80,6 +80,46 @@ final class GatewayClientTests: XCTestCase, @unchecked Sendable {
         _ = try await client().history(sessionID: "sess_test", after: "item_previous")
         XCTAssertEqual(box.last?.url?.query, "limit=10&after=item_previous")
     }
+    func testRealTaskServiceIdentityAndPaginationNeverUseSessionAsTaskID() async throws {
+        // Matches docs/contracts/fixtures/tasks-v1.json. The task ID is distinct
+        // from the provider session ID, unlike the old WorkListView session roster.
+        let task = #""id":"synthetic-task","title":"Plan the visit","instruction":"Prepare a visit plan","sessionID":"synthetic-session","status":"ready_for_review","resolvedAt":null,"createdAt":"2026-10-28T00:00:00Z","updatedAt":"2026-10-28T00:00:00Z","deliveryPhase":"accepted","pendingNodeIDs":[],"failure":null"#
+        let page = #"{"tasks":[{\#(task)}],"hasMore":true,"nextCursor":"synthetic-task"}"#
+        let box = RequestBox()
+        GatewayTestProtocol.box.set { req in box.record(req); return (200, Data(page.utf8)) }
+        let result = try await client().listTasks(after: "earlier_task")
+        XCTAssertEqual(result.tasks.count, 1)
+        XCTAssertEqual(result.tasks[0].id, "synthetic-task")
+        XCTAssertEqual(result.tasks[0].sessionID, "synthetic-session")
+        XCTAssertNotEqual(result.tasks[0].id, result.tasks[0].sessionID)
+        XCTAssertEqual(box.last?.url?.path, "/v1/tasks")
+        XCTAssertEqual(box.last?.url?.query, "limit=20&after=earlier_task")
+        XCTAssertEqual(box.last?.value(forHTTPHeaderField: "Authorization"), "Bearer development-token")
+
+        GatewayTestProtocol.box.set { req in
+            box.record(req)
+            return (200, Data(#"{"task":{\#(task)}}"#.utf8))
+        }
+        let detail = try await client().task(id: "synthetic-task")
+        XCTAssertEqual(detail.task.id, "synthetic-task")
+        XCTAssertEqual(box.last?.url?.path, "/v1/tasks/synthetic-task")
+        do { _ = try await client().task(id: "../foreign"); XCTFail("Invalid task ID sent") }
+        catch { }
+    }
+
+    func testTaskServiceRejectsMalformedStatusesAndCursorBeforeRendering() throws {
+        let item = #""id":"task_one","title":"Work","instruction":"Do real work","sessionID":"session_one","status":"working","resolvedAt":null,"createdAt":"2026-10-28T00:00:00Z","updatedAt":"2026-10-28T00:00:00Z","deliveryPhase":"accepted","pendingNodeIDs":[],"failure":null"#
+        let good = #"{"tasks":[{\#(item)}],"hasMore":true,"nextCursor":"task_one"}"#
+        XCTAssertNoThrow(try JSONDecoder().decode(GatewayTaskList.self, from: Data(good.utf8)))
+        for bad in [
+            good.replacingOccurrences(of: "task_one\"}", with: "foreign\"}"),
+            good.replacingOccurrences(of: "\"working\"", with: "\"success\""),
+            good.replacingOccurrences(of: "\"id\":\"task_one\"", with: "\"id\":\"../foreign\""),
+            good.replacingOccurrences(of: "\"hasMore\":true", with: "\"hasMore\":false")
+        ] {
+            XCTAssertThrowsError(try JSONDecoder().decode(GatewayTaskList.self, from: Data(bad.utf8)))
+        }
+    }
     private func client() throws -> GatewayClient {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [GatewayTestProtocol.self]

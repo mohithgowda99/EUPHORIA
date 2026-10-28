@@ -146,11 +146,11 @@ final class SourceOpenDuetTests: XCTestCase, @unchecked Sendable {
             observed.record(req)
             switch (req.httpMethod, req.url?.path) {
             case ("GET", "/api/openduet/tasks"):
-                return (200, Data("{\"tasks\":[\\(task)]}".utf8))
+                return (200, Data("{\"tasks\":[\(task)]}".utf8))
             case ("POST", "/api/openduet/tasks"):
-                return (201, Data("{\"task\":\\(task)}".utf8))
+                return (201, Data("{\"task\":\(task)}".utf8))
             case ("POST", "/api/openduet/tasks/source_task/reply"):
-                return (202, Data("{\"task\":\\(task)}".utf8))
+                return (202, Data("{\"task\":\(task)}".utf8))
             default:
                 return (404, Data("{}".utf8))
             }

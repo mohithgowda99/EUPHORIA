@@ -271,7 +271,7 @@ private struct NativeTaskEvidenceView: View {
         }
         .navigationTitle("Task detail")
         .navigationDestination(isPresented: $showsConversation) {
-            if let conversationModel { GatewaySessionView(model: conversationModel) }
+            if let conversationModel { GatewaySessionView(model: conversationModel, title: "Task conversation") }
         }
         .onChange(of: showsConversation) { _, isOpen in
             if !isOpen { Task { await refresh() } }

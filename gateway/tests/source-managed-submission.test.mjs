@@ -6,7 +6,21 @@ const scope={ownerUserId:'person1',channelId:'channel1',botId:'bot1',threadId:'t
 const definition={model:'test-model',instructions:'Only do authorized work.',tools:[]};
 function links(){
  let session=null, key=null;
+ const receipts=new Map();
  return {
+  turns:{
+   async read(id){return receipts.has(id)?{providerSessionId:receipts.get(id)}:null;},
+   async reserve(id,sourceScope,providerSessionId){
+    assert.deepEqual(sourceScope,{ownerUserId:scope.ownerUserId,channelId:scope.channelId,
+     agentId:scope.botId,threadId:scope.threadId});
+    if(receipts.has(id)){
+     assert.equal(receipts.get(id),providerSessionId);
+     return 'existing';
+    }
+    receipts.set(id,providerSessionId);
+    return 'reserved';
+   },
+  },
   async reserve(given,creationKey){
    assert.deepEqual(given,scope);
    if(session)return {create:false,providerSessionId:session};
@@ -22,7 +36,7 @@ function links(){
  };
 }
 function input(storage,provider,runId='run_one'){
- return {scope,runId,message:'Help with today',definition,links:storage,provider};
+ return {scope,runId,message:'Help with today',definition,links:storage,turns:storage.turns,provider};
 }
 test('source message creates once, then continues same hosted session with original durable key',async()=>{
  const calls=[];
@@ -61,4 +75,26 @@ test('provider success is only acceptance: source cannot fabricate reply or comp
  const outcome=await submitManagedSourceInput(input(storage,provider));
  assert.deepEqual(Object.keys(outcome).sort(),['phase','sessionID']);
  assert.equal(outcome.phase,'accepted');
+});
+
+test('worker replay of original session creation never becomes a new follow-up input',async()=>{
+ const storage=links();let creates=0,followups=0;
+ const provider={createSession:async()=>{creates++;return {id:'session_a'};},
+  sendMessage:async()=>{followups++;}};
+ await submitManagedSourceInput(input(storage,provider,'run_one'));
+ await submitManagedSourceInput(input(storage,provider,'run_one'));
+ assert.equal(creates,1);
+ assert.equal(followups,0);
+});
+
+test('ambiguous follow-up is not resent after owner lease loss or a process restart',async()=>{
+ const storage=links();let creates=0,followups=0;
+ const provider={createSession:async()=>{creates++;return {id:'session_a'};},
+  sendMessage:async()=>{followups++;throw Error('HTTP outcome unknown');}};
+ await submitManagedSourceInput(input(storage,provider,'run_one'));
+ await assert.rejects(submitManagedSourceInput(input(storage,provider,'run_two')));
+ assert.deepEqual(await submitManagedSourceInput(input(storage,provider,'run_two')),
+  {sessionID:'session_a',phase:'accepted'});
+ assert.equal(creates,1);
+ assert.equal(followups,1,'One original source Inbox can submit only once');
 });

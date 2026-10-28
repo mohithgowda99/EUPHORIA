@@ -53,7 +53,7 @@ struct VisualFixtureView: View {
             switch kind {
             case .interactions: fixture = try SourceFixtures.surface()
             case .gallery: fixture = try SourceFixtures.gallerySurface()
-            case .a2uiForm: fixture = try SourceFixtures.a2uiFormSurface()
+            case .a2uiForm: fixture = try SourceFixtures.a2uiControlsSurface()
             }
             let repo = VisualSnapshotRepository(context: modelContext)
             let restored = try repo.load(surfaceID: fixture.surfaceID)

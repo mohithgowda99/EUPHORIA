@@ -50,12 +50,15 @@ public struct VisualState: Codable, Equatable, Sendable {
             values[approvalNoteKey(nodeID: node.id)] = .text(note)
         case (.askForm, .setField):
             guard action.values.count == 1, let (key, value) = action.values.first,
-                  let field = node.fields?.first(where: { $0.id == key }),
-                  let raw = value.string, raw.utf16.count <= 2000 else { throw VisualContractError.invalidAction }
-            if field.type == .select && !(field.options ?? []).contains(raw) && !raw.isEmpty {
-                throw VisualContractError.invalidAction
+                  let field = node.fields?.first(where: { $0.id == key }) else { throw VisualContractError.invalidAction }
+            if node.formEvent != nil {
+                guard field.acceptsSourceValue(value) else { throw VisualContractError.invalidAction }
+                values[formFieldKey(node: node, fieldID: key)] = value
+            } else {
+                guard let raw = value.string, raw.utf16.count <= 2000 else { throw VisualContractError.invalidAction }
+                if field.type == .select && !(field.options ?? []).contains(raw) && !raw.isEmpty { throw VisualContractError.invalidAction }
+                values[formFieldKey(node: node, fieldID: key)] = .text(raw)
             }
-            values[formFieldKey(node: node, fieldID: key)] = .text(raw)
         case (.askForm, .submitForm):
             guard let fields = node.fields else { throw VisualContractError.invalidAction }
             if node.formEvent != nil {
@@ -158,10 +161,22 @@ public struct VisualState: Codable, Equatable, Sendable {
     private func formFieldKey(node: VisualNode, fieldID: String) -> String {
         node.id + (node.formEvent == nil ? "." : ".a2ui@" + String(surface.revision) + ".") + fieldID
     }
-    public func formFieldValue(nodeID: String, fieldID: String) -> String {
+    public func formFieldData(nodeID: String, fieldID: String) -> VisualScalar? {
         guard let node = surface.nodes.first(where: { $0.id == nodeID && $0.kind == .askForm }),
-              let field = node.fields?.first(where: { $0.id == fieldID }) else { return "" }
-        return values[formFieldKey(node: node, fieldID: fieldID)]?.string ?? field.initialValue ?? ""
+              let field = node.fields?.first(where: { $0.id == fieldID }) else { return nil }
+        return values[formFieldKey(node: node, fieldID: fieldID)] ?? field.initialValue
+    }
+    public func formFieldValue(nodeID: String, fieldID: String) -> String { formFieldData(nodeID: nodeID, fieldID: fieldID)?.string ?? "" }
+
+    public func proposedChoiceValue(nodeID: String, fieldID: String, optionID: String) throws -> VisualScalar {
+        guard let node = surface.nodes.first(where: { $0.id == nodeID && $0.formEvent != nil }),
+              let field = node.fields?.first(where: { $0.id == fieldID && $0.type == .choice }),
+              field.choices?.contains(where: { $0.id == optionID }) == true,
+              let current = formFieldData(nodeID: nodeID, fieldID: fieldID), field.acceptsSourceValue(current), let selected = current.stringList else { throw VisualContractError.invalidAction }
+        if field.allowsMultipleSelection == true {
+            return .strings(selected.contains(optionID) ? selected.filter { $0 != optionID } : selected + [optionID])
+        }
+        return .strings([optionID])
     }
 
     public func proposedFormValues(nodeID: String) throws -> [String: VisualScalar] {
@@ -170,9 +185,8 @@ public struct VisualState: Codable, Equatable, Sendable {
         if node.formEvent != nil {
             var source: [String: VisualScalar] = [:]
             for field in fields {
-                let raw = formFieldValue(nodeID: nodeID, fieldID: field.id)
-                guard raw.utf16.count <= 2000 else { throw VisualContractError.invalidAction }
-                source[field.id] = .text(raw)
+                guard let value = formFieldData(nodeID: nodeID, fieldID: field.id), field.acceptsSourceValue(value) else { throw VisualContractError.invalidAction }
+                source[field.id] = value
             }
             return source
         }

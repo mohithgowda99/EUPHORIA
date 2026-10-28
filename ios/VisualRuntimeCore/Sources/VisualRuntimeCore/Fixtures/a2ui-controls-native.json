@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 2,
+  "surfaceID": "trip-controls",
+  "revision": 0,
+  "nodes": [
+    {
+      "id": "form",
+      "kind": "askForm",
+      "title": "Trip preferences",
+      "fields": [
+        {
+          "id": "field_0",
+          "label": "Destination",
+          "type": "text",
+          "required": false,
+          "initialValue": "Paris"
+        },
+        {
+          "id": "field_1",
+          "label": "Send a reminder",
+          "type": "checkbox",
+          "required": false,
+          "initialValue": false
+        },
+        {
+          "id": "field_2",
+          "label": "Preferred channel",
+          "type": "choice",
+          "required": false,
+          "initialValue": [],
+          "allowsMultipleSelection": false,
+          "choices": [
+            {
+              "id": "email",
+              "label": "Email message"
+            },
+            {
+              "id": "push",
+              "label": "Push notification"
+            }
+          ]
+        },
+        {
+          "id": "field_3",
+          "label": "Activities",
+          "type": "choice",
+          "required": false,
+          "initialValue": [
+            "walk"
+          ],
+          "allowsMultipleSelection": true,
+          "choices": [
+            {
+              "id": "walk",
+              "label": "Walking"
+            },
+            {
+              "id": "run",
+              "label": "Running"
+            }
+          ]
+        }
+      ],
+      "submitLabel": "Confirm",
+      "formEvent": {
+        "name": "confirm_trip",
+        "surfaceID": "trip-controls",
+        "sourceComponentID": "confirm",
+        "contextFields": {
+          "destination": "field_0",
+          "notify": "field_1",
+          "channel": "field_2",
+          "activities": "field_3"
+        },
+        "literalContext": {}
+      }
+    }
+  ]
+}

@@ -262,3 +262,17 @@ test('unsupported A2UI form never publishes controls or submits a tool result',a
   assert.equal((await request('/v1/sessions/sess_test')).status,502);
   assert.equal(provider.results.length,0);
 });
+
+test('mixed source controls reject forged types then submit real booleans and arrays once',async t=>{
+  const packet=JSON.parse(readFileSync(new URL('./fixtures/a2ui-controls-v09.json',import.meta.url)));
+  const {start,request,provider,reopen}=await setup(t,sourceProvider(packet));const snapshot=await start();
+  const action={id:'controls-answer',surfaceID:snapshot.surface.surfaceID,expectedRevision:1,nodeID:'form',kind:'submitForm',values:{field_0:'Kyoto',field_1:true,field_2:['push'],field_3:[]}};
+  const route='/v1/surfaces/'+snapshot.surface.surfaceID+'/actions';
+  assert.equal((await request(route,{method:'POST',body:{...action,id:'forged',values:{...action.values,field_1:'true'}}})).status,422);
+  assert.equal(provider.results.length,0);
+  assert.equal((await request(route,{method:'POST',body:action})).status,202);
+  await reopen();await request(route,{method:'POST',body:action});assert.equal(provider.results.length,1);
+  const {timestamp,...event}=provider.results[0].result.output.userAction;
+  assert.ok(Number.isFinite(Date.parse(timestamp)));
+  assert.deepEqual(event,{name:'confirm_trip',surfaceId:'trip-controls',sourceComponentId:'confirm',context:{destination:'Kyoto',notify:true,channel:['push'],activities:[]}});
+});

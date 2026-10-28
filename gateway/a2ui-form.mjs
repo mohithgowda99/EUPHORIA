@@ -5,6 +5,7 @@ const bad=()=>fail(502,'Unsupported A2UI form contract');
 const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const key=x=>typeof x==='string'&&/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(x)&&!['__proto__','prototype','constructor'].includes(x);
 const text=(x,max=2000)=>typeof x==='string'&&x.length<=max;
+const modelValue=x=>text(x)||typeof x==='boolean'||(Array.isArray(x)&&x.length<=20&&new Set(x).size===x.length&&x.every(v=>text(v)));
 function shape(x,required,optional=[]){
   if(!object(x)||required.some(k=>!Object.hasOwn(x,k))||Object.keys(x).some(k=>![...required,...optional].includes(k)))bad();
 }
@@ -42,9 +43,9 @@ export function normalizeRenderInput(input){
         shape(value,['surfaceId','path','value']);
         if(value.path==='/'){
           if(!object(value.value)||Object.keys(value.value).length>32)bad();
-          for(const [k,v] of Object.entries(value.value)){if(!key(k)||!text(v))bad();model[k]=v;}
+          for(const [k,v] of Object.entries(value.value)){if(!key(k)||!modelValue(v))bad();model[k]=v;}
         }else{
-          const k=path({path:value.path});if(!text(value.value))bad();model[k]=value.value;
+          const k=path({path:value.path});if(!modelValue(value.value))bad();model[k]=value.value;
         }
       }else bad();
     }
@@ -63,12 +64,31 @@ export function normalizeRenderInput(input){
   if(!text(heading.text,120)||!heading.text||(heading.variant!==undefined&&!['h1','h2','h3','h4','h5','h6'].includes(heading.variant)))bad();
   const fields=[],bindingFields=new Map();
   for(const id of ids.slice(1,-1)){
-    const c=take(id,'TextField');shape(c,['id','component','label','value'],['variant']);
-    if(!text(c.label,100)||!c.label||![undefined,'shortText','longText'].includes(c.variant))bad();
+    const type=components.get(id)?.component;
+    if(!['TextField','CheckBox','ChoicePicker'].includes(type))bad();
+    const c=take(id,type);
+    if(type==='ChoicePicker')shape(c,['id','component','options','value'],['label','variant','displayStyle','filterable']);
+    else shape(c,['id','component','label','value'],type==='TextField'?['variant']:[]);
+    const label=c.label??'';
+    if(!text(label,100)||(type!=='ChoicePicker'&&!label))bad();
     const binding=path(c.value);
     if(bindingFields.has(binding)||!Object.hasOwn(model,binding))bad();
     const fieldID='field_'+fields.length;bindingFields.set(binding,fieldID);
-    fields.push({id:fieldID,label:c.label,type:c.variant==='longText'?'textarea':'text',required:false,initialValue:model[binding]});
+    const field={id:fieldID,label,type:'text',required:false,initialValue:model[binding]};
+    if(type==='TextField'){
+      if(![undefined,'shortText','longText'].includes(c.variant))bad();
+      field.type=c.variant==='longText'?'textarea':'text';
+    }else if(type==='CheckBox')field.type='checkbox';
+    else{
+      if(![undefined,'mutuallyExclusive','multipleSelection'].includes(c.variant)||![undefined,'checkbox'].includes(c.displayStyle)||![undefined,false].includes(c.filterable)||!Array.isArray(c.options)||c.options.length>20)bad();
+      field.type='choice';field.allowsMultipleSelection=c.variant!=='mutuallyExclusive';
+      field.choices=c.options.map(option=>{
+        shape(option,['label','value']);
+        if(!text(option.value)||!text(option.label,100)||!option.label)bad();
+        return {id:option.value,label:option.label};
+      });
+    }
+    fields.push(field);
   }
   if(fields.length<1||fields.length>8)bad();
   const button=take(ids.at(-1),'Button');shape(button,['id','component','child','action'],['variant']);

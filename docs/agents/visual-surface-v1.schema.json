@@ -152,7 +152,7 @@
         },
         "label": {
           "type": "string",
-          "minLength": 1,
+          "minLength": 0,
           "maxLength": 100
         },
         "type": {
@@ -161,7 +161,9 @@
             "email",
             "number",
             "select",
-            "textarea"
+            "textarea",
+            "checkbox",
+            "choice"
           ]
         },
         "required": {
@@ -182,8 +184,50 @@
           "type": "number"
         },
         "initialValue": {
-          "type": "string",
-          "maxLength": 2000
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 2000
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "maxItems": 20,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            }
+          ]
+        },
+        "choices": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "label"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              }
+            }
+          }
+        },
+        "allowsMultipleSelection": {
+          "type": "boolean"
         }
       }
     },
@@ -490,6 +534,43 @@
             "contains": {
               "required": [
                 "formEvent"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "schemaVersion": {
+            "const": 2
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "nodes": {
+            "contains": {
+              "properties": {
+                "fields": {
+                  "contains": {
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "checkbox",
+                          "choice"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "fields"
               ]
             }
           }

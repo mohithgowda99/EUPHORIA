@@ -107,4 +107,32 @@ final class VisualPersistenceTests: XCTestCase {
         XCTAssertEqual(recovered.pending.first?.values, values)
     }
 
+    func testBooleanAndSelectionDraftsAndPendingSubmissionSurviveDiskReopen() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("controls.store")
+        var state = VisualState(surface: try SourceFixtures.a2uiControlsSurface())
+        for (id, value): (String, VisualScalar) in [("field_1", .flag(false)), ("field_2", .strings(["push"])), ("field_3", .strings([]))] {
+            try state.apply(VisualAction(id: UUID().uuidString, surfaceID: state.surface.surfaceID, expectedRevision: 0, nodeID: "form", kind: .setField, values: [id: value]))
+        }
+        try autoreleasepool {
+            let container = try ModelContainer(for: VisualSnapshot.self, configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+            try VisualSnapshotRepository(context: ModelContext(container)).save(state)
+        }
+        try autoreleasepool {
+            let container = try ModelContainer(for: VisualSnapshot.self, configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+            let repo = VisualSnapshotRepository(context: ModelContext(container))
+            var recovered = try XCTUnwrap(repo.load(surfaceID: state.surface.surfaceID))
+            let values = try recovered.proposedFormValues(nodeID: "form")
+            XCTAssertEqual(values["field_1"], .flag(false)); XCTAssertEqual(values["field_2"], .strings(["push"])); XCTAssertEqual(values["field_3"], .strings([]))
+            try recovered.apply(VisualAction(id: "confirm", surfaceID: state.surface.surfaceID, expectedRevision: 0, nodeID: "form", kind: .submitForm, values: values))
+            try repo.save(recovered)
+        }
+        let container = try ModelContainer(for: VisualSnapshot.self, configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+        var pending = try XCTUnwrap(VisualSnapshotRepository(context: ModelContext(container)).load(surfaceID: state.surface.surfaceID))
+        XCTAssertEqual(pending.pending.first?.values["field_2"], .strings(["push"]))
+        XCTAssertThrowsError(try pending.apply(VisualAction(id: "late", surfaceID: state.surface.surfaceID, expectedRevision: 0, nodeID: "form", kind: .setField, values: ["field_1": .flag(true)])))
+    }
+
 }

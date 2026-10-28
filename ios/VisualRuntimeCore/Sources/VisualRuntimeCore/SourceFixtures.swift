@@ -3,6 +3,7 @@ import Foundation
 /// Transcribed from actual OpenDuet component previews, not synthetic agent output.
 /// See: components/gallery/decisions.tsx, form.tsx and cards.tsx; page-view.tsx.
 public enum SourceFixtures {
+    public static func a2uiControlsSurface() throws -> VisualSurface { try bundledSurface("a2ui-controls-native") }
     public static func a2uiFormSurface() throws -> VisualSurface { try bundledSurface("a2ui-trip-native") }
     public static func gallerySurface() throws -> VisualSurface { try bundledSurface("gallery-v2") }
     private static func bundledSurface(_ name: String) throws -> VisualSurface {

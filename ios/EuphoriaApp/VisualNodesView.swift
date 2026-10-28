@@ -79,7 +79,38 @@ struct VisualNodesView: View {
     }
 
     @ViewBuilder private func fieldView(_ field: VisualField, node: VisualNode) -> some View {
-        if field.type == .select {
+        if field.type == .checkbox {
+            Toggle(field.label, isOn: Binding(
+                get: { state.formFieldData(nodeID: node.id, fieldID: field.id)?.bool ?? false },
+                set: { enact(node, kind: .setField, values: [field.id: .flag($0)]) }
+            ))
+            .accessibilityIdentifier("source.boolean." + field.id)
+            .disabled(isWaiting(node, kind: .submitForm))
+        } else if field.type == .choice {
+            VStack(alignment: .leading, spacing: 10) {
+                if !field.label.isEmpty { Text(field.label).font(.subheadline.weight(.medium)) }
+                ForEach(field.choices ?? []) { option in
+                    let selected = state.formFieldData(nodeID: node.id, fieldID: field.id)?.stringList?.contains(option.id) == true
+                    Button {
+                        do {
+                            let value = try state.proposedChoiceValue(nodeID: node.id, fieldID: field.id, optionID: option.id)
+                            enact(node, kind: .setField, values: [field.id: value])
+                        } catch { errorMessage = "Selection is unavailable. Refresh the form." }
+                    } label: {
+                        HStack {
+                            Image(systemName: field.allowsMultipleSelection == true ? (selected ? "checkmark.square.fill" : "square") : (selected ? "checkmark.circle.fill" : "circle"))
+                            Text(option.label)
+                            Spacer()
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityValue(selected ? "Selected" : "Not selected")
+                    .accessibilityIdentifier("source.choice." + field.id + "." + option.id)
+                }
+            }
+            .disabled(isWaiting(node, kind: .submitForm))
+        } else if field.type == .select {
             Picker(field.label, selection: binding(for: field, node: node)) {
                 Text("Select").tag("")
                 ForEach(field.options ?? [], id: \.self) { option in Text(option).tag(option) }

@@ -40,7 +40,7 @@ public struct VisualGallery: Codable, Equatable, Sendable {
             try require(columns != nil && (1...8).contains(columns!.count) && Set(columns!).count == columns!.count && columns!.allSatisfy { !$0.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty && text($0,80) })
             try require(rows != nil && rows!.count <= 100 && rows!.allSatisfy { row in
                 row.cells.count == columns!.count && row.cells.allSatisfy { cell in
-                    switch cell { case .text(let x): return text(x,2000); case .number(let x): return x.isFinite; case .flag: return false }
+                    switch cell { case .text(let x): return text(x,2000); case .number(let x): return x.isFinite; case .flag, .strings: return false }
                 }
             })
         case .bar, .pie, .progress:
@@ -68,6 +68,6 @@ public struct VisualGallery: Codable, Equatable, Sendable {
 }
 public extension VisualScalar {
     var displayText: String {
-        switch self { case .text(let s): return s; case .number(let n): return n.formatted(); case .flag(let x): return x ? "Yes" : "No" }
+        switch self { case .text(let s): return s; case .number(let n): return n.formatted(); case .flag(let x): return x ? "Yes" : "No"; case .strings(let list): return list.joined(separator: ", ") }
     }
 }

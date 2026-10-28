@@ -12,6 +12,23 @@ export function stable(value){
   if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+stable(value[k])).join(',')+'}';
   return JSON.stringify(value);
 }
+const boundedText=x=>typeof x==='string'&&x.length<=2000;
+const boundedStrings=x=>Array.isArray(x)&&x.length<=20&&new Set(x).size===x.length&&x.every(boundedText);
+function sourceValueValid(field,value){
+  if(['text','textarea'].includes(field.type))return boundedText(value);
+  if(field.type==='checkbox')return typeof value==='boolean';
+  if(field.type==='choice')return boundedStrings(value)&&
+    (field.allowsMultipleSelection||value.length<=1)&&value.every(v=>field.choices?.some(c=>c.id===v));
+  return false;
+}
+function sourceFieldValid(field){
+  if(field.required||field.options!==undefined||field.min!==undefined||field.max!==undefined)return false;
+  if(field.type==='choice'){
+    if(typeof field.allowsMultipleSelection!=='boolean'||!Array.isArray(field.choices)||field.choices.length>20||
+      new Set(field.choices.map(c=>c.id)).size!==field.choices.length||field.choices.some(c=>!boundedText(c.id)||!c.label||c.label.length>100))return false;
+  }else if(field.choices!==undefined||field.allowsMultipleSelection!==undefined)return false;
+  return sourceValueValid(field,field.initialValue);
+}
 export function validateSurface(surface){
   if(!validate(surface))fail(502,'Unsupported visual surface');
   const unique=items=>new Set(items.map(x=>x.id)).size===items.length;
@@ -22,12 +39,12 @@ export function validateSurface(surface){
     if(!/^[A-Za-z0-9_-]{1,64}$/.test(n.id))fail(502,'Unsupported node identity');
     if(['askChoice','askForm','askApproval'].includes(n.kind))decisions++;
     if(n.submitLabel!==undefined&&n.kind!=='askForm')fail(502,'Invalid form label');
-    if(n.fields?.some(f=>f.initialValue!==undefined&&f.initialValue.length>2000))fail(502,'Invalid initial value');
+    if(!n.formEvent&&n.fields?.some(f=>['checkbox','choice'].includes(f.type)||f.choices!==undefined||f.allowsMultipleSelection!==undefined||(f.initialValue!==undefined&&!boundedText(f.initialValue))))fail(502,'Invalid native field');
     if(n.formEvent){
       const e=n.formEvent, fields=n.fields??[];
       const safe=k=>/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(k)&&!['__proto__','prototype','constructor'].includes(k);
       if(surface.schemaVersion!==2||n.kind!=='askForm'||!n.submitLabel||![e.name,e.surfaceID,e.sourceComponentID].every(safe)||
-        fields.some(f=>!['text','textarea'].includes(f.type)||typeof f.initialValue!=='string')||
+        fields.some(f=>!sourceFieldValid(f))||
         [...Object.keys(e.contextFields),...Object.keys(e.literalContext)].some(k=>!safe(k))||
         Object.keys(e.contextFields).some(k=>Object.hasOwn(e.literalContext,k))||
         Object.values(e.literalContext).some(v=>typeof v==='string'&&v.length>2000)||
@@ -37,6 +54,7 @@ export function validateSurface(surface){
     if(n.kind==='askForm'){
       if(!n.fields?.length||!unique(n.fields))fail(502,'Invalid form');
       for(const f of n.fields){
+        if(f.type!=='choice'&&!f.label)fail(502,'Empty field label');
         if(f.min!==undefined&&f.max!==undefined&&f.min>f.max)fail(502,'Invalid field bounds');
         if(f.type==='select'&&(!f.options?.length||new Set(f.options).size!==f.options.length))fail(502,'Invalid field choices');
       }
@@ -82,7 +100,7 @@ export function decisionResult(surface,action){
   }
   if(node.kind==='askForm'&&action.kind==='submitForm'){
     if(node.formEvent){
-      if(keys.length!==node.fields.length||node.fields.some(f=>typeof v[f.id]!=='string'||v[f.id].length>2000)||keys.some(k=>!node.fields.some(f=>f.id===k)))fail(422,'Invalid source form values');
+      if(keys.length!==node.fields.length||node.fields.some(f=>!sourceValueValid(f,v[f.id]))||keys.some(k=>!node.fields.some(f=>f.id===k)))fail(422,'Invalid source form values');
       const e=node.formEvent,context={...e.literalContext};
       for(const [name,field] of Object.entries(e.contextFields))context[name]=v[field];
       return {userAction:{name:e.name,surfaceId:e.surfaceID,sourceComponentId:e.sourceComponentID,context}};

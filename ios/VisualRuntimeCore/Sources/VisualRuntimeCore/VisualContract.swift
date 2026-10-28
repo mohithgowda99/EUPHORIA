@@ -1,24 +1,30 @@
 import Foundation
 
-/// EUPHORIA native visual contract v1. No executable markup, scripts, URLs or credentials.
+/// Versioned native data contract; only explicit isolated artifact nodes carry executable web content.
 public enum VisualKind: String, Codable, Sendable {
     case askChoice, askForm, askApproval, showChecklist, pageChecklist, gallery, htmlArtifact
 }
 
 public enum VisualFieldKind: String, Codable, Sendable {
-    case text, email, number, select, textarea
+    case text, email, number, select, textarea, checkbox, choice
 }
 
 public enum VisualScalar: Codable, Equatable, Sendable {
     case text(String)
     case number(Double)
     case flag(Bool)
+    case strings([String])
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
         if let b = try? c.decode(Bool.self) { self = .flag(b) }
         else if let n = try? c.decode(Double.self) { self = .number(n) }
-        else { self = .text(try c.decode(String.self)) }
+        else if let list = try? c.decode([String].self) {
+            guard list.count <= 20, Set(list).count == list.count, list.allSatisfy({ $0.utf16.count <= 2000 }) else {
+                throw DecodingError.dataCorruptedError(in: c, debugDescription: "Invalid bounded string list")
+            }
+            self = .strings(list)
+        } else { self = .text(try c.decode(String.self)) }
     }
     public func encode(to encoder: Encoder) throws {
         var c = encoder.singleValueContainer()
@@ -26,10 +32,16 @@ public enum VisualScalar: Codable, Equatable, Sendable {
         case .text(let x): try c.encode(x)
         case .number(let x): try c.encode(x)
         case .flag(let x): try c.encode(x)
+        case .strings(let x):
+            guard x.count <= 20, Set(x).count == x.count, x.allSatisfy({ $0.utf16.count <= 2000 }) else {
+                throw EncodingError.invalidValue(x, .init(codingPath: encoder.codingPath, debugDescription: "Invalid bounded string list"))
+            }
+            try c.encode(x)
         }
     }
     public var string: String? { if case .text(let s) = self { return s }; return nil }
     public var bool: Bool? { if case .flag(let b) = self { return b }; return nil }
+    public var stringList: [String]? { if case .strings(let list) = self { return list }; return nil }
 }
 
 public struct VisualOption: Codable, Equatable, Sendable, Identifiable {
@@ -49,12 +61,35 @@ public struct VisualField: Codable, Equatable, Sendable, Identifiable {
     public let options: [String]?
     public let min: Double?
     public let max: Double?
-    public let initialValue: String?
+    public let initialValue: VisualScalar?
+    public let choices: [VisualOption]?
+    public let allowsMultipleSelection: Bool?
     public init(id: String, label: String, type: VisualFieldKind, required: Bool = false,
-                options: [String]? = nil, min: Double? = nil, max: Double? = nil, initialValue: String? = nil) {
+                options: [String]? = nil, min: Double? = nil, max: Double? = nil, initialValue: VisualScalar? = nil, choices: [VisualOption]? = nil, allowsMultipleSelection: Bool? = nil) {
         self.id = id; self.label = label; self.type = type; self.required = required
         self.options = options; self.min = min; self.max = max; self.initialValue = initialValue
+        self.choices = choices; self.allowsMultipleSelection = allowsMultipleSelection
     }
+    func acceptsSourceValue(_ value: VisualScalar) -> Bool {
+        switch (type, value) {
+        case (.text, .text(let text)), (.textarea, .text(let text)): return text.utf16.count <= 2000
+        case (.checkbox, .flag): return true
+        case (.choice, .strings(let list)):
+            return list.count <= 20 && Set(list).count == list.count && (allowsMultipleSelection == true || list.count <= 1) &&
+                list.allSatisfy { value in value.utf16.count <= 2000 && choices?.contains(where: { $0.id == value }) == true }
+        default: return false
+        }
+    }
+    func validSourceField() -> Bool {
+        guard !required, options == nil, min == nil, max == nil, let initialValue else { return false }
+        if type == .choice {
+            guard let choices, choices.count <= 20, allowsMultipleSelection != nil,
+                  Set(choices.map(\.id)).count == choices.count,
+                  choices.allSatisfy({ $0.id.utf16.count <= 2000 && !$0.label.isEmpty && $0.label.utf16.count <= 100 && $0.description == nil }) else { return false }
+        } else if choices != nil || allowsMultipleSelection != nil { return false }
+        return acceptsSourceValue(initialValue)
+    }
+
 }
 
 public struct VisualChecklistItem: Codable, Equatable, Sendable, Identifiable {
@@ -83,9 +118,9 @@ public struct VisualFormEvent: Codable, Equatable, Sendable {
               contextFields.keys.allSatisfy(safe), literalContext.keys.allSatisfy(safe),
               Set(contextFields.keys).isDisjoint(with: literalContext.keys),
               contextFields.values.allSatisfy({ id in fields.contains { $0.id == id } }),
-              fields.allSatisfy({ [.text, .textarea].contains($0.type) && $0.initialValue != nil }),
+              fields.allSatisfy({ $0.validSourceField() }),
               literalContext.values.allSatisfy({ value in
-                  switch value { case .text(let s): return s.utf16.count <= 2000; case .number(let n): return n.isFinite; case .flag: return true }
+                  switch value { case .text(let s): return s.utf16.count <= 2000; case .number(let n): return n.isFinite; case .flag: return true; case .strings: return false }
               }) else { throw VisualContractError.invalidNode }
     }
 }
@@ -159,9 +194,13 @@ public struct VisualSurface: Codable, Equatable, Sendable {
                 }
                 for f in fields {
                     guard f.id.range(of: "^[A-Za-z][A-Za-z0-9_]{0,47}$", options: .regularExpression) != nil,
-                          !f.label.isEmpty, f.label.count <= 100, (f.initialValue?.utf16.count ?? 0) <= 2000,
+                          (f.type == .choice || !f.label.isEmpty), f.label.utf16.count <= 100,
                           f.min == nil || f.max == nil || f.min! <= f.max! else {
                         throw VisualContractError.invalidNode
+                    }
+                    if node.formEvent == nil {
+                        guard ![.checkbox, .choice].contains(f.type), f.choices == nil, f.allowsMultipleSelection == nil,
+                              f.initialValue == nil || (f.initialValue?.string.map { $0.utf16.count <= 2000 } == true) else { throw VisualContractError.invalidNode }
                     }
                     if f.type == .select {
                         let opts = f.options ?? []

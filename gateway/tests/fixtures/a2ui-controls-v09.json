@@ -1,0 +1,141 @@
+{
+  "a2ui": [
+    {
+      "version": "v0.9",
+      "createSurface": {
+        "surfaceId": "trip-controls",
+        "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"
+      }
+    },
+    {
+      "version": "v0.9",
+      "updateComponents": {
+        "surfaceId": "trip-controls",
+        "components": [
+          {
+            "id": "root",
+            "component": "Card",
+            "child": "fields"
+          },
+          {
+            "id": "fields",
+            "component": "Column",
+            "children": [
+              "title",
+              "destination",
+              "notify",
+              "channel",
+              "activities",
+              "confirm"
+            ]
+          },
+          {
+            "id": "title",
+            "component": "Text",
+            "text": "Trip preferences",
+            "variant": "h3"
+          },
+          {
+            "id": "destination",
+            "component": "TextField",
+            "label": "Destination",
+            "value": {
+              "path": "/destination"
+            }
+          },
+          {
+            "id": "confirm",
+            "component": "Button",
+            "variant": "primary",
+            "child": "confirm-label",
+            "action": {
+              "event": {
+                "name": "confirm_trip",
+                "context": {
+                  "destination": {
+                    "path": "/destination"
+                  },
+                  "notify": {
+                    "path": "/notify"
+                  },
+                  "channel": {
+                    "path": "/channel"
+                  },
+                  "activities": {
+                    "path": "/activities"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "confirm-label",
+            "component": "Text",
+            "text": "Confirm"
+          },
+          {
+            "id": "notify",
+            "component": "CheckBox",
+            "label": "Send a reminder",
+            "value": {
+              "path": "/notify"
+            }
+          },
+          {
+            "id": "channel",
+            "component": "ChoicePicker",
+            "label": "Preferred channel",
+            "variant": "mutuallyExclusive",
+            "options": [
+              {
+                "label": "Email message",
+                "value": "email"
+              },
+              {
+                "label": "Push notification",
+                "value": "push"
+              }
+            ],
+            "value": {
+              "path": "/channel"
+            }
+          },
+          {
+            "id": "activities",
+            "component": "ChoicePicker",
+            "label": "Activities",
+            "variant": "multipleSelection",
+            "options": [
+              {
+                "label": "Walking",
+                "value": "walk"
+              },
+              {
+                "label": "Running",
+                "value": "run"
+              }
+            ],
+            "value": {
+              "path": "/activities"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "version": "v0.9",
+      "updateDataModel": {
+        "surfaceId": "trip-controls",
+        "path": "/",
+        "value": {
+          "destination": "Paris",
+          "notify": false,
+          "channel": [],
+          "activities": [
+            "walk"
+          ]
+        }
+      }
+    }
+  ]
+}

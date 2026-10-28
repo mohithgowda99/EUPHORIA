@@ -131,7 +131,7 @@ test('single initial managed session stream carries real session-created then ro
  ];
  const {client,requests}=await provider(t,(_,res)=>{
   res.writeHead(200,{'content-type':'text/event-stream'});
-  res.end(events.map(e=>'data: '+JSON.stringify(e)+'\\n\\n').join(''));
+  res.end(events.map(e=>'data: '+JSON.stringify(e)+'\n\n').join(''));
  });
  const stream=await client.createSessionStream({model:'test-model',instructions:'Work',
   input:'Hello'},'stream_create_1');

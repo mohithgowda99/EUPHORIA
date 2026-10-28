@@ -1,5 +1,9 @@
 # Current verification evidence — 2026-10-28
 
+## Routine dispatch —c9b9e4c
+
+148 gateway tests pass offline. Actual task/session fixture dispatch, strict source cron/timezone/floor/cap, atomic due keys, restart/no replay, stale window skip, worker liveness, slow-batch freshness, deterministic task link and graceful shutdown drain all covered. Terra/medium review3 important issues fixed RED→GREEN. Conditional multi-process finding remains outside supported runtime: one process per SQLite file; no shared-file replicas. Logs:/private/tmp/euphoria-routines-{red,review-red,shutdown-red,final}.log. A baseline deferred-stub/close cleanup hang was corrected; owned runners stopped, final full suite green. No paid/native calls or edits; no production worker/native/provider acceptance claim. Outcome/fatigue/grants/channel/cloud parity remains unfinished. User AgentB ownership/isolation clarification honored; native branch inspected only, no merge.
+
 ## Task service —aa12d31
 
 138 gateway tests pass offline. Local HTTP/disk SQLite cover actual provider-session start, creation ownership/idempotency/uncertainty, canonical needs_input, exact-root saved reply readiness, cancellation, reply-before-turn checkpoint, human resolution/reopen/supersession, bounded history search and owner-scoped paginated decision reports. Existing generic session input routes for tasks reuse same journal. Two alias collisions reproduced then fixed; source explicit resolve of failed work retains failure. Terra/medium review completed; no paid calls, no native edits/build or task UI/provider acceptance claimed. Final:/private/tmp/euphoria-tasks-final.log. Task contract/schema/fixture in docs/contracts/tasks-v1*. Full service/cloud goal remains open.

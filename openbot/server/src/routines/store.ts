@@ -697,6 +697,14 @@ export function createRoutineStore(database: Database): RoutineStore {
         await transaction.execute(
           sql`select pg_advisory_xact_lock(hashtext(${`routine-run-${id}`}))`,
         );
+        // Same lock as provider migration. Recheck AFTER the lock so a manual
+        // original-source firing cannot slip past a concurrent cloud cutover.
+        const [current] = await transaction.select({
+          backend:routines.executionBackend,enabled:routines.enabled
+        }).from(routines).where(and(eq(routines.id,id),
+          eq(routines.ownerUserId,ownerUserId))).limit(1);
+        if(current?.backend!=="source"||!current.enabled)
+          throw new RoutineRefusedError("Routine execution backend changed; refresh before running.");
         const [open] = await transaction
           .select({ id: routineRuns.id })
           .from(routineRuns)
@@ -937,6 +945,9 @@ export function createRoutineStore(database: Database): RoutineStore {
         .where(
           and(
             isNull(routineRuns.status),
+            inArray(routineRuns.routineId,
+              database.select({id:routines.id}).from(routines)
+                .where(eq(routines.executionBackend,"source"))),
             lte(
               routineRuns.startedAt,
               sql`now() - (${olderThanMs} * interval '1 millisecond')`,
@@ -951,7 +962,7 @@ export function createRoutineStore(database: Database): RoutineStore {
       const disabled = await database
         .update(routines)
         .set({ enabled: false, updatedAt: sql`now()` })
-        .where(eq(routines.id, id))
+        .where(and(eq(routines.id, id), eq(routines.executionBackend,"source")))
         .returning({ id: routines.id });
       // Deleted between the sweep's read and this write: gone is gone, and a run row inserted here
       // would only violate the foreign key of a routine nobody can see any more.

@@ -51,6 +51,31 @@ struct SourceConnectionsResponse: Decodable, Sendable {
     let connections: [SourceConnectedApp]
     let redirectUri: String?
 }
+struct SourcePluginServer: Decodable, Identifiable, Sendable {
+    let id: String
+    let title: String
+    let summary: String
+    let provenance: String
+    let hasCredential: Bool
+    let lastError: String?
+    var isAvailable: Bool { lastError == nil }
+}
+struct SourcePluginServersResponse: Decodable, Sendable {
+    let servers: [SourcePluginServer]
+}
+struct SourceConnectionStart: Decodable, Sendable {
+    let authorizationUrl: String?
+    let fields: [SourceConnectionField]?
+}
+struct SourceConnectionField: Decodable, Sendable {
+    let name: String
+    let required: Bool
+}
+struct SourceConnectionEnd: Decodable, Sendable {
+    let ok: Bool?
+    let disconnected: Bool?
+}
+
 struct SourceSkill: Decodable, Identifiable, Sendable {
     let slug: String
     let title: String
@@ -664,6 +689,32 @@ struct OpenDuetSourceAPI: Sendable {
         let response: SourceConnectionsResponse = try await get("api/plugins/connections")
         guard response.connections.count <= 2000 else { throw SourceAPIError.invalidResponse }
         return response
+    }
+
+    /// Only server-advertised app entries may be addressed. Source policies
+    /// still decide whether this account may connect/disconnect.
+    func availableSourceConnections() async throws -> [SourcePluginServer] {
+        let envelope: SourcePluginServersResponse = try await get("api/plugins")
+        guard envelope.servers.count <= 2000 else { throw SourceAPIError.invalidResponse }
+        return envelope.servers
+    }
+    func startSourceConnection(serverID: String) async throws -> URL {
+        let response: SourceConnectionStart = try await request(
+            "api/plugins/servers/" + checkedID(serverID) + "/connect", method: "POST")
+        // Credential-field forms are not silently submitted or reconstructed
+        // from OAuth URLs. The UI must explicitly report unsupported setup.
+        guard response.fields == nil, let raw = response.authorizationUrl,
+              raw.count <= 4096, let url = URL(string: raw),
+              url.scheme?.lowercased() == "https",
+              url.host != nil, url.user == nil, url.password == nil,
+              url.fragment == nil else { throw SourceAPIError.invalidResponse }
+        return url
+    }
+    func disconnectSourceConnection(serverID: String) async throws {
+        let _: SourceConnectionEnd = try await request(
+            "api/plugins/servers/" + checkedID(serverID) + "/connection", method: "DELETE")
+        // A request accepted is not evidence that a remote broker session is
+        // gone. A separate read of original source status is required.
     }
 
     /// Skills and tool permissions are owned by original PluginStore.

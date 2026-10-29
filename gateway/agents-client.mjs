@@ -329,6 +329,25 @@ export class AgentsClient {
       finally{controller.abort();}
     })()};
   }
+  /** OpenAI's native browser approval event. Source must verify exact owner,
+   * session/root, current origin and request ID and persist a one-shot receipt.
+   * Never retry a possibly accepted approval write automatically.
+   */
+  async respondBrowserApproval(sessionID,requestID,decision,submissionKey){
+    identifier(sessionID);identifier(requestID);
+    if(!['approve','deny','cancel'].includes(decision))
+      throw Error('Unsupported browser origin decision');
+    const session=await this.retrieveSession(sessionID);
+    const present=(session.required_actions??[]).some(a=>
+      a.type==='computer_use_approval_request'&&a.request_id===requestID&&
+      a.request?.type==='browser_origin_access');
+    if(!present)throw Error('Browser origin request is no longer pending');
+    return this.#request('POST','/'+sessionID+'/events',{events:[{
+      type:'agent.session.input.computer_use_approval_request_result',
+      request_id:requestID,response:{type:'browser_origin_access',decision}
+    }]},submissionKey);
+  }
+
   async cancelTurn(sessionID, submissionKey) {
     return this.#request('POST', '/' + identifier(sessionID) + '/events',
       {events: [{type: 'agent.session.input.cancel'}]}, submissionKey);
@@ -510,11 +529,30 @@ function checkedEnvironment(value) {
   if (value.type === 'none' && Object.keys(value).length === 1) return {type: 'none'};
   if (value.type !== 'openai_hosted') throw Error('Unsupported Agents environment');
   const keys = Object.keys(value);
-  if (keys.some(k => !['type', 'container_size', 'network', 'skills'].includes(k))) throw Error('Unapproved Agents environment option');
+  if (keys.some(k => !['type', 'container_size', 'network', 'skills', 'desktop'].includes(k))) throw Error('Unapproved Agents environment option');
   if (value.container_size !== undefined && value.container_size !== 'small') throw Error('Only small hosted sandbox is approved');
-  if (!value.network || typeof value.network !== 'object' || Array.isArray(value.network) ||
-      Object.keys(value.network).length !== 1 || value.network.access !== 'disabled')
-    throw Error('Hosted sandbox network access must be disabled');
+  const desktop=value.desktop;
+  const browser=desktop!==undefined;
+  if(browser&&(!desktop||typeof desktop!=='object'||Array.isArray(desktop)||
+     Object.keys(desktop).length!==1||desktop.enabled!==true))
+    throw Error('Invalid OpenAI hosted browser configuration');
+  if (!value.network || typeof value.network !== 'object' || Array.isArray(value.network))
+    throw Error('Explicit hosted network policy required');
+  const policy=value.network;
+  if(browser){
+    if(Object.keys(policy).sort().join(',')!=='access,allowed_domains'||
+      policy.access!=='restricted'||!Array.isArray(policy.allowed_domains)||
+      policy.allowed_domains.length<1||policy.allowed_domains.length>12||
+      policy.allowed_domains.some(host=>typeof host!=='string'||
+       !['developers.openai.com','www.rfc-editor.org','www.w3.org'].includes(host))||
+      value.skills!==undefined)
+      throw Error('Browser may access only approved documentation hosts without skill bundles');
+    return{type:'openai_hosted',container_size:'small',
+      desktop:{enabled:true},network:{access:'restricted',
+       allowed_domains:[...new Set(policy.allowed_domains)]}};
+  }
+  if(Object.keys(policy).length!==1||policy.access!=='disabled')
+    throw Error('Hosted code sandbox network access must be disabled');
   const skills=value.skills===undefined?[]:value.skills;
   if(!Array.isArray(skills)||skills.length>4)throw Error('Unsupported hosted skill count');
   const seen=new Set();

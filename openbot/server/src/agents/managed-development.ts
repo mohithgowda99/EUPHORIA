@@ -173,13 +173,14 @@ export async function createManagedDevelopment(input:{database:Database;provider
  }
 
  const visualPath='/api/delivery/conversations/:id/visual';
- async function pendingVisual(owner:string,channelId:string,botId:string){
+ async function pendingVisual(owner:string,channelId:string,botId:string,sourceInboxID?:string){
   const scope=await scopeFor(owner,channelId,botId);if(!scope)throw Error('Source access revoked');
   const link=await links.read({ownerUserId:owner,channelId,botId,threadId:scope.threadId});
   if(!link?.providerSessionId)return{surface:null};
   const [current]=await database.select({inbox:deliveryInbox,receipt:managedAgentInboxTurns}).from(deliveryInbox)
    .leftJoin(managedAgentInboxTurns,eq(deliveryInbox.id,managedAgentInboxTurns.inboxId))
-   .where(and(eq(deliveryInbox.ownerUserId,owner),eq(deliveryInbox.channelId,channelId),eq(deliveryInbox.agentId,botId)))
+   .where(and(eq(deliveryInbox.ownerUserId,owner),eq(deliveryInbox.channelId,channelId),eq(deliveryInbox.agentId,botId),
+    ...(sourceInboxID?[eq(deliveryInbox.id,sourceInboxID)]:[])))
    .orderBy(desc(deliveryInbox.createdAt)).limit(1);
   if(!current||!['accepted','running'].includes(current.inbox.state)||!current.receipt?.rootTurnId||current.receipt.providerSessionId!==link.providerSessionId)return{surface:null};
   const session=await provider.retrieveSession(link.providerSessionId);
@@ -279,7 +280,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
    if(openQuestion)continue;
    try{
     if(await scopeFor(inbox.owner,inbox.channelId,inbox.agentId))
-      await pendingVisual(inbox.owner,inbox.channelId,inbox.agentId);
+      await pendingVisual(inbox.owner,inbox.channelId,inbox.agentId,inbox.id);
    }catch{
     // Exact provider action cannot yet be read or is invalid. Do not guess
     // a human question or fabricate a provider tool result.

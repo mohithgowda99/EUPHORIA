@@ -24,6 +24,11 @@ struct SourceMoreView: View {
                 } label: {
                     Label("Routines and responsibilities", systemImage: "calendar.badge.clock")
                 }
+                NavigationLink {
+                    SourceProactiveSettingsView()
+                } label: {
+                    Label("Proactive research", systemImage: "sparkle.magnifyingglass")
+                }
             }
             Section("External services") {
                 NavigationLink {

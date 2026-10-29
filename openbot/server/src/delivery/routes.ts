@@ -87,6 +87,7 @@ export function createDeliveryRoutes(deps: {
   slack?: OpenTagTransport;
   twilio?: TwilioTransport;
   pushProjectId?: string;
+  nativeAPNs?: boolean;
 }) {
   const routes = new Hono<{ Variables: AppVariables }>();
   routes.use("*", deps.requireUser, bodyLimit({ maxSize: 64 * 1024 }));
@@ -98,11 +99,13 @@ export function createDeliveryRoutes(deps: {
         ({ token: _token, ...device }) => device,
       ),
       deliveries: await deps.store.history(c.var.actor.id),
+      pushProjectId: deps.pushProjectId ?? null,
       available: {
         slack: Boolean(deps.slack),
         teams: Boolean(deps.slack),
         sms: Boolean(deps.twilio),
         push: Boolean(deps.pushProjectId),
+        nativeAPNs: Boolean(deps.pushProjectId && deps.nativeAPNs),
       },
     }),
   );
@@ -204,11 +207,15 @@ export function createDeliveryRoutes(deps: {
     const input = z
       .strictObject({
         id: z.string().uuid(),
-        token: z.string().regex(/^(Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/),
+        token: z.string().refine(token => deps.nativeAPNs
+          ? /^[a-fA-F0-9]{64}$/.test(token)
+          : /^(Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/.test(token)),
         projectId: z.string().uuid(),
         platform: z.enum(["ios", "android"]),
       })
       .parse(await c.req.json());
+    if (deps.nativeAPNs && input.platform !== "ios")
+      throw new DeliveryRefusedError("This delivery service only accepts native iOS devices.");
     if (input.projectId !== deps.pushProjectId)
       throw new DeliveryRefusedError(
         "This device belongs to another push project.",

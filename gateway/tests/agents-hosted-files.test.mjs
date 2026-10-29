@@ -46,3 +46,44 @@ test('artifact content enforces streaming size, not just Content-Length',async()
  const client=new AgentsClient({...base,fetchImpl:async()=>new Response(new Uint8Array(24))});
  await assert.rejects(client.retrieveArtifactContent('sess_a','art_b',{maxBytes:8}),/unavailable/);
 });
+
+test('hosted environment file upload uses verified session/environment target, bounded base64 and stable idempotency key',async()=>{
+ const sent=[];
+ const bytes=Buffer.from('hello input');
+ const client=new AgentsClient({...base,fetchImpl:async(url,init)=>{
+  sent.push({url,init});
+  return Response.json({object:'agent.environment.file',environment_id:'env_1',
+   path:'/workspace/upload_test.txt',size_bytes:bytes.length},{status:201});
+ }});
+ const result=await client.createEnvironmentFile('env_1',{
+  path:'/workspace/upload_test.txt',data:bytes.toString('base64')
+ },'hosted_file_uuid_1');
+ assert.equal(result.size_bytes,bytes.length);
+ assert.equal(sent[0].url,'https://api.openai.com/v1/agents/environments/env_1/files');
+ assert.equal(sent[0].init.headers['Idempotency-Key'],'hosted_file_uuid_1');
+ assert.deepEqual(JSON.parse(sent[0].init.body),{
+  type:'inline',path:'/workspace/upload_test.txt',data:bytes.toString('base64')
+ });
+});
+test('sandbox inputs reject path traversal, noncanonical bytes and oversized input without provider call',async()=>{
+ let calls=0;
+ const client=new AgentsClient({...base,fetchImpl:async()=>{calls++;return Response.json({});}});
+ for(const [path,data] of [
+  ['/workspace/../../.ssh/key','dGVzdA=='],['/workspace/hi','dGVzdA==='],
+  ['/workspace/name.txt',''],['/tmp/file','dGVzdA=='],
+  ['/workspace/file',Buffer.alloc(1024*1024+1).toString('base64')]
+ ])await assert.rejects(client.createEnvironmentFile('env_1',{path,data},'key_1'));
+ assert.equal(calls,0);
+});
+test('subagent roster is read from original managed session, never invented from progress text',async()=>{
+ const called=[];
+ const client=new AgentsClient({...base,fetchImpl:async(url,init)=>{
+  called.push({url,init});
+  return Response.json({data:[{id:'sub_1',session_id:'sess_1',status:'active'}],
+   has_more:false});
+ }});
+ const page=await client.listSubagents('sess_1',{limit:50});
+ assert.equal(page.data[0].id,'sub_1');
+ assert.equal(called[0].url,'https://api.openai.com/v1/agents/sessions/sess_1/subagents?order=desc&limit=50');
+ assert.equal(called[0].init.method,'GET');
+});

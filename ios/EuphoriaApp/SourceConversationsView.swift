@@ -155,6 +155,9 @@ struct SourceConversationDetailView: View {
     @State private var needsHumanAnswer = false
     @State private var visualCompleted = false
     @State private var completedVisuals: [SourceCompletedVisual] = []
+    @State private var hostedArtifacts: [SourceHostedArtifact] = []
+    @State private var exportedArtifact: (id: String, url: URL)?
+    @State private var downloadingArtifactID: String?
 
     private var pending: [SourceMessageIntent] {
         allPending.filter { $0.ownerScope == ownerScope && $0.channelID == conversation.id }
@@ -231,6 +234,41 @@ struct SourceConversationDetailView: View {
                             .padding(16).frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
                             .accessibilityElement(children: .contain)
+                        }
+                        if !hostedArtifacts.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label("Generated files", systemImage: "doc.zipper")
+                                    .font(.subheadline.weight(.semibold))
+                                Text("Files from completed, source-verified Bot turns. Downloading is private to your signed-in account.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                ForEach(hostedArtifacts) { artifact in
+                                    VStack(alignment: .leading, spacing: 7) {
+                                        Text(artifact.filename).font(.subheadline.weight(.medium))
+                                        Text(artifact.mimeType + " · " +
+                                             ByteCountFormatter.string(fromByteCount: Int64(artifact.sizeBytes), countStyle: .file))
+                                            .font(.caption2).foregroundStyle(.secondary)
+                                        if exportedArtifact?.id == artifact.id, let file = exportedArtifact?.url {
+                                            ShareLink(item: file) {
+                                                Label("Save or share", systemImage: "square.and.arrow.up")
+                                            }
+                                        } else {
+                                            Button {
+                                                Task { await download(artifact) }
+                                            } label: {
+                                                if downloadingArtifactID == artifact.id {
+                                                    ProgressView()
+                                                } else {
+                                                    Label("Prepare file", systemImage: "arrow.down.doc")
+                                                }
+                                            }
+                                            .disabled(downloadingArtifactID != nil)
+                                        }
+                                    }
+                                    .padding(12)
+                                    .background(botColor, in: RoundedRectangle(cornerRadius: 12))
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         ForEach(pending) { item in
                             VStack(alignment: .leading, spacing: 8) {
@@ -328,6 +366,14 @@ struct SourceConversationDetailView: View {
             let channel = try await client.sourceConversation(id: conversation.id)
             guard channel.agentIds.contains(selectedBotID) else { throw SourceAPIError.invalidResponse }
             messages = try await client.sourceHistory(channelID: conversation.id, agentID: selectedBotID)
+            // Previous file links cannot carry authority across Bot switches.
+            if exportedArtifact?.id != nil && !hostedArtifacts.contains(where: { $0.id == exportedArtifact?.id }) {
+                exportedArtifact = nil
+            }
+            hostedArtifacts = (try? await client.sourceHostedArtifacts(channelID: conversation.id, botID: selectedBotID)) ?? []
+            if let exportedArtifact, !hostedArtifacts.contains(where: { $0.id == exportedArtifact.id }) {
+                self.exportedArtifact = nil
+            }
             self.error = nil
             do {
                 let response = try await client.sourceVisual(channelID: conversation.id, agentID: selectedBotID)
@@ -356,6 +402,26 @@ struct SourceConversationDetailView: View {
             catch { awaitingAgent = false; self.error = "The interactive response could not be verified. Refresh to check it." }
         } catch {
             self.error = "The original conversation could not be read. Your saved outgoing intent has not been replayed."
+        }
+    }
+
+    private func download(_ artifact: SourceHostedArtifact) async {
+        guard downloadingArtifactID == nil,
+              hostedArtifacts.contains(where: { $0.id == artifact.id }),
+              !selectedBotID.isEmpty else { return }
+        downloadingArtifactID = artifact.id
+        defer { downloadingArtifactID = nil }
+        do {
+            let file = try await client.downloadSourceHostedArtifact(
+                channelID: conversation.id, botID: selectedBotID, artifact: artifact)
+            guard hostedArtifacts.contains(where: { $0.id == artifact.id }) else {
+                try? FileManager.default.removeItem(at: file)
+                return
+            }
+            exportedArtifact = (id: artifact.id, url: file)
+            error = nil
+        } catch {
+            error = "The generated file is unavailable or its source authorization could not be confirmed."
         }
     }
 

@@ -114,7 +114,7 @@ struct SourceBotsView: View {
                     }
                     if bots.isEmpty && !loading {
                         ContentUnavailableView("No Bots", systemImage: "person.crop.circle.badge.plus",
-                            description: Text("Create a Bot in the original OpenDuet service."))
+                            description: Text("Create a Bot in the EUPHORIA service."))
                     }
                 }
             }
@@ -145,7 +145,7 @@ struct SourceBotsView: View {
                     TextField("Short title", text: $newTitle)
                     TextField("What this Bot does and how it behaves", text: $newInstructions, axis: .vertical)
                         .lineLimit(4...10)
-                    Text("New Bots are private by default. Their instructions and permissions are stored in the original OpenDuet account service.")
+                    Text("New Bots are private by default. Their instructions and permissions are stored in the EUPHORIA account service.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .navigationTitle("New Bot")
@@ -234,7 +234,7 @@ struct SourceBotsView: View {
             bots = accountsBots
             errorMessage = nil
         } catch {
-            errorMessage = "Original OpenDuet sign-in or account access could not be verified. No new session was stored."
+            errorMessage = "Original EUPHORIA sign-in or account access could not be verified. No new session was stored."
         }
     }
 
@@ -266,7 +266,7 @@ struct SourceBotsView: View {
     private func forgetThisDevice() {
         if let currentEndpoint { SourceSessionKeychain.clear(origin: currentEndpoint.baseURL) }
         client = nil; user = nil; bots = []; builtInAvailable = false
-        errorMessage = "The saved login was cleared on this iPhone. Remote account sessions may remain active until revoked in OpenDuet."
+        errorMessage = "The saved login was cleared on this iPhone. Remote account sessions may remain active until revoked in EUPHORIA."
     }
 }
 
@@ -292,7 +292,7 @@ private struct SourceBotDetailView: View {
                     Text(bot.title).foregroundStyle(.secondary)
                     Text(bot.roleDescription).textSelection(.enabled)
                     LabeledContent("Visibility", value: bot.visibility)
-                    if bot.systemOwned { Text("Managed by your OpenDuet deployment").font(.caption) }
+                    if bot.systemOwned { Text("Managed by your EUPHORIA deployment").font(.caption) }
                 }
                 Section("Skills and connected tools") {
                     NavigationLink("Manage this Bot's skills and grants") {
@@ -335,7 +335,7 @@ private struct SourceBotDetailView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("OpenDuet will revoke this Bot's access. This cannot be undone from this screen.")
+            Text("EUPHORIA will revoke this Bot's access. This cannot be undone from this screen.")
         }
         .sheet(isPresented: $editing) {
             NavigationStack {

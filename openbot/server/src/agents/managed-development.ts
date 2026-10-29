@@ -654,6 +654,7 @@ export async function createManagedDevelopment(input: {
   app.route("/api/openduet/tasks", managedTasks.routes);
   app.route("/api/openduet/tasks", managedTasks.extras);
   app.route("/api/proactive/suggestions", managedTasks.suggestions);
+  app.route("/api/proactive/settings", managedTasks.proactiveSettingsRoutes);
   // Expose original RoutineStore and its source-scoped routes. No additional
   // scheduler is installed. Paid scheduled execution stays default DENY.
   const originalRoutineStore = createRoutineStore(database);

@@ -37,7 +37,7 @@ export function projectHostedArtifact(
     return null;
   const parts = path.split("/");
   const filename = parts.at(-1) ?? "";
-  if (!filename || filename.length > 180 || /[\x00-\x1f]/.test(filename))
+  if (!filename || filename.length > 180 || Array.from(filename).some((ch) => ch.charCodeAt(0) < 32))
     return null;
   if (
     !Number.isSafeInteger(v.size_bytes) ||

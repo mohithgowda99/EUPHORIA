@@ -117,8 +117,8 @@ export async function createManagedDevelopment(input:{database:Database;provider
   authorizeBot:async(owner,botID)=>{
    if(owner!==actor.id)throw Error('Managed Bot owner unavailable');
    await resolveManagedSourceBot({
-    actor,botId:botID,profiles,registered,model,
-    roleMessage:agentStandingMessage,
+    actor,botId:botID,profiles,registered,model:input.model,
+    roleMessage:standingRoleMessage,
    });
   },
  });

@@ -176,11 +176,29 @@ test.skipIf(!url)(
         method:"POST",headers,body:JSON.stringify({...draftInput,enabled:true})
       });
       expect(denied.status).toBe(409);
-      const draft=await app2.app.request("/api/proactive/settings",{
-        method:"POST",headers,body:JSON.stringify(draftInput)
-      });
-      expect(draft.status).toBe(201);
-      const draftID=(await draft.json()).setting.id;
+      const original=await app2.app.request("/api/proactive/settings",{headers});
+      const existing=(await original.json()).settings.find(
+        (setting:{agentId:string})=>setting.agentId===bot.id
+      );
+      let draftID:string;
+      if(existing){
+        // Original OpenDuet may have enabled background research by default
+        // after first contact. Do not create a duplicate or silently assume
+        // that it is managed provider work. Explicitly disable that source row.
+        draftID=existing.id;
+        const paused=await app2.app.request("/api/proactive/settings/"+draftID,{
+          method:"PATCH",headers,
+          body:JSON.stringify({focus:draftInput.focus,enabled:false})
+        });
+        expect(paused.status).toBe(200);
+        expect((await paused.json()).setting.enabled).toBe(false);
+      }else{
+        const draft=await app2.app.request("/api/proactive/settings",{
+          method:"POST",headers,body:JSON.stringify(draftInput)
+        });
+        expect(draft.status).toBe(201);
+        draftID=(await draft.json()).setting.id;
+      }
       expect((await app2.app.request("/api/proactive/settings",{
         method:"POST",headers,body:JSON.stringify(draftInput)
       })).status).toBe(409);

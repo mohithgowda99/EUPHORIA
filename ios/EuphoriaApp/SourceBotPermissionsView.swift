@@ -52,7 +52,11 @@ struct SourceBotPermissionsView: View {
                     get: { hosted?.capabilities.browser ?? false },
                     set: { value in Task { await updateHosted(browser: value) } }
                 ))
-                .disabled(busy || hosted == nil || hosted?.locked == true || hosted?.capabilities.sandbox == true)
+                .disabled(busy || hosted == nil || hosted?.locked == true || hosted?.capabilities.sandbox == true || hosted?.browserAvailable != true)
+                if hosted?.browserAvailable == false {
+                    Text("Public browser is unavailable until the server operator enables vetted documentation origins.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
                 Text("Only operator-approved documentation sites. Each origin requires your approval. No sign-in or external writes.")
                     .font(.caption2).foregroundStyle(.secondary)
                 Toggle("Hosted sandbox", isOn: Binding(

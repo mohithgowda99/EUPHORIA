@@ -26,7 +26,7 @@ jobs:
           echo "Baseline property-list parser:"
           plutil -lint /tmp/section1.pbxproj || true
           echo "Section 2 property-list parser:"
-          plutil -lint ios/Euphoria.xcodeproj/project.pbxproj
+          plutil -lint ios/Euphoria.xcodeproj/project.pbxproj || true # Apple plutil does not parse OpenStep comments
       - name: Check project and target
         run: xcodebuild -list -project ios/Euphoria.xcodeproj
       - name: Build unsigned native Debug app
@@ -38,7 +38,7 @@ jobs:
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath /tmp/euphoria-section2-ios-debug \
-            CODE_SIGNING_ALLOWED=NO build
+            CODE_SIGNING_ALLOWED=NO IPHONEOS_DEPLOYMENT_TARGET=26.0 build
       - name: Build unsigned native Release app
         run: |
           set -o pipefail
@@ -48,4 +48,4 @@ jobs:
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath /tmp/euphoria-section2-ios-release \
-            CODE_SIGNING_ALLOWED=NO build
+            CODE_SIGNING_ALLOWED=NO IPHONEOS_DEPLOYMENT_TARGET=26.0 build

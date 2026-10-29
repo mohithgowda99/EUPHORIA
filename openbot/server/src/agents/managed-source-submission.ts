@@ -1,3 +1,4 @@
+import type { ManagedRootCreatedEvent } from "./managed-inbox-turns";
 import type { ManagedSourceScope } from "./managed-session-links";
 
 /**
@@ -120,7 +121,7 @@ export async function submitManagedSourceInput(input: {
       sessionID: string,
       message: string,
       key: string,
-      onRoot: (event: unknown) => Promise<void>,
+      onRoot: (event: ManagedRootCreatedEvent) => Promise<void>,
     ): Promise<void>;
     sendMessage(
       sessionID: string,

@@ -29,6 +29,7 @@ import {createManagedTaskAdapter} from './managed-task-adapter';
 import {createManagedHostedCapabilities,parseHostedCapabilities,hostedDefinition,DENIED_HOSTED_CAPABILITIES} from './managed-hosted-capabilities';
 import {projectHostedArtifact,attachmentName} from './managed-hosted-artifacts';
 import {assertCurrentRootForCancellation} from './managed-hosted-cancel';
+import {browserEnvironment,parsePublicBrowserHosts,pendingPublicOrigin,isPendingAuth} from './managed-hosted-browser';
 import {managedSourceSkillContext} from './managed-source-skills';
 import {grantedHostedSkillReferences,parseHostedSkillMappings,type HostedSkillMapping} from './managed-hosted-skills';
 import {canManageAgent} from './profile-policy';
@@ -60,7 +61,7 @@ import {argumentFingerprint} from '../../../../gateway/provider-arguments.mjs';
 // @ts-expect-error stable shared native prompt prefix
 import {RENDER_INSTRUCTIONS} from '../../../../gateway/render-prompt.mjs';
 
-export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string;plugins?:PluginStore;nativeReadOnlyMCPOrigins?:readonly string[];allowWebSearch?:boolean;hostedSkillMappings?:HostedSkillMapping}) {
+export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string;plugins?:PluginStore;nativeReadOnlyMCPOrigins?:readonly string[];allowWebSearch?:boolean;hostedSkillMappings?:HostedSkillMapping;browserHosts?:readonly string[]}) {
  if(input.token.length<32)throw Error('Development token must contain at least32 characters');
  const {database,provider}=input;
  await initializeDevActorUser(database,true);
@@ -97,10 +98,14 @@ export async function createManagedDevelopment(input:{database:Database;provider
    const managedHosted=hostedDefinition(caps);
    const hostedSkillRefs=input.plugins&&caps.sandbox?
      await grantedHostedSkillReferences(input.plugins,scope.agentId,input.hostedSkillMappings??{}):[];
-   const hostedEnvironment=managedHosted.environment?
+   const hostedEnvironment=caps.browser?
+     browserEnvironment(input.browserHosts??[]):
+     managedHosted.environment?
      {...managedHosted.environment,...(hostedSkillRefs.length?{skills:hostedSkillRefs}:{})}:undefined;
    const hostedGuidance=caps.sandbox?
      "\\n\\nYou have an isolated OpenAI-hosted sandbox with network disabled. Read uploaded files only under /workspace; never claim a file was opened unless you actually processed it. Save final user-downloadable files under /workspace/outputs with a concise, accurate filename, and describe what you produced. Published artifacts are available to the user only after the original source turn is completed.":'';
+   const browserGuidance=caps.browser?
+     "\\n\\nBrowser use is restricted to approved public documentation domains. Never sign in, submit forms, modify a website, post data, or perform other external writes. Origin access requires a separate user choice. If a site needs authentication or writable interaction, ask the user to use the source-approved connector instead.":'';
    const delegationGuidance=caps.delegation?
      "\\n\\nFor independent, useful parallel work you may delegate to provider-managed subagents within the configured bound. Subagents are not separate EUPHORIA Bots or authorized to gain new source permissions. Do not report their work as finished before the main root turn actually verifies it.":'';
    const nativeMCP=input.plugins?await selectNativeReadOnlyMCP(input.plugins,scope.agentId,input.nativeReadOnlyMCPOrigins??[]):{tools:[],nativeRefs:[]};
@@ -108,8 +113,8 @@ export async function createManagedDevelopment(input:{database:Database;provider
    const grantedSkills=input.plugins?await managedSourceSkillContext(input.plugins,scope.agentId):'';
    await channels.recordActivity(actor,scope.channelId,{text:scope.text,agentId:null,at:new Date()},{id:'delivery-input:'+scope.runId});
    await submitManagedSourceInput({scope:{ownerUserId:scope.ownerUserId,channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId},
-    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory+connectedInventory+grantedSkills+hostedGuidance+delegationGuidance,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[]),
-       ...(input.allowWebSearch&&caps.webSearch?[{type:'web_search',mode:'live',context_size:'low'}]:[]),...nativeMCP.tools],
+    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory+connectedInventory+grantedSkills+hostedGuidance+browserGuidance+delegationGuidance,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[]),
+       ...(input.allowWebSearch&&caps.webSearch?[{type:'web_search',mode:'live',context_size:'low'}]:[]),...(caps.browser?[{type:'computer_use',include_screenshots:true}]:[]),...nativeMCP.tools],
        ...managedHosted,environment:hostedEnvironment},links,turns,provider});
    return {replyText:'',pending:true};
   }});
@@ -890,7 +895,8 @@ if(import.meta.main){
    plugins,
    nativeReadOnlyMCPOrigins:(process.env.EUPHORIA_NATIVE_READ_MCP_ORIGINS??'').split(',').map(s=>s.trim()).filter(Boolean),
    allowWebSearch:process.env.EUPHORIA_MANAGED_WEB_SEARCH==='1',
-   hostedSkillMappings:skillMappings
+   hostedSkillMappings:skillMappings,
+   browserHosts:parsePublicBrowserHosts(process.env.EUPHORIA_PUBLIC_BROWSER_HOSTS)
  });
  const server=Bun.serve({hostname:'127.0.0.1',port:8788,fetch:source.app.fetch});
  const worker=repeatAfterEach(async()=>{try{await source.tick();}catch{console.error('Managed source work awaits recovery');}},1000);

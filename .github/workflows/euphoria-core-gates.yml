@@ -23,6 +23,9 @@ jobs:
       - name: Install original source
         working-directory: openbot
         run: bun install --frozen-lockfile
+      - name: Install canonical gateway dependencies
+        working-directory: gateway
+        run: npm ci
       - name: Typecheck server
         working-directory: openbot
         run: bun run --filter server typecheck
@@ -36,5 +39,4 @@ jobs:
       - name: Check gateway regressions
         working-directory: gateway
         run: |
-          npm ci
           npm test

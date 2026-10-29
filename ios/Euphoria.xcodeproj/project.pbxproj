@@ -7,6 +7,10 @@
     objects = {
 
 /* Begin PBXBuildFile section */
+        A2F000000000000000000004 /* A2UISwiftCore in Frameworks */ = {isa = PBXBuildFile; productRef = A2F000000000000000000002 /* A2UISwiftCore */; };
+        A2F000000000000000000005 /* A2UISwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = A2F000000000000000000003 /* A2UISwiftUI */; };
+        A2F000000000000000000007 /* EuphoriaNativeA2UIEngineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F000000000000000000006 /* EuphoriaNativeA2UIEngineView.swift */; };
+        A2F000000000000000000009 /* A2UIProjectionBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F000000000000000000008 /* A2UIProjectionBridge.swift */; }
         0000000000000000000000FB /* SourceConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000FA /* SourceConnectionsView.swift */; };
         0000000000000000000000F9 /* SourceBotPermissionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000F8 /* SourceBotPermissionsView.swift */; };
         0000000000000000000000F3 /* SourceRoutinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000F2 /* SourceRoutinesView.swift */; };
@@ -67,6 +71,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+        A2F000000000000000000006 /* EuphoriaNativeA2UIEngineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EuphoriaNativeA2UIEngineView.swift; sourceTree = "<group>"; };
+        A2F000000000000000000008 /* A2UIProjectionBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Spikes/A2UIRendererComparison/Sources/A2UIProjectionBridge.swift"; sourceTree = "<group>"; };
         0000000000000000000000FA /* SourceConnectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceConnectionsView.swift; sourceTree = "<group>"; };
         0000000000000000000000F8 /* SourceBotPermissionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceBotPermissionsView.swift; sourceTree = "<group>"; };
         0000000000000000000000F2 /* SourceRoutinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceRoutinesView.swift; sourceTree = "<group>"; };
@@ -119,7 +125,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-        000000000000000000000009 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+        000000000000000000000009 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A2F000000000000000000004 /* A2UISwiftCore in Frameworks */, A2F000000000000000000005 /* A2UISwiftUI in Frameworks */); runOnlyForDeploymentPostprocessing = 0; };
         00000000000000000000000C /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
@@ -141,6 +147,8 @@
                 0000000000000000000000C0 /* NativeTaskAcceptanceView.swift */,
                 0000000000000000000000D0 /* TaskCreationSnapshot.swift */,
                 0000000000000000000000E0 /* OpenDuetSourceAPI.swift */,
+                A2F000000000000000000006 /* EuphoriaNativeA2UIEngineView.swift */,
+                A2F000000000000000000008 /* A2UIProjectionBridge.swift */,
                 0000000000000000000000E2 /* SourceBotsView.swift */,
                 0000000000000000000000E4 /* SourceMemoryView.swift */,
                 0000000000000000000000E6 /* SourceApprovalsView.swift */,
@@ -213,6 +221,10 @@
             name = Euphoria;
             productName = Euphoria;
             productReference = 000000000000000000000012 /* Euphoria.app */;
+            packageProductDependencies = (
+                A2F000000000000000000002 /* A2UISwiftCore */,
+                A2F000000000000000000003 /* A2UISwiftUI */,
+            );
             productType = "com.apple.product-type.application";
         };
         000000000000000000000007 /* EuphoriaTests */ = {
@@ -250,6 +262,9 @@
             knownRegions = (en, Base);
             mainGroup = 000000000000000000000002;
             productRefGroup = 000000000000000000000005 /* Products */;
+            packageReferences = (
+                A2F000000000000000000001 /* XCRemoteSwiftPackageReference "a2ui-swift" */,
+            );
             projectDirPath = "";
             projectRoot = "";
             targets = (
@@ -274,6 +289,8 @@
                 0000000000000000000000C1 /* NativeTaskAcceptanceView.swift in Sources */,
                 0000000000000000000000D1 /* TaskCreationSnapshot.swift in Sources */,
                 0000000000000000000000E1 /* OpenDuetSourceAPI.swift in Sources */,
+                A2F000000000000000000007 /* EuphoriaNativeA2UIEngineView.swift in Sources */,
+                A2F000000000000000000009 /* A2UIProjectionBridge.swift in Sources */,
                 0000000000000000000000E3 /* SourceBotsView.swift in Sources */,
                 0000000000000000000000E5 /* SourceMemoryView.swift in Sources */,
                 0000000000000000000000E7 /* SourceApprovalsView.swift in Sources */,
@@ -404,6 +421,32 @@
         000000000000000000000019 /* Build configuration list for PBXNativeTarget "Euphoria" */ = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000001D /* Debug */, 00000000000000000000001E /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
         00000000000000000000001A /* Build configuration list for PBXNativeTarget "EuphoriaTests" */ = {isa = XCConfigurationList; buildConfigurations = (00000000000000000000001F /* Debug */, 000000000000000000000020 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+        A2F000000000000000000001 /* XCRemoteSwiftPackageReference "a2ui-swift" */ = {
+            isa = XCRemoteSwiftPackageReference;
+            repositoryURL = "https://github.com/BBC6BAE9/a2ui-swift.git";
+            requirement = {
+                kind = revision;
+                revision = 16476ba2cb3fcb4c4bcb141dfa4c2804adbdedb0;
+            };
+        };
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+        A2F000000000000000000002 /* A2UISwiftCore */ = {
+            isa = XCSwiftPackageProductDependency;
+            package = A2F000000000000000000001 /* XCRemoteSwiftPackageReference "a2ui-swift" */;
+            productName = A2UISwiftCore;
+        };
+        A2F000000000000000000003 /* A2UISwiftUI */ = {
+            isa = XCSwiftPackageProductDependency;
+            package = A2F000000000000000000001 /* XCRemoteSwiftPackageReference "a2ui-swift" */;
+            productName = A2UISwiftUI;
+        };
+/* End XCSwiftPackageProductDependency section */
+
+
     };
     rootObject = 000000000000000000000001 /* Project object */;
 }

@@ -11,6 +11,7 @@ import { nextOccurrence } from "./schedule";
 import {
   inspectAutomationDelivery,
   advanceInvocationCursor,
+  mergeDeliveryStatus,
 } from "./managed-automation-identity";
 import { RoutineNotFoundError, RoutineRefusedError } from "./store";
 
@@ -735,35 +736,36 @@ export function createManagedRoutineBridge(input: {
           });
         });
       }
-      // Only the original provider delivery result can close a failed or
-      // skipped invocation. A completed delivery NEVER closes an execution run.
-      const terminal = item.status === "failed" || item.status === "skipped";
+      // Lock the ORIGINAL receipt before projecting a provider update.
+      // Concurrent scanners, duplicate webhooks, and stale queued snapshots
+      // cannot regress a failed/skipped delivery into an "active" run.
+      let terminal=false;
       await db.transaction(async (tx) => {
-        if (terminal)
-          await tx
-            .update(routineRuns)
-            .set({
-              status: item.status === "failed" ? "failed" : "skipped",
-              error:
-                item.status === "failed"
-                  ? "Provider delivery failed"
-                  : "Provider skipped delivery",
-              finishedAt: new Date(),
-            })
-            .where(and(eq(routineRuns.id, runID), isNull(routineRuns.status)));
-        await tx
-          .update(managedRoutineInvocations)
-          .set({
-            deliveryStatus: item.status!,
-            providerSessionId: item.session_id ?? null,
-            executionStatus: terminal
-              ? item.status === "failed"
-                ? "delivery_failed"
-                : "delivery_skipped"
-              : "unverified",
-            updatedAt: new Date(),
-          })
-          .where(eq(managedRoutineInvocations.receiptKey, receiptKey));
+        const [latest]=await tx.select().from(managedRoutineInvocations)
+          .where(eq(managedRoutineInvocations.receiptKey,receiptKey))
+          .for("update").limit(1);
+        if(!latest||latest.routineId!==id||
+           latest.providerInvocationId!==item.id)
+          throw Error("Original invocation receipt identity changed");
+        const previous=latest.deliveryStatus;
+        if(!["unknown","queued","completed","failed","skipped"].includes(previous))
+          throw Error("Unknown saved provider delivery state");
+        const effective=mergeDeliveryStatus(previous as
+          "unknown"|"queued"|"completed"|"failed"|"skipped",item.status);
+        terminal=effective==="failed"||effective==="skipped";
+        if(terminal)
+          await tx.update(routineRuns).set({
+            status:effective==="failed"?"failed":"skipped",
+            error:effective==="failed"?"Provider delivery failed":"Provider skipped delivery",
+            finishedAt:new Date()
+          }).where(and(eq(routineRuns.id,runID),isNull(routineRuns.status)));
+        await tx.update(managedRoutineInvocations).set({
+          deliveryStatus:effective,
+          providerSessionId:item.session_id ?? latest.providerSessionId,
+          executionStatus:terminal?
+            (effective==="failed"?"delivery_failed":"delivery_skipped"):"unverified",
+          updatedAt:new Date()
+        }).where(eq(managedRoutineInvocations.receiptKey,receiptKey));
       });
       inspected++;
       if (!terminal) unverified++;

@@ -505,6 +505,13 @@
       "when": 1793208000000,
       "tag": "0071_managed_completed_jsonb_normalization",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1793313600000,
+      "tag": "0072_managed_bot_hosted_capabilities",
+      "breakpoints": true
     }
   ]
 }

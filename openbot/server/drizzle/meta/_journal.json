@@ -498,6 +498,13 @@
       "when": 1793207000000,
       "tag": "0070_managed_completed_projection",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1793208000000,
+      "tag": "0071_managed_completed_jsonb_normalization",
+      "breakpoints": true
     }
   ]
 }

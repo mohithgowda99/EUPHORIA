@@ -335,6 +335,8 @@ struct SourceRoutine: Decodable, Identifiable, Sendable {
     let enabled: Bool
     let nextRunAt: String
     let lastRun: SourceRoutineOutcome?
+    let executionBackend: String?
+    let providerAutomationId: String?
 }
 struct SourceRoutineChannel: Decodable, Sendable {
     let id: String
@@ -362,6 +364,45 @@ struct SourceRoutineRun: Decodable, Identifiable, Sendable {
 }
 struct SourceRoutineRunsResponse: Decodable, Sendable { let runs: [SourceRoutineRun] }
 private struct SourceRoutineEnabledInput: Encodable { let enabled: Bool }
+private struct SourceManagedRoutineActionInput: Encodable { let requestId: String }
+private struct SourceManagedRoutineEditInput: Encodable {
+    let requestId: String
+    let patch: SourceManagedRoutineEditPatch
+}
+struct SourceManagedRoutineEditPatch: Encodable {
+    let instruction: String?
+    let cron: String?
+    let timezone: String?
+}
+struct SourceManagedRoutineMutation: Decodable {
+    let accepted: Bool?
+    let receiptKey: String?
+    let invocationId: String?
+    let uncertain: Bool?
+    let enabled: Bool?
+    let automationId: String?
+    let state: String?
+    let deleted: Bool?
+    let updated: Bool?
+}
+struct SourceManagedRoutineReceipt: Decodable, Identifiable {
+    let id: String
+    let invocationId: String?
+    let sessionId: String?
+    let rootTurnId: String?
+    let deliveryStatus: String
+    let executionStatus: String
+    let originalRunId: String?
+    let source: String
+    let createdAt: String
+}
+struct SourceManagedRoutineState: Decodable {
+    let backend: String
+    let automationId: String?
+    let syncOperation: String?
+    let invocations: [SourceManagedRoutineReceipt]
+}
+
 private struct SourceRoutineEnabledResult: Decodable { let enabled: Bool }
 
 struct SourceSuggestion: Decodable, Identifiable, Sendable {
@@ -1068,6 +1109,37 @@ struct OpenDuetSourceAPI: Sendable {
             "api/routines/" + checkedID(id) + "/enabled", method: "PUT",
             body: SourceRoutineEnabledInput(enabled: false))
         guard response.enabled == false else { throw SourceAPIError.invalidResponse }
+    }
+
+    func setSourceRoutineEnabled(id: String, enabled: Bool) async throws {
+        let response: SourceRoutineEnabledResult = try await request(
+            "api/routines/" + checkedID(id) + "/enabled", method: "PUT",
+            body: SourceRoutineEnabledInput(enabled: enabled))
+        guard response.enabled == enabled else { throw SourceAPIError.invalidResponse }
+    }
+    func managedRoutineState(id: String) async throws -> SourceManagedRoutineState {
+        try await get("api/routines/" + checkedID(id) + "/managed/state")
+    }
+    func reconcileManagedRoutine(id: String) async throws -> SourceManagedRoutineMutation {
+        // Reconciliation is READ-ONLY against the provider, but can settle
+        // already completed original source results with stable receipt IDs.
+        try await request("api/routines/" + checkedID(id) + "/managed/reconcile", method: "POST")
+    }
+    func changeManagedRoutine(id: String, operation: String, requestId: String) async throws -> SourceManagedRoutineMutation {
+        guard ["migrate","pause","resume","delete"].contains(operation) else {
+            throw SourceAPIError.invalidInput
+        }
+        return try await request("api/routines/" + checkedID(id) + "/managed/" + operation,
+            method: "POST", body: SourceManagedRoutineActionInput(requestId: checkedID(requestId)))
+    }
+    func editManagedRoutine(id: String, requestId: String,
+                            patch: SourceManagedRoutineEditPatch) async throws -> SourceManagedRoutineMutation {
+        try await request("api/routines/" + checkedID(id) + "/managed/edit", method: "POST",
+            body: SourceManagedRoutineEditInput(requestId: checkedID(requestId), patch: patch))
+    }
+    func runSourceRoutine(id: String, requestId: String) async throws -> SourceManagedRoutineMutation {
+        try await request("api/routines/" + checkedID(id) + "/run", method: "POST",
+            body: SourceManagedRoutineActionInput(requestId: checkedID(requestId)))
     }
 
     /// Up Next cards are original ProactiveStore suggestions, not tasks or

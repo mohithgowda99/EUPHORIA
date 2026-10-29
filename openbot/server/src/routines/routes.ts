@@ -246,7 +246,7 @@ function routineDto(routine: RoutineSummary): RoutineDto {
     id: routine.id,
     agentId: routine.agentId,
     schedule: routine.schedule,
-    cron: routine.cron,
+    cron: routine.cron ?? routine.schedule,
     timezone: routine.timezone,
     instruction: routine.instruction,
     channel: {

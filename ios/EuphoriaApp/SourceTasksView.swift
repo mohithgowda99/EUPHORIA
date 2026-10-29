@@ -35,7 +35,7 @@ struct SourceTasksView: View {
             }
             if client == nil {
                 Section {
-                    Text("Sign in through Bots to access your original OpenDuet task service.")
+                    Text("Sign in through Bots to access your EUPHORIA task service.")
                         .foregroundStyle(.secondary)
                     #if DEBUG
                     NavigationLink("Development Agents task adapter") { NativeTaskAcceptanceView() }
@@ -131,7 +131,7 @@ struct SourceTasksView: View {
                     TextField("Task title", text: $title)
                     TextField("What should the Bot do?", text: $instruction, axis: .vertical)
                         .lineLimit(3...8)
-                    Text("The original OpenDuet task service creates a separate conversation for each task.")
+                    Text("The EUPHORIA task service creates a separate conversation for each task.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .navigationTitle("Start task")
@@ -155,7 +155,7 @@ struct SourceTasksView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Only clear after checking whether the original OpenDuet server created this task. Clearing does not cancel or create a task.")
+            Text("Only clear after checking whether the EUPHORIA server created this task. Clearing does not cancel or create a task.")
         }
         .refreshable { await reload() }
         .onAppear { Task { await reload() } }
@@ -191,7 +191,7 @@ struct SourceTasksView: View {
             self.error = nil
         } catch {
             client = nil
-            self.error = "Original Tasks cannot be loaded. Sign in through Bots or check the OpenDuet server."
+            self.error = "Original Tasks cannot be loaded. Sign in through Bots or check the EUPHORIA server."
         }
     }
 
@@ -293,7 +293,7 @@ struct SourceTaskDetailView: View {
                             .disabled(loading || !pending.isEmpty ||
                                       reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         if lastReplyAccepted {
-                            Text("Reply queued in OpenDuet; execution may still be underway.")
+                            Text("Reply queued in EUPHORIA; execution may still be underway.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }

@@ -163,12 +163,17 @@ export function createManagedRoutineBridge(input:{
       eq(routines.ownerUserId,owner))).limit(1);
     if(fresh?.executionBackend!=="managed"||!fresh.enabled)
       throw new RoutineRefusedError("Schedule changed; refresh before running.");
-    const [inserted]=await tx.insert(managedRoutineInvocations).values({
+    // Serialize the original source run with its provider receipt so the FK
+    // exists before insertion and duplicate requests cannot create extra runs.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key},0))`);
+    const [previous]=await tx.select({key:managedRoutineInvocations.receiptKey})
+      .from(managedRoutineInvocations).where(eq(managedRoutineInvocations.receiptKey,key)).limit(1);
+    if(previous)return false;
+    await tx.insert(routineRuns).values({id:runID,routineId:id,source:"run_now"});
+    await tx.insert(managedRoutineInvocations).values({
       receiptKey:key,routineId:id,source:"run_now",originalRunId:runID,
       deliveryStatus:"unknown",executionStatus:"unverified"
-    }).onConflictDoNothing().returning({receiptKey:managedRoutineInvocations.receiptKey});
-    if(!inserted)return false;
-    await tx.insert(routineRuns).values({id:runID,routineId:id,source:"run_now"});
+    });
     return true;
   });
   if(!reserved)return {accepted:false,receiptKey:key,uncertain:true}; // never replay.
@@ -196,12 +201,18 @@ export function createManagedRoutineBridge(input:{
     // Unique receipt & source run are inserted together; across restarts a
     // provider invocation can never produce two original runs.
     await db.transaction(async tx=>{
-      const [created]=await tx.insert(managedRoutineInvocations).values({
-        receiptKey:key,routineId:id,providerInvocationId:item.id,
-        providerSessionId:item.session_id??null,deliveryStatus:item.status??"unknown",
-        source,originalRunId:runID
-      }).onConflictDoNothing().returning({receiptKey:managedRoutineInvocations.receiptKey});
-      if(created)await tx.insert(routineRuns).values({id:runID,routineId:id,source});
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"provider-invocation:"+item.id},0))`);
+      const [previous]=await tx.select({key:managedRoutineInvocations.receiptKey})
+        .from(managedRoutineInvocations)
+        .where(eq(managedRoutineInvocations.providerInvocationId,item.id)).limit(1);
+      if(!previous){
+        await tx.insert(routineRuns).values({id:runID,routineId:id,source});
+        await tx.insert(managedRoutineInvocations).values({
+          receiptKey:key,routineId:id,providerInvocationId:item.id,
+          providerSessionId:item.session_id??null,deliveryStatus:item.status??"unknown",
+          source,originalRunId:runID
+        });
+      }
     });
     const [receipt]=await db.select().from(managedRoutineInvocations).where(
       eq(managedRoutineInvocations.providerInvocationId,item.id)).limit(1);

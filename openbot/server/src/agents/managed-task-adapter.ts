@@ -91,13 +91,13 @@ export function createManagedTaskAdapter(deps:{
    .where(and(eq(deliveryInbox.ownerUserId,owner),eq(deliveryInbox.channelId,task.channelId),
      eq(deliveryInbox.realm,"managed-task")))
    .orderBy(deliveryInbox.createdAt).limit(200);
-  const entries:({kind:"reply"|"update";id:string;text:string;at:string})[]=[];
+  const entries:({kind:"reply"|"update";id:string;text:string;at:string|null})[]=[];
   for(const row of rows){
    entries.push({kind:"reply",id:row.id+":input",text:row.text,at:row.createdAt.toISOString()});
    if(row.state==="sent"&&row.completed&&typeof row.completed==="object"&&
       "replyText" in row.completed&&typeof row.completed.replyText==="string")
     entries.push({kind:"update",id:row.id+":output",
-      text:row.completed.replyText,at:row.createdAt.toISOString()});
+      text:row.completed.replyText,at:null});
   }
   return {taskId:task.id,entries,resources:[]};
  };

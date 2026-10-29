@@ -119,7 +119,7 @@ export function createManagedHostedCapabilities(database: Database) {
       // adopting a different immutable manifest on another process.
       return database.transaction(async (tx) => {
         await tx.execute(
-          sql`SELECT pg_advisory_xact_lock(hashtextextended(${ownerUserId + ":" + botId}, 0))`,
+          sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${ownerUserId}:${botId}`}, 0))`,
         );
         const [reserved] = await tx
           .select({ ownerUserId: managedAgentSessionLinks.ownerUserId })

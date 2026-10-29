@@ -1,3 +1,22 @@
+# EUPHORIA | Section 1 implementation continuation | 2026-10-29
+
+**New branch:** `feature/phase1-section1-lifecycle-20261029`, based on
+`feature/phase1-hosted-tools-files-delegation-20261029`.
+
+Source-code additions: exact source-root stop-run workflow (native and server),
+no-replay cancellation receipts, session/grant advisory locking,
+original-source bounded Skill instructions, operator-pinned hosted Skill references,
+and native QuickLook previews. New offline source/gateway regression fixtures and CI
+gates are committed, but no tests or device builds were executed during this continuation.
+
+**Do not claim Section 1 full E2E completion.** Browser/computer writes remain
+blocked by the lack of action-by-action approval enforcement; provider vault
+secrets and uncorrelated delegated artifacts remain blocked. Production cutover
+is still excluded. See `docs/agents/EUPHORIA_SECTION1_LIFECYCLE_CLOSEOUT.md`.
+Section 2 has not started.
+
+---
+
 # EUPHORIA | Phase 1 engineering checkpoint | 2026-10-29
 
 Current implementation branch: `feature/final-phase1-engineering-20261029`, based on convergence `78f746d2b3f4f3c57861853109bff0290132edca`. Main and earlier source branches have not been modified or merged.

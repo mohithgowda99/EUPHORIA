@@ -47,9 +47,10 @@ export function managedMCPCall(raw:unknown):ManagedMCPCall{
  * missing credential is a refusal, never read-only by default.
  */
 export async function authorizeManagedMCP(
- plugins:OriginalPluginBridge,botId:string,raw:unknown
+ plugins:OriginalPluginBridge,botId:string,raw:unknown,excludedRefs:readonly string[]=[]
 ):Promise<{input:ManagedMCPArgs;effect:"read"|"write";description:string}>{
  const input=managedMCPArgs(raw);
+ if(excludedRefs.includes(input.ref))throw Error("Tool is exclusively assigned to native managed MCP");
  const [grants,servers]=await Promise.all([plugins.listForAgent(botId),plugins.listServers()]);
  const granted=grants.tools.find(t=>t.ref===input.ref);
  const advertised=servers.flatMap(server=>server.tools).find(t=>t.ref===input.ref);
@@ -76,10 +77,10 @@ export function mcpWritePreview(ref:string,args:Record<string,unknown>):string{
  * currently granted refs and current advertised catalog. No credentials,
  * live data, executable code or full wire schemas enter the prompt.
  */
-export async function managedMCPInventory(plugins:OriginalPluginBridge,botId:string):Promise<string>{
+export async function managedMCPInventory(plugins:OriginalPluginBridge,botId:string,excludedRefs:readonly string[]=[]):Promise<string>{
  const [grants,servers]=await Promise.all([plugins.listForAgent(botId),plugins.listServers()]);
  const advertised=new Map(servers.flatMap(server=>server.tools).map(t=>[t.ref,t]));
- const scoped=grants.tools.filter(t=>advertised.has(t.ref)).slice(0,16).map(t=>{
+ const scoped=grants.tools.filter(t=>advertised.has(t.ref)&&!excludedRefs.includes(t.ref)).slice(0,16).map(t=>{
   const entry=advertised.get(t.ref)!;
   return{ref:t.ref,effect:entry.effect,description:t.description.slice(0,140)};
  });

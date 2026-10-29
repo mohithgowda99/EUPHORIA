@@ -108,7 +108,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
   if(!timingSafeEqual(expected,digest(c.req.header('cookie')??'')))return c.json({error:'Development authentication required'},401);
   c.set('actor',DEV_ACTOR);await next();
  };
- app.use('*',bodyLimit({maxSize:128*1024}));
+ app.use('*',bodyLimit({maxSize:2*1024*1024})); // Hosted 1MiB file upload, still bounded per route.
  app.onError((error,c)=>{if('status' in error && [409,422,502].includes(Number(error.status)))return c.json({error:error.message},Number(error.status) as 409|422|502);console.error(JSON.stringify({type:'managed-development-error',name:error.name}));return c.json({error:'Managed source operation unavailable'},503);});
  app.get('/api/auth/get-session',requireUser,c=>c.json({user:{...DEV_ACTOR,name:'Development'}}));
  // Original OpenDuet questions, accepted through its transactional one-winner
@@ -267,6 +267,74 @@ export async function createManagedDevelopment(input:{database:Database;provider
   }
   throw Error('Artifact listing incomplete; refusing truncated authorization');
  }
+ // One source-owned, pre-reserved upload, delivered into an existing
+ // OpenAI-hosted environment strictly BETWEEN user turns. Never duplicate
+ // an uncertain provider POST, including if its HTTP response is lost.
+ app.post('/api/delivery/conversations/:id/hosted-files',requireUser,async c=>{
+  const channelID=c.req.param('id'),owner=c.var.actor.id,botID=c.req.query('agentId')??'';
+  const scope=await scopeFor(owner,channelID,botID);
+  if(!scope)return c.json({error:'Bot or conversation unavailable'},403);
+  const bot=await profiles.get(actor,botID);
+  if(!bot||bot.ownerUserId!==owner||bot.systemOwned||
+    !(await hosted.read(owner,botID)).sandbox)
+    return c.json({error:'Hosted sandbox is not granted to this Bot'},403);
+  let raw:unknown;
+  try{raw=await c.req.json();}catch{return c.json({error:'Invalid hosted file payload'},400);}
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return c.json({error:'Invalid hosted file payload'},400);
+  const body=raw as Record<string,unknown>;
+  const uploadId=body.uploadId,filename=body.filename,data=body.data;
+  if(Object.keys(body).some(k=>!['uploadId','filename','data'].includes(k))||
+    typeof uploadId!=='string'||!/^[-A-Za-z0-9_]{10,96}$/.test(uploadId)||
+    typeof filename!=='string'||!/^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$/.test(filename)||
+    filename==='.'||filename==='..'||filename.includes('..')||
+    typeof data!=='string'||data.length>1_400_000||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data))
+    return c.json({error:'Invalid or oversized hosted file'},400);
+  const bytes=Buffer.from(data,'base64');
+  if(bytes.length<1||bytes.length>1024*1024||bytes.toString('base64')!==data)
+    return c.json({error:'Invalid hosted file bytes'},400);
+  const link=await links.read({ownerUserId:owner,channelId:channelID,botId:botID,threadId:scope.threadId});
+  if(!link?.providerSessionId)return c.json({error:'Start a Bot session before uploading files'},409);
+  const session=await provider.retrieveSession(link.providerSessionId);
+  const env=session.environment as {type?:unknown;id?:unknown;network?:{access?:unknown}}|undefined;
+  if(session.id!==link.providerSessionId||session.status!=='idle'||
+    Array.isArray(session.required_actions)&&session.required_actions.length>0||
+    env?.type!=='openai_hosted'||typeof env.id!=='string'||env.network?.access!=='disabled')
+    return c.json({error:'Hosted sandbox not idle or unavailable'},409);
+  const environment=await provider.retrieveEnvironment(env.id);
+  if(environment?.id!==env.id||environment?.status!=='connected'||environment?.type!=='openai_hosted')
+    return c.json({error:'Sandbox environment not connected'},409);
+  if(!await authorised(scope))return c.json({error:'Source permission revoked'},403);
+  const providerPath='/workspace/'+uploadId+'_'+filename;
+  if(providerPath.length>180)return c.json({error:'Invalid hosted file path'},400);
+  const integrity=createHash('sha256').update(bytes).digest('hex');
+  const receipt={ownerUserId:owner,channelId:channelID,botId:botID,threadId:scope.threadId,
+    sessionID:link.providerSessionId,environmentID:env.id,path:providerPath,
+    sha256:integrity,bytes:bytes.length};
+  const [winner]=await database.insert(workItems).values({kind:'managed.hosted-upload',key:uploadId,payload:receipt})
+    .onConflictDoNothing().returning();
+  if(!winner){
+   // Same client idempotency key is never retransmitted to the provider.
+   const [prior]=await database.select().from(workItems).where(and(
+     eq(workItems.kind,'managed.hosted-upload'),eq(workItems.key,uploadId))).limit(1);
+   if(!prior||stable(prior.payload)!==stable(receipt))
+    return c.json({error:'Hosted file identity collision'},409);
+   if(prior.finishedAt)return c.json({path:providerPath,bytes:bytes.length,status:'uploaded'});
+   return c.json({error:'Previous hosted file submission needs reconciliation; not replayed'},409);
+  }
+  try{
+   // The original source work item was saved BEFORE any remote side effect.
+   await provider.createEnvironmentFile(env.id,{path:providerPath,data},'hosted_file_'+uploadId);
+   await database.update(workItems).set({finishedAt:new Date()}).where(and(
+     eq(workItems.kind,'managed.hosted-upload'),eq(workItems.key,uploadId)));
+   return c.json({path:providerPath,bytes:bytes.length,status:'uploaded'},201);
+  }catch{
+   await database.update(workItems).set({
+     attempts:100,lastError:'Hosted file provider outcome uncertain; manual reconciliation required'
+   }).where(and(eq(workItems.kind,'managed.hosted-upload'),eq(workItems.key,uploadId)));
+   return c.json({error:'Hosted file submission outcome unconfirmed; do not retry with a new ID'},503);
+  }
+ });
  app.get('/api/delivery/conversations/:id/artifacts',requireUser,async c=>{
   const channelID=c.req.param('id'),botID=c.req.query('agentId')??'';
   const found=await sourceArtifacts(c.var.actor.id,channelID,botID);

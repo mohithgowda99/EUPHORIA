@@ -216,7 +216,7 @@ export class AgentsClient {
   async listEnvironmentFiles(environmentID,{page,limit=100,path='/workspace'}={}){
     identifier(environmentID);
     if(!Number.isInteger(limit)||limit<1||limit>100||
-       typeof path!=='string'||!/^\\/workspace(?:\\/[A-Za-z0-9._-]+)*$/.test(path)||
+       typeof path!=='string'||!/^\/workspace(?:\/[A-Za-z0-9._-]+)*$/.test(path)||
        page!==undefined&&(typeof page!=='string'||page.length>512||!page))
       throw Error('Invalid environment file listing');
     const query=new URLSearchParams({limit:String(limit),order:'desc',path});

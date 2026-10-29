@@ -157,6 +157,7 @@ struct SourceConversationDetailView: View {
     @State private var visualCompleted = false
     @State private var completedVisuals: [SourceCompletedVisual] = []
     @State private var hostedArtifacts: [SourceHostedArtifact] = []
+    @State private var subagents: [SourceHostedSubagent] = []
     @State private var exportedArtifact: (id: String, url: URL)?
     @State private var downloadingArtifactID: String?
     @State private var selectingInputFile = false
@@ -242,6 +243,30 @@ struct SourceConversationDetailView: View {
                             .padding(16).frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
                             .accessibilityElement(children: .contain)
+                        }
+                        if !subagents.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Label("Delegated workers", systemImage: "person.2.crop.square.stack")
+                                    .font(.subheadline.weight(.semibold))
+                                ForEach(subagents) { agent in
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(agent.name ?? "Delegated worker")
+                                                .font(.subheadline.weight(.medium))
+                                            Text(agent.id)
+                                                .font(.caption2).foregroundStyle(.tertiary)
+                                        }
+                                        Spacer()
+                                        Label(agent.status == "active" ? "Active" : "Closed",
+                                              systemImage: agent.status == "active" ?
+                                              "circle.dotted.circle" : "checkmark.circle")
+                                            .font(.caption)
+                                    }
+                                }
+                                Text("These are real provider workers in this Bot's session. Active does not mean the task has finished.")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                            .padding(12).background(botColor, in: RoundedRectangle(cornerRadius: 12))
                         }
                         if !unconfirmedUploads.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
@@ -420,6 +445,8 @@ struct SourceConversationDetailView: View {
                 exportedArtifact = nil
             }
             hostedArtifacts = (try? await client.sourceHostedArtifacts(channelID: conversation.id, botID: selectedBotID)) ?? []
+            subagents = (try? await client.sourceHostedSubagents(channelID: conversation.id,
+                                                                  botID: selectedBotID)) ?? []
             if let exportedArtifact, !hostedArtifacts.contains(where: { $0.id == exportedArtifact.id }) {
                 self.exportedArtifact = nil
             }

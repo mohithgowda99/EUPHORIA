@@ -235,6 +235,33 @@ export async function createManagedDevelopment(input:{database:Database;provider
   return c.json({capabilities:await hosted.write(owner,botID,config),locked:false});
  });
 
+ // Real provider-managed subagents, scoped to the original Bot/channel's
+ // immutable session link. No synthetic tasks, progress percentages, or
+ // exposure of their underlying instructions to unrelated team members.
+ app.get('/api/delivery/conversations/:id/subagents',requireUser,async c=>{
+  const channelID=c.req.param('id'),botID=c.req.query('agentId')??'';
+  const scope=await scopeFor(c.var.actor.id,channelID,botID);
+  if(!scope)return c.json({error:'Source Bot access revoked'},403);
+  const link=await links.read({ownerUserId:scope.ownerUserId,channelId:scope.channelId,
+    botId:scope.agentId,threadId:scope.threadId});
+  if(!link?.providerSessionId)return c.json({subagents:[]});
+  const session=await provider.retrieveSession(link.providerSessionId);
+  if(session.id!==link.providerSessionId||session.agent?.multi_agent?.enabled!==true)
+    return c.json({subagents:[]});
+  const result=await provider.listSubagents(link.providerSessionId,{limit:100,order:'desc'});
+  if(result.has_more)return c.json({error:'Subagent roster exceeds bounded page'},409);
+  const subagents=(result.data as unknown[]).flatMap(raw=>{
+   if(!raw||typeof raw!=='object')return[];
+   const x=raw as Record<string,unknown>;
+   if(x.session_id!==link.providerSessionId||typeof x.id!=='string'||
+      !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(x.id)||
+      !['active','closed'].includes(String(x.status)))return[];
+   return[{id:x.id,name:typeof x.name==='string'?x.name.slice(0,80):null,
+     status:x.status,openedAt:typeof x.opened_at==='number'?x.opened_at:null}];
+  });
+  if(!await authorised(scope))return c.json({error:'Source Bot access revoked'},403);
+  return c.json({subagents});
+ });
  // Artifacts are read from provider, but source identity and root turn are
  // verified against original Inbox first. No provider URL or credential leaves
  // this endpoint; unsupported provider artifact shapes are not exposed.

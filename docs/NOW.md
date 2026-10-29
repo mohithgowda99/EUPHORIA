@@ -1,3 +1,17 @@
+# EUPHORIA | Section 2 autonomous Bots engineering checkpoint | 2026-10-29
+
+**Branch:** `feature/phase1-section2-autonomous-bots`; **baseline:** `a3e92acf50408f8b82c171dcf3fa7a09b9ae9cac`.
+**Status: PARTIAL IMPLEMENTATION, NOT ACCEPTED E2E.** The branch adds a guarded OpenAI Automations transport, additive original-RoutineStore execution-backend and provider receipts, fail-closed migration/repair, signed session webhook receipts, bounded read-only reconciliation, and native SwiftUI schedule/invocation controls. Existing routines default to the original scheduler; provider-owned/uncertain routines are excluded from its firing and reaper paths.
+
+**Explicit deployment blocker:** The deployed Agents API rejected per-session `spend_control`; no enforceable recurring per-automation hard inference budget has been verified. The managed routine bridge is default-deny in the development assembly. No paid live creation, device push, webhook deployment, or real provider invocation was attempted. The documented OpenAI invocation response does not guarantee an exact root-turn ID, so completion must remain **unverified** unless authoritative correlation is available; an accepted automation notification is not a finished Bot result.
+
+Original OpenDuet Bot, RoutineStore, routine_runs, Delivery Inbox, WorkQueue, ProactiveStore, task/approval and connector grants are not replaced. Managed development remains loopback-only with fixed dev actor, and the original production server's Better Auth/Intelligence integration remains unchanged. Native code has not been Xcode-built. No tests were executed in this repository-editing environment, even though offline fixtures were committed. The separate MacBook agent must typecheck, migrate disposable Postgres, run fixtures, build iOS and inspect live flows only after budget authorization.
+
+**Section 2 handoff:** `docs/agents/EUPHORIA_SECTION2_HANDOFF.md`.
+Section 1's independent validation branch was not modified or merged. Sections 3, 4 and 5 were not started.
+
+---
+
 # EUPHORIA | Section 1 OpenAI-first implementation checkpoint | 2026-10-29
 
 **Current branch:** `feature/phase1-section1-openai-completion-20261029`

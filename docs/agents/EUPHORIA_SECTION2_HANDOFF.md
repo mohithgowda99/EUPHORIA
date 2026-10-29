@@ -47,6 +47,22 @@ The strict `managed-automation-identity.ts` inspector excludes fabricated roots,
 - Existing `managed-task-adapter.ts` already uses the **original** `createProactiveStore` and `createTaskStore`, supports source suggestion list/dismiss/start with idempotent, owner-scoped transactional suggestion-to-task and original TaskThreads. No duplicate store.
 - **Not complete:** managed cloud-proactive *read-only discovery generation* and proactive periodic execution are NOT wired to the production multi-user original `ProactiveEngine`; do not claim proactive autonomy or a background check-in works. The provider root/budget boundaries remain hard prerequisites.
 
+## Verified offline CI evidence (code HEAD `95c0e244ea92c9924bc6a80e924a935d77ed64f5`, 2026-10-29)
+
+**EUPHORIA core branch gates: PASS**, [GitHub Actions run 40832853447](https://github.com/mohithgowda99/EUPHORIA/actions/runs/40832853447), job `123310783271`.
+- TypeScript server typecheck: PASS.
+- Strict automation identity + signed webhook/APNs tests: **9 passed, 0 failed**, two files.
+- Managed source unit suite: **21 passed, 0 failed**, nine files.
+- Disposable PostgreSQL migration applied per isolated suite, each success.
+- Original source integration suites: managed person questions **3**, tasks **1**, connected MCP **2**, completed JSONB **1**, hosted capabilities **1**, cancellation **1**, browser **1**, original RoutineStore source/managed scheduler exclusivity and run context **55**, all PASS. Aggregate **65** DB integration tests.
+- Gateway `npm test`: **199 passed, 0 failed**.
+- **294 tests passed in this workflow, 0 failed** (9 + 21 + 65 + 199).
+- Security/zizmor: PASS on [run 40832853529](https://github.com/mohithgowda99/EUPHORIA/actions/runs/40832853529).
+
+**Repository-wide CI is not fully green.** The format check and migrations pass; the `format, lint, types` job reports Biome lint failures on existing managed-agent modules, including useTemplate style, unused identifiers, and control-character regexp warnings. That is an **outstanding code-quality validation issue, not a missing credential or provider limitation**. Source CI also has other jobs whose results must be inspected individually; passing the Section 2 core gate does not mean every repository workflow passed.
+
+No Xcode/iPhone build, APNs device delivery, live OpenAI Agents inference, real scheduled invocation, authorized connector write, public backend, restart/concurrent-provider stress scenario or production deployment was executed. New unit and integration coverage does **not** constitute the closed-iPhone acceptance test.
+
 ## Tests and validation
 GitHub draft PR was opened to execute existing CI and the isolated EUPHORIA core offline-gates workflow. Written fixture:
 - `openbot/server/tests/managed-automation-identity.test.ts`: no delivery=execution, wrong automation/session denial, manual provenance, pagination errors, APNs signer/no receipt.

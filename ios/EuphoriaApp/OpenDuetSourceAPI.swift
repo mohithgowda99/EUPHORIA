@@ -329,6 +329,7 @@ struct SourceRoutine: Decodable, Identifiable, Sendable {
     let id: String
     let agentId: String
     let schedule: String
+    let cron: String?
     let timezone: String
     let instruction: String
     let channel: SourceRoutineChannel

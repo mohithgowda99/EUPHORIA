@@ -265,6 +265,65 @@ export function createManagedRoutineBridge(input:{
   }
   return {inspected,unverified};
  }
+ async function repair(owner:string,id:string) {
+  const {row,sessionID}=await owned(owner,id);
+  if(!["provisioning","sync_unknown"].includes(row.executionBackend))
+    return {reconciled:false,reason:"No uncertain provider mutation"};
+  const op=row.providerSyncOperation,key=row.providerSyncKey;
+  if(!op||!key)throw new RoutineRefusedError("Source has no recorded provider mutation to reconcile.");
+  if(op==="create") {
+    let after:string|undefined;
+    const matches:{id:string}[]=[];
+    let exhausted=false;
+    for(let i=0;i<5;i++){
+      const page=await provider.listAutomations({sessionID,limit:100,...(after?{after}:{})});
+      for(const value of page.data){
+        if(!value||typeof value!=="object")continue;
+        const candidate=value as {id?:string;name?:string;target?:{session_id?:string}};
+        if(candidate.name==="EUPHORIA:"+id&&candidate.target?.session_id===sessionID&&
+           candidate.id&&validID(candidate.id))
+          matches.push({id:candidate.id});
+      }
+      if(!page.has_more){exhausted=true;break;}
+      if(!page.last_id||!validID(page.last_id)||page.last_id===after)break;
+      after=page.last_id;
+    }
+    if(!exhausted||matches.length!==1)
+      return {reconciled:false,reason:"Provider creation remains ambiguous; source scheduling stays frozen"};
+    await settle(owner,id,key,{providerAutomationId:matches[0].id,providerSessionId:sessionID});
+    return {reconciled:true,operation:op};
+  }
+  if(!row.providerAutomationId)
+    return {reconciled:false,reason:"Provider automation ID missing"};
+  if(op==="delete"){
+    try{
+      await provider.retrieveAutomation(row.providerAutomationId);
+      return {reconciled:false,reason:"Provider still holds schedule; don't replay delete"};
+    }catch(error){
+      if(!(error instanceof Error)||!("status" in error)||error.status!==404)
+        return {reconciled:false,reason:"Provider deletion cannot be verified"};
+    }
+    const deleted=await db.delete(routines).where(and(eq(routines.id,id),
+      eq(routines.ownerUserId,owner),eq(routines.providerSyncKey,key)))
+      .returning({id:routines.id});
+    return {reconciled:deleted.length===1,operation:op};
+  }
+  const providerRow=await provider.retrieveAutomation(row.providerAutomationId);
+  if(providerRow.id!==row.providerAutomationId||
+     providerRow.target?.session_id!==sessionID)
+    throw new RoutineRefusedError("Remote automation is no longer correlated with original Bot");
+  if(op==="pause"&&providerRow.status==="paused"){
+    await settle(owner,id,key,{enabled:false});
+    return {reconciled:true,operation:op};
+  }
+  if(op==="resume"&&providerRow.status==="active"){
+    await settle(owner,id,key,{enabled:true});
+    return {reconciled:true,operation:op};
+  }
+  // Editing intent is NOT stored in a second config journal; a remote update
+  // must be reviewed explicitly if it had an unknown acknowledgement.
+  return {reconciled:false,reason:"Provider change remains uncertain; do not re-enable source"};
+ }
  async function state(owner:string,id:string) {
   const {row}=await owned(owner,id);
   const invocations=await db.select().from(managedRoutineInvocations)
@@ -279,7 +338,7 @@ export function createManagedRoutineBridge(input:{
       originalRunId:x.originalRunId,source:x.source,createdAt:x.createdAt.toISOString()
     }))};
  }
- return {migrate,change,edit,manual,sync,owned,state};
+ return {migrate,change,edit,manual,sync,owned,state,repair};
 }
 
 export type ManagedRoutineBridge=ReturnType<typeof createManagedRoutineBridge>;

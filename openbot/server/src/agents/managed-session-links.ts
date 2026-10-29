@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { managedAgentSessionLinks } from "../db/schema";
 
@@ -57,19 +57,26 @@ export function createManagedSessionLinkStore(database: Database) {
       if (!creationKey || creationKey.length > 256) {
         throw new ManagedSessionIdentityConflict();
       }
-      const [created] = await database.insert(managedAgentSessionLinks).values({
-        ownerUserId: scope.ownerUserId,
-        channelId: scope.channelId,
-        botId: scope.botId,
-        sourceThreadId: scope.threadId,
-        creationKey,
-      }).onConflictDoNothing().returning();
-      if (created) return { create: true, providerSessionId: null };
-      const previous = await read(scope);
-      if (!previous) throw new ManagedSessionIdentityConflict();
-      if (!previous.providerSessionId) throw new UncertainManagedSession();
-      return { create: false, providerSessionId: previous.providerSessionId,
-        creationKey: previous.creationKey };
+      return database.transaction(async tx => {
+        // Serialise the ORIGINAL permission row with the FIRST provider
+        // reservation, even across two backend processes.
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${scope.ownerUserId+":"+scope.botId}, 0))`);
+        const [created] = await tx.insert(managedAgentSessionLinks).values({
+          ownerUserId: scope.ownerUserId,
+          channelId: scope.channelId,
+          botId: scope.botId,
+          sourceThreadId: scope.threadId,
+          creationKey,
+        }).onConflictDoNothing().returning();
+        if (created) return { create: true as const, providerSessionId: null };
+        const [previous] = await tx.select().from(managedAgentSessionLinks)
+          .where(byOwner(scope)).limit(1);
+        if (!previous || previous.sourceThreadId !== scope.threadId)
+          throw new ManagedSessionIdentityConflict();
+        if (!previous.providerSessionId) throw new UncertainManagedSession();
+        return { create: false as const, providerSessionId: previous.providerSessionId,
+          creationKey: previous.creationKey };
+      });
     },
     /**
      * Link only the session created under this exact immutable reservation.

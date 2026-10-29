@@ -239,7 +239,8 @@ export async function createManagedDevelopment(input:{database:Database;provider
   const botID=c.req.param('id');
   if(!await hostedOwner(c.var.actor.id,botID))return c.json({error:'Bot cannot be managed'},403);
   return c.json({capabilities:await hosted.read(c.var.actor.id,botID),
-    locked:await hostedLocked(c.var.actor.id,botID)});
+    locked:await hostedLocked(c.var.actor.id,botID),
+    browserAvailable:!!input.browserHosts?.length});
  });
  app.put('/api/agents/:id/hosted-capabilities',requireUser,async c=>{
   const botID=c.req.param('id'),owner=c.var.actor.id;
@@ -247,6 +248,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
   let config;
   try{config=parseHostedCapabilities(await c.req.json());}
   catch{return c.json({error:'Invalid hosted tool configuration'},400);}
+  if(config.browser&&!input.browserHosts?.length)return c.json({error:'Public browser operator host list is not configured'},409);
   if(await hostedLocked(owner,botID))return c.json({error:
    'Existing hosted session is immutable. Configure a new Bot before enabling or revoking hosted capabilities.'},409);
   return c.json({capabilities:await hosted.write(owner,botID,config),locked:false});

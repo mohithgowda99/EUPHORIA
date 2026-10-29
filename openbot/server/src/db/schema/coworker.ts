@@ -114,6 +114,16 @@ export const routines = pgTable(
     /** IANA zone the cron is read in. UTC when the person never said otherwise. */
     timezone: text("timezone").notNull().default("UTC"),
     enabled: boolean("enabled").notNull().default(true),
+    /** Explicit execution owner. A provisioning or ambiguous transition NEVER
+     * fires from the original sweeper. Existing rows remain source-owned. */
+    executionBackend: text("execution_backend")
+      .$type<"source" | "provisioning" | "managed" | "sync_unknown">()
+      .notNull().default("source"),
+    providerAutomationId: text("provider_automation_id"),
+    providerSessionId: text("provider_session_id"),
+    providerSyncKey: text("provider_sync_key"),
+    providerSyncOperation: text("provider_sync_operation"),
+    providerSyncAt: timestamp("provider_sync_at", { withTimezone: true }),
     /** The sweep's read target. Recomputed on every write and CAS-advanced by the sweep. */
     nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
     /**

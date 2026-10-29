@@ -1,4 +1,5 @@
-import { pgTable, primaryKey, text, timestamp, uniqueIndex, integer, boolean } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, primaryKey, text, timestamp, uniqueIndex, integer, boolean, check, foreignKey } from "drizzle-orm/pg-core";
 import { jsonb } from "./json";
 import { agents, channels, users } from "./core";
 import { deliveryInbox } from "./delivery";
@@ -62,12 +63,16 @@ export const managedAgentInboxTurns = pgTable(
  * delegated to an untrusted generated interface. Missing row = all disabled.
  */
 export const managedBotHostedCapabilities=pgTable("managed_bot_hosted_capabilities",{
- ownerUserId:text("owner_user_id").notNull().references(()=>users.id,{onDelete:"cascade"}),
- botId:text("bot_id").notNull().references(()=>agents.id,{onDelete:"cascade"}),
+ ownerUserId:text("owner_user_id").notNull(),
+ botId:text("bot_id").notNull(),
  sandbox:boolean("sandbox").notNull().default(false),
  browser:boolean("browser").notNull().default(false),
  webSearch:boolean("web_search").notNull().default(false),
  delegation:boolean("delegation").notNull().default(false),
  maxConcurrentSubagents:integer("max_concurrent_subagents").notNull().default(1),
  updatedAt:timestamp("updated_at",{withTimezone:true}).notNull().defaultNow(),
-},table=>[primaryKey({columns:[table.ownerUserId,table.botId]})]);
+},table=>[primaryKey({name:"managed_bot_hosted_capabilities_pkey",columns:[table.ownerUserId,table.botId]}),
+ foreignKey({name:"managed_bot_hosted_capabilities_owner_user_id_fkey",columns:[table.ownerUserId],foreignColumns:[users.id]}).onDelete("cascade"),
+ foreignKey({name:"managed_bot_hosted_capabilities_bot_id_fkey",columns:[table.botId],foreignColumns:[agents.id]}).onDelete("cascade"),
+ check("managed_bot_subagent_bounds",sql`${table.maxConcurrentSubagents} BETWEEN 1 AND 3 AND (${table.delegation} OR ${table.maxConcurrentSubagents}=1)`)
+]);

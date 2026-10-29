@@ -37,6 +37,7 @@ for(const effect of ["read","write"] as const)test.skipIf(!url)(
   },
  };
  const plugins={
+  brokerProvider:"composio",
   async listForAgent(_bot:string){return{tools:revoked?[]:[{ref:"fixture/doc",toolName:"fixture__doc",description:"Local test tool",inputSchema:{type:"object"}}],skills:[]};},
   async listServers(){return[{tools:[{ref:"fixture/doc",effect,destructive:false,inputSchema:{type:"object"}}]}];},
   async callTool(params:{ref:string;actorId:string;botId:string}){

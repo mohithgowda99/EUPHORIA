@@ -30,6 +30,7 @@ import {createManagedHostedCapabilities,parseHostedCapabilities,hostedDefinition
 import {projectHostedArtifact,attachmentName} from './managed-hosted-artifacts';
 import {assertCurrentRootForCancellation} from './managed-hosted-cancel';
 import {managedSourceSkillContext} from './managed-source-skills';
+import {grantedHostedSkillReferences,parseHostedSkillMappings,type HostedSkillMapping} from './managed-hosted-skills';
 import {canManageAgent} from './profile-policy';
 import {createMemoryStore} from '../memory/store';
 import {createMemoryRoutes} from '../memory/routes';
@@ -59,7 +60,7 @@ import {argumentFingerprint} from '../../../../gateway/provider-arguments.mjs';
 // @ts-expect-error stable shared native prompt prefix
 import {RENDER_INSTRUCTIONS} from '../../../../gateway/render-prompt.mjs';
 
-export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string;plugins?:PluginStore;nativeReadOnlyMCPOrigins?:readonly string[];allowWebSearch?:boolean}) {
+export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string;plugins?:PluginStore;nativeReadOnlyMCPOrigins?:readonly string[];allowWebSearch?:boolean;hostedSkillMappings?:HostedSkillMapping}) {
  if(input.token.length<32)throw Error('Development token must contain at least32 characters');
  const {database,provider}=input;
  await initializeDevActorUser(database,true);
@@ -94,6 +95,10 @@ export async function createManagedDevelopment(input:{database:Database;provider
    const caps=activeProfile?.ownerUserId===scope.ownerUserId&&
      !activeProfile.systemOwned?await hosted.read(scope.ownerUserId,scope.agentId):DENIED_HOSTED_CAPABILITIES;
    const managedHosted=hostedDefinition(caps);
+   const hostedSkillRefs=input.plugins&&caps.sandbox?
+     await grantedHostedSkillReferences(input.plugins,scope.agentId,input.hostedSkillMappings??{}):[];
+   const hostedEnvironment=managedHosted.environment?
+     {...managedHosted.environment,...(hostedSkillRefs.length?{skills:hostedSkillRefs}:{})}:undefined;
    const hostedGuidance=caps.sandbox?
      "\\n\\nYou have an isolated OpenAI-hosted sandbox with network disabled. Read uploaded files only under /workspace; never claim a file was opened unless you actually processed it. Save final user-downloadable files under /workspace/outputs with a concise, accurate filename, and describe what you produced. Published artifacts are available to the user only after the original source turn is completed.":'';
    const delegationGuidance=caps.delegation?
@@ -105,7 +110,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
    await submitManagedSourceInput({scope:{ownerUserId:scope.ownerUserId,channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId},
     runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory+connectedInventory+grantedSkills+hostedGuidance+delegationGuidance,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[]),
        ...(input.allowWebSearch&&caps.webSearch?[{type:'web_search',mode:'live',context_size:'low'}]:[]),...nativeMCP.tools],
-       ...managedHosted},links,turns,provider});
+       ...managedHosted,environment:hostedEnvironment},links,turns,provider});
    return {replyText:'',pending:true};
   }});
  const app=new Hono<{Variables:AppVariables}>();
@@ -879,11 +884,13 @@ if(import.meta.main){
      brokerProvider:process.env.OPENBOT_BROKER_PROVIDER==='arcade'?'arcade':'composio'
    });
  }
+ const skillMappings=parseHostedSkillMappings(process.env.EUPHORIA_HOSTED_SKILL_REFERENCES_JSON);
  const source=await createManagedDevelopment({
    database,provider,token:EUPHORIA_DEV_TOKEN,model:process.env.EUPHORIA_MODEL??'gpt-6-luna',
    plugins,
    nativeReadOnlyMCPOrigins:(process.env.EUPHORIA_NATIVE_READ_MCP_ORIGINS??'').split(',').map(s=>s.trim()).filter(Boolean),
-   allowWebSearch:process.env.EUPHORIA_MANAGED_WEB_SEARCH==='1'
+   allowWebSearch:process.env.EUPHORIA_MANAGED_WEB_SEARCH==='1',
+   hostedSkillMappings:skillMappings
  });
  const server=Bun.serve({hostname:'127.0.0.1',port:8788,fetch:source.app.fetch});
  const worker=repeatAfterEach(async()=>{try{await source.tick();}catch{console.error('Managed source work awaits recovery');}},1000);

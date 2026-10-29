@@ -29,6 +29,11 @@ import {createManagedTaskAdapter} from './managed-task-adapter';
 import {createMemoryStore} from '../memory/store';
 import {createMemoryRoutes} from '../memory/routes';
 import {managedMemoryContext} from './managed-memory-context';
+import {createPluginStore,type PluginStore} from '../plugins/store';
+import {createPluginRoutes} from '../plugins/routes';
+import {createCredentialStore} from '../credentials';
+import {createAuditStore} from '../audit';
+import {createPolicyStore,DEFAULT_ACTION_POLICY} from '../computer/policy-store';
 import {MANAGED_CONNECTED_MCP_TOOL,managedMCPCall,authorizeManagedMCP,approvedWriteDecision,mcpWritePreview,type OriginalPluginBridge} from './managed-connected-mcp';
 import {resolveManagedSourceBot} from './managed-source-definition';
 import {createManagedSessionLinkStore} from './managed-session-links';
@@ -48,7 +53,7 @@ import {argumentFingerprint} from '../../../../gateway/provider-arguments.mjs';
 // @ts-expect-error stable shared native prompt prefix
 import {RENDER_INSTRUCTIONS} from '../../../../gateway/render-prompt.mjs';
 
-export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string;plugins?:OriginalPluginBridge}) {
+export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string;plugins?:PluginStore}) {
  if(input.token.length<32)throw Error('Development token must contain at least32 characters');
  const {database,provider}=input;
  await initializeDevActorUser(database,true);
@@ -177,6 +182,8 @@ export async function createManagedDevelopment(input:{database:Database;provider
    });
   },
  });
+ if(input.plugins)app.route('/api/plugins',createPluginRoutes(input.plugins,requireUser,
+   async (requester,bot)=>!!await profiles.get(requester,bot)));
  app.route('/api/memory',createMemoryRoutes(memory,null,requireUser));
  app.route('/api/openduet/tasks',managedTasks.routes);
  app.route('/api/openduet/tasks',managedTasks.extras);
@@ -551,7 +558,29 @@ if(import.meta.main){
    if(!response.ok){const body=await response.clone().json().catch(()=>({}));console.error(JSON.stringify({type:'managed-provider-rejection',status:response.status,code:body.error?.code,param:body.error?.param}));}
    return response;
   }});
- const source=await createManagedDevelopment({database,provider,token:EUPHORIA_DEV_TOKEN,model:process.env.EUPHORIA_MODEL??'gpt-6-luna'});
+ // The original PluginStore/vault is optional in loopback dev, but when it
+ // is enabled it is the SAME grant/policy/credential implementation as the
+ // production source. A missing or invalid encryption key never leads to a
+ // dummy tool or a credential exposed to the managed agent.
+ let plugins:PluginStore|undefined;
+ if(process.env.EUPHORIA_ENABLE_SOURCE_MCP==='1'){
+   const encryptionKey=process.env.KEY_ENCRYPTION_KEY??'';
+   const decoded=Buffer.from(encryptionKey,'base64');
+   if(decoded.length!==32||decoded.toString('base64')!==encryptionKey)
+    throw Error('KEY_ENCRYPTION_KEY must be a base64-encoded 32-byte vault key');
+   const policy=createPolicyStore(DEFAULT_ACTION_POLICY,database);
+   await policy.load();
+   plugins=createPluginStore({
+     database,auditStore:createAuditStore(database),
+     credentials:createCredentialStore(database),encryptionKey,
+     policy:()=>policy.get(),
+     brokerProvider:process.env.OPENBOT_BROKER_PROVIDER==='arcade'?'arcade':'composio'
+   });
+ }
+ const source=await createManagedDevelopment({
+   database,provider,token:EUPHORIA_DEV_TOKEN,model:process.env.EUPHORIA_MODEL??'gpt-6-luna',
+   plugins
+ });
  const server=Bun.serve({hostname:'127.0.0.1',port:8788,fetch:source.app.fetch});
  const worker=repeatAfterEach(async()=>{try{await source.tick();}catch{console.error('Managed source work awaits recovery');}},1000);
  console.info('Managed source development service listening on loopback:8788');

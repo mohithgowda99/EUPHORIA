@@ -1,4 +1,4 @@
-import { pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, primaryKey, text, timestamp, uniqueIndex, integer, boolean } from "drizzle-orm/pg-core";
 import { jsonb } from "./json";
 import { agents, channels, users } from "./core";
 import { deliveryInbox } from "./delivery";
@@ -57,3 +57,15 @@ export const managedAgentInboxTurns = pgTable(
     uniqueIndex("managed_agent_inbox_turns_event_idx").on(table.createdEventId),
   ],
 );
+
+/** Per-source-owner capabilities, NEVER an executable agent or authority
+ * delegated to an untrusted generated interface. Missing row = all disabled.
+ */
+export const managedBotHostedCapabilities=pgTable("managed_bot_hosted_capabilities",{
+ ownerUserId:text("owner_user_id").notNull().references(()=>users.id,{onDelete:"cascade"}),
+ botId:text("bot_id").notNull().references(()=>agents.id,{onDelete:"cascade"}),
+ sandbox:boolean("sandbox").notNull().default(false),
+ delegation:boolean("delegation").notNull().default(false),
+ maxConcurrentSubagents:integer("max_concurrent_subagents").notNull().default(1),
+ updatedAt:timestamp("updated_at",{withTimezone:true}).notNull().defaultNow(),
+},table=>[primaryKey({columns:[table.ownerUserId,table.botId]})]);

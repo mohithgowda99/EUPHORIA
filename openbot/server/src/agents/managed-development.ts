@@ -91,14 +91,16 @@ export async function createManagedDevelopment(input:{database:Database;provider
    const activeProfile=await profiles.get(actor,scope.agentId);
    const caps=activeProfile?.ownerUserId===scope.ownerUserId&&
      !activeProfile.systemOwned?await hosted.read(scope.ownerUserId,scope.agentId):DENIED_HOSTED_CAPABILITIES;
-   const managedHosted=activeProfile?.ownerUserId===scope.ownerUserId&&
-     !activeProfile.systemOwned?hostedDefinition(await hosted.read(scope.ownerUserId,scope.agentId)):
-     hostedDefinition(DENIED_HOSTED_CAPABILITIES);
+   const managedHosted=hostedDefinition(caps);
+   const hostedGuidance=caps.sandbox?
+     "\\n\\nYou have an isolated OpenAI-hosted sandbox with network disabled. Read uploaded files only under /workspace; never claim a file was opened unless you actually processed it. Save final user-downloadable files under /workspace/outputs with a concise, accurate filename, and describe what you produced. Published artifacts are available to the user only after the original source turn is completed.":'';
+   const delegationGuidance=caps.delegation?
+     "\\n\\nFor independent, useful parallel work you may delegate to provider-managed subagents within the configured bound. Subagents are not separate EUPHORIA Bots or authorized to gain new source permissions. Do not report their work as finished before the main root turn actually verifies it.":'';
    const nativeMCP=input.plugins?await selectNativeReadOnlyMCP(input.plugins,scope.agentId,input.nativeReadOnlyMCPOrigins??[]):{tools:[],nativeRefs:[]};
    const connectedInventory=input.plugins?await managedMCPInventory(input.plugins,scope.agentId,nativeMCP.nativeRefs):'';
    await channels.recordActivity(actor,scope.channelId,{text:scope.text,agentId:null,at:new Date()},{id:'delivery-input:'+scope.runId});
    await submitManagedSourceInput({scope:{ownerUserId:scope.ownerUserId,channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId},
-    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory+connectedInventory,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[]),
+    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory+connectedInventory+hostedGuidance+delegationGuidance,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[]),
        ...(input.allowWebSearch&&caps.webSearch?[{type:'web_search',mode:'live',context_size:'low'}]:[]),...nativeMCP.tools],
        ...managedHosted},links,turns,provider});
    return {replyText:'',pending:true};

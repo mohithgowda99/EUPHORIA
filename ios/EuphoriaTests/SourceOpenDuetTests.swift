@@ -23,6 +23,24 @@ final class SourceOpenDuetTests: XCTestCase, @unchecked Sendable {
         XCTAssertNil(legacy.selectedLabel, "Old saved surfaces stay readable without fabricated selections")
     }
 
+    func testClosedProviderActionIsRestorableAndOldResponsesRemainDecodable() throws {
+        let closed = #"""
+        {"surface":null,"completedSurfaces":[],"submissionUncertain":false,
+         "deliveryState":"accepted","deliveryError":null,
+         "decisionRecoveryRequired":"Provider action closed before the accepted answer could be delivered."}
+        """#
+        let saved = try JSONDecoder().decode(SourceVisualResponse.self, from: Data(closed.utf8))
+        XCTAssertNil(saved.surface)
+        XCTAssertEqual(saved.deliveryState, "accepted")
+        XCTAssertTrue(saved.decisionRecoveryRequired?.contains("Provider action closed") == true)
+        let legacy = #"""
+        {"surface":null,"completedSurfaces":[],"deliveryState":"sent","deliveryError":null}
+        """#
+        let old = try JSONDecoder().decode(SourceVisualResponse.self, from: Data(legacy.utf8))
+        XCTAssertNil(old.decisionRecoveryRequired)
+        XCTAssertEqual(old.deliveryState, "sent")
+    }
+
     func testExpoStateCookieTransferMatchesOriginalBetterAuthNativeProxy() throws {
         XCTAssertEqual(SourceOAuthStateCookie.extract(
             from: "better-auth.oauth_state=source-123; Path=/; HttpOnly; SameSite=Lax"),

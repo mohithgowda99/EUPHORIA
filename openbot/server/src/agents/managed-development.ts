@@ -108,6 +108,14 @@ export async function createManagedDevelopment(input:{database:Database;provider
     typeof (body as {response?:unknown}).response!=='string'||
     !(body as {response:string}).response.trim()||
     (body as {response:string}).response.length>6000)return c.json({error:'Invalid answer'},400);
+  const [savedQuestion]=await database.select({payload:workItems.payload}).from(workItems).where(and(
+    eq(workItems.kind,'person.question'),eq(workItems.key,c.req.param('id')),
+    sql`${workItems.payload}->>'actorId' = ${c.var.actor.id}`)).limit(1);
+  if(savedQuestion?.payload&&typeof savedQuestion.payload==='object'&&
+    (savedQuestion.payload as {managed?:{kind?:string}}).managed?.kind==='connector_write'){
+    try{approvedWriteDecision((body as {response:string}).response);}
+    catch{return c.json({error:'Choose Allow once or Refuse'},400);}
+  }
   try{return c.json(await questions.respond(c.var.actor.id,c.req.param('id'),(body as {response:string}).response),202);}
   catch{return c.json({error:'Question already answered, missing or unauthorized'},409);}
  });
@@ -367,7 +375,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
     const call=managedMCPCall(payload.call);
     const fresh=await provider.retrieveSession(payload.sessionID);
     const current=(fresh.required_actions??[]).find((v:any)=>v.call_id===call.call_id&&v.turn_id===call.turn_id);
-    if(fresh.id!==payload.sessionID||!current||stable(current)!==stable(call))
+    if(fresh.id!==payload.sessionID||!current||(current.name!==call.name||stable(typeof current.arguments==='string'?JSON.parse(current.arguments):current.arguments)!==stable(typeof call.arguments==='string'?JSON.parse(call.arguments):call.arguments)))
       throw Error('Provider connector call is no longer pending or has changed');
     const granted=await authorizeManagedMCP(input.plugins,payload.scope.agentId,call.arguments);
     if(granted.effect!=='read')throw Error('Connector effect changed; write not permitted in read path');

@@ -16,6 +16,15 @@ struct VisualNodesView: View {
             switch node.kind {
             case .sourceComposition:
                 if let document = try? state.compositionDocument(nodeID:node.id) {
+                    // Prefer the full pinned A2UI native renderer for display
+                    // compositions. Action-bearing controls keep their proven
+                    // persisted/authorized source continuation bridge until the
+                    // engine's two-way values have a verified gateway mapping.
+                    if document.components.allSatisfy({
+                        !["Button","TextField","CheckBox","ChoicePicker","Slider","DateTimeInput"].contains($0.component)
+                    }) {
+                        EuphoriaNativeA2UIEngineView(document: document)
+                    } else {
                     A2UICompositionView(document: Binding(
                         get: { (try? state.compositionDocument(nodeID:node.id)) ?? document },
                         set: { edited in
@@ -29,6 +38,7 @@ struct VisualNodesView: View {
                         catch {errorMessage="This composition action is unsupported."}
                     }
                     .disabled(isWaiting(node,kind:.submitForm))
+                    }
                 } else { Text("Composition unavailable").foregroundStyle(.secondary) }
             case .askChoice:
                 if let selectedID = state.values[node.id]?.string,

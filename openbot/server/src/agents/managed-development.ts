@@ -20,6 +20,7 @@ import {createAgentRoutes} from './routes';
 import {createDeliveryStore} from '../delivery/store';
 import {createDeliveryRouter} from '../delivery/router';
 import {createDeliveryRoutes} from '../delivery/routes';
+import {createApnsPushTransport,type ApnsConfiguration} from '../delivery/apns';
 import type {DeliveryScope} from '../delivery/types';
 import {createWorkQueue} from '../work/queue';
 import {repeatAfterEach} from '../work/loop';
@@ -65,7 +66,7 @@ import {argumentFingerprint} from '../../../../gateway/provider-arguments.mjs';
 // @ts-expect-error stable shared native prompt prefix
 import {RENDER_INSTRUCTIONS} from '../../../../gateway/render-prompt.mjs';
 
-export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string;plugins?:PluginStore;nativeReadOnlyMCPOrigins?:readonly string[];allowWebSearch?:boolean;hostedSkillMappings?:HostedSkillMapping;browserHosts?:readonly string[];verifiedAutomationSpendingBoundary?:()=>Promise<void>;webhookSecret?:string}) {
+export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string;plugins?:PluginStore;nativeReadOnlyMCPOrigins?:readonly string[];allowWebSearch?:boolean;hostedSkillMappings?:HostedSkillMapping;browserHosts?:readonly string[];verifiedAutomationSpendingBoundary?:()=>Promise<void>;webhookSecret?:string;apnsConfig?:ApnsConfiguration;pushProjectId?:string}) {
  if(input.token.length<32)throw Error('Development token must contain at least32 characters');
  const {database,provider}=input;
  await initializeDevActorUser(database,true);
@@ -77,6 +78,8 @@ export async function createManagedDevelopment(input:{database:Database;provider
  const memory=createMemoryStore(database);
  const hosted=createManagedHostedCapabilities(database);
  const actor={id:DEV_ACTOR.id,role:DEV_ACTOR.role};
+ if(Boolean(input.apnsConfig)!==Boolean(input.pushProjectId))throw Error('APNs requires a configured device project ID');
+ const push=input.apnsConfig?createApnsPushTransport(input.apnsConfig):undefined;
  const scopeFor=async(owner:string,channelId:string,agentId:string)=>{
   if(owner!==actor.id)return null;
   const channel=await channels.get(actor,channelId);
@@ -88,7 +91,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
   const current=await scopeFor(question.actorId,question.channelId??'',question.botId);
   if(!current||current.threadId!==question.threadId)throw Error('Question owner, Bot or channel access revoked');
  });
- const router=createDeliveryRouter({store,queue,owner:'managed-development-delivery',providers:{},authoriseScope:authorised,
+ const router=createDeliveryRouter({store,queue,owner:'managed-development-delivery',providers:push?{push}:{},authoriseScope:authorised,
   runTurn:async scope=>{
    if(!await authorised(scope))throw Error('Source access revoked');
    const resolved=await resolveManagedSourceBot({actor,botId:scope.agentId,profiles,registered,model:input.model,roleMessage:standingRoleMessage});
@@ -275,8 +278,10 @@ export async function createManagedDevelopment(input:{database:Database;provider
   },
   publishResult:async(scope,text,receiptId)=>{
    if(!await authorised(scope))throw Error('Routine source ownership revoked');
+   // Original channel activity + original outbox, idempotent by provider receipt.
    await channels.recordActivity(actor,scope.channelId,
      {text,agentId:scope.agentId,at:new Date()},{id:receiptId});
+   await router.notify(scope,{id:receiptId,text,kind:'reply'});
   }
  });
  app.route('/api/routines',createRoutineRoutes(originalRoutineStore,requireUser,{managed:managedRoutines}));
@@ -733,6 +738,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
  app.route('/api/agents',createAgentRoutes(profiles,requireUser,false,undefined,undefined,undefined,true));
  app.route('/api/channels',createChannelRoutes(channels,requireUser));
  app.route('/api/delivery',createDeliveryRoutes({store,router,requireUser,scopeFor,
+  pushProjectId:input.pushProjectId,nativeAPNs:Boolean(push),
   listConversations:async(owner,cursor)=>{if(owner!==actor.id)throw Error('Unknown owner');return channels.list(actor,{cursor});},
   history:async scope=>{
    if(!await authorised(scope))throw Error('Source access revoked');
@@ -905,15 +911,45 @@ export async function createManagedDevelopment(input:{database:Database;provider
  let lastRoutineReconcile=0;
  async function tick(){
   await router.sweep('delivery.inbound');
-  // Bounded read-only recovery. No original/model input is replayed on restart.
+  await router.sweep('delivery.outbound');
+  if(push)await router.sweep('delivery.push-receipt');
+  // Fair source-owned round-robin. Every pass changes last_scanned_at; all
+  // invocations (and webhooks) eventually advance across process restarts.
   if(Date.now()-lastRoutineReconcile>60_000){
    lastRoutineReconcile=Date.now();
    const active=await database.select({id:routines.id,owner:routines.ownerUserId})
      .from(routines).where(and(eq(routines.executionBackend,'managed'),
-       eq(routines.ownerUserId,actor.id))).limit(10);
+       eq(routines.ownerUserId,actor.id)))
+     .orderBy(sql`${routines.providerLastScannedAt} ASC NULLS FIRST`,routines.id).limit(10);
    for(const row of active){
     try{await managedRoutines.sync(row.owner,row.id);}
-    catch{console.error('Managed routine awaits provider/source reconciliation');}
+    catch{console.error('Managed invocation remains unverified; recovery will retry');}
+   }
+   const receipts=await database.select().from(managedRoutineWebhookReceipts)
+    .where(isNull(managedRoutineWebhookReceipts.inspectedAt))
+    .orderBy(managedRoutineWebhookReceipts.receivedAt,
+      managedRoutineWebhookReceipts.webhookId).limit(10);
+   for(const receipt of receipts){
+    // The webhook is only a signed hint to query provider state. Never
+    // interpret session.idle as a completed turn or make a write from it.
+    const matched=await database.select({id:routines.id,owner:routines.ownerUserId})
+     .from(routines).where(and(
+      eq(routines.ownerUserId,actor.id),
+      eq(routines.providerSessionId,receipt.sessionId),
+      eq(routines.executionBackend,'managed'),
+      ...(receipt.routineCursor?[sql`${routines.id} > ${receipt.routineCursor}`]:[])
+     )).orderBy(routines.id).limit(10);
+    let cursor=receipt.routineCursor;
+    let failed=false;
+    for(const row of matched){
+     try{await managedRoutines.sync(row.owner,row.id);cursor=row.id;}
+     catch{failed=true;break;}
+    }
+    await database.update(managedRoutineWebhookReceipts).set(
+     failed?{routineCursor:cursor}:matched.length<10?
+       {routineCursor:null,inspectedAt:new Date()}:
+       {routineCursor:cursor}
+    ).where(eq(managedRoutineWebhookReceipts.webhookId,receipt.webhookId));
    }
   }
   // The phone may be terminated. Inspect ORIGINAL accepted source receipts
@@ -1149,7 +1185,14 @@ if(import.meta.main){
    allowWebSearch:process.env.EUPHORIA_MANAGED_WEB_SEARCH==='1',
    hostedSkillMappings:skillMappings,
    browserHosts:parsePublicBrowserHosts(process.env.EUPHORIA_PUBLIC_BROWSER_HOSTS),
-   webhookSecret:process.env.OPENAI_WEBHOOK_SECRET
+   webhookSecret:process.env.OPENAI_WEBHOOK_SECRET,
+   ...(process.env.EUPHORIA_APNS_ENABLED==='1'?{
+    pushProjectId:process.env.EUPHORIA_PUSH_PROJECT_ID,
+    apnsConfig:{teamId:process.env.APNS_TEAM_ID??'',keyId:process.env.APNS_KEY_ID??'',
+     bundleId:process.env.APNS_BUNDLE_ID??'',
+     privateKey:Buffer.from(process.env.APNS_AUTH_KEY_P8_BASE64??'','base64').toString('utf8'),
+     environment:process.env.APNS_ENVIRONMENT==='production'?'production':'sandbox'} as ApnsConfiguration
+   }:{})
  });
  const server=Bun.serve({hostname:'127.0.0.1',port:8788,fetch:source.app.fetch});
  const worker=repeatAfterEach(async()=>{try{await source.tick();}catch{console.error('Managed source work awaits recovery');}},1000);

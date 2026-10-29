@@ -58,7 +58,15 @@ struct SourcePluginServer: Decodable, Identifiable, Sendable {
     let provenance: String
     let hasCredential: Bool
     let lastError: String?
+    let tools: [SourcePluginTool]
     var isAvailable: Bool { lastError == nil }
+}
+struct SourcePluginTool: Decodable, Identifiable, Sendable {
+    let ref: String
+    let description: String
+    let effect: String
+    let destructive: Bool
+    var id: String { ref }
 }
 struct SourcePluginServersResponse: Decodable, Sendable {
     let servers: [SourcePluginServer]
@@ -95,6 +103,11 @@ struct SourceBotGrants: Decodable, Sendable {
 }
 private struct SourceSkillGrant: Encodable {
     let kind: String
+    let ref: String
+    let agentId: String
+}
+private struct SourceMCPGrant: Encodable {
+    let kind: String = "mcp"
     let ref: String
     let agentId: String
 }
@@ -741,6 +754,26 @@ struct OpenDuetSourceAPI: Sendable {
                     URLQueryItem(name: "agentId", value: checkedID(botID))])
         }
         guard result.ok else { throw SourceAPIError.invalidResponse }
+    }
+
+    func setSourceMCPGrant(botID: String, ref: String, enabled: Bool) async throws {
+        guard (3...256).contains(ref.count),
+              ref.range(of: "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$", options: .regularExpression) != nil
+        else { throw SourceAPIError.invalidInput }
+        let result: SourceGrantReceipt
+        if enabled {
+            result = try await request("api/plugins/grants", method: "POST",
+                body: SourceMCPGrant(ref: ref, agentId: checkedID(botID)))
+        } else {
+            result = try await request("api/plugins/grants", method: "DELETE",
+                queryItems: [
+                    URLQueryItem(name: "kind", value: "mcp"),
+                    URLQueryItem(name: "ref", value: ref),
+                    URLQueryItem(name: "agentId", value: checkedID(botID))
+                ])
+        }
+        guard result.ok else { throw SourceAPIError.invalidResponse }
+        // Source grant state, not this POST/DELETE, is the next UI authority.
     }
 
     /// Original OpenDuet PageStore owns generated Make pages, previews, decks

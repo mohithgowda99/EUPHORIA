@@ -177,7 +177,7 @@ test.skipIf(!address)('closed provider action preserves one decision without sen
   expect(remoteSubmissions).toBe(0);
   const [receipt]=await database.select().from(workItems).where(and(eq(workItems.kind,'managed.native-response'),eq(workItems.key,callID)));
   expect(receipt.finishedAt).toBeNull();
-  expect(receipt.payload.action.values.choice).toBe('yes');
+  expect((receipt.payload as { action: { values: { choice: string } } }).action.values.choice).toBe('yes');
   expect(receipt.lastError).toContain('Provider action closed');
   const reboot=await createManagedDevelopment({database,provider,token,model:'fixture-only'});
   await reboot.tick();

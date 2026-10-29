@@ -28,6 +28,7 @@ import {MANAGED_ASK_PERSON_TOOL,parseManagedQuestionCall,parseManagedQuestion,pa
 import {createManagedTaskAdapter} from './managed-task-adapter';
 import {createManagedHostedCapabilities,parseHostedCapabilities,hostedDefinition,DENIED_HOSTED_CAPABILITIES} from './managed-hosted-capabilities';
 import {projectHostedArtifact,attachmentName} from './managed-hosted-artifacts';
+import {assertCurrentRootForCancellation} from './managed-hosted-cancel';
 import {canManageAgent} from './profile-policy';
 import {createMemoryStore} from '../memory/store';
 import {createMemoryRoutes} from '../memory/routes';
@@ -237,6 +238,94 @@ export async function createManagedDevelopment(input:{database:Database;provider
   if(await hostedLocked(owner,botID))return c.json({error:
    'Existing hosted session is immutable. Configure a new Bot before enabling or revoking hosted capabilities.'},409);
   return c.json({capabilities:await hosted.write(owner,botID,config),locked:false});
+ });
+
+
+ // The provider cancel event applies to the SESSION, not an arbitrary client
+ // turn id. A source-owned, exactly-correlated active root is required, and
+ // a work receipt is persisted BEFORE any remote cancel. A lost HTTP response
+ // is NEVER retried under a new request id.
+ async function activeHostedRoot(owner:string,channelID:string,botID:string){
+  const scope=await scopeFor(owner,channelID,botID);
+  if(!scope)return null;
+  const link=await links.read({ownerUserId:owner,channelId:channelID,
+   botId:botID,threadId:scope.threadId});
+  if(!link?.providerSessionId)return null;
+  const [latest]=await database.select({
+   inbox:deliveryInbox,receipt:managedAgentInboxTurns
+  }).from(deliveryInbox)
+   .leftJoin(managedAgentInboxTurns,eq(deliveryInbox.id,managedAgentInboxTurns.inboxId))
+   .where(and(eq(deliveryInbox.ownerUserId,owner),eq(deliveryInbox.channelId,channelID),
+     eq(deliveryInbox.agentId,botID),eq(deliveryInbox.threadId,scope.threadId)))
+   .orderBy(desc(deliveryInbox.createdAt)).limit(1);
+  if(!latest||!["accepted","running"].includes(latest.inbox.state)||
+     !latest.receipt?.rootTurnId||
+     latest.receipt.providerSessionId!==link.providerSessionId)return null;
+  return{scope,sessionID:link.providerSessionId,inbox:latest.inbox,
+   root:latest.receipt.rootTurnId};
+ }
+ app.get('/api/delivery/conversations/:id/hosted-activity',requireUser,async c=>{
+  const active=await activeHostedRoot(c.var.actor.id,c.req.param('id'),
+   c.req.query('agentId')??'');
+  if(!active)return c.json({rootTurnId:null,canCancel:false,cancelRequested:false});
+  const [record]=await database.select({id:workItems.key,finishedAt:workItems.finishedAt,
+    error:workItems.lastError}).from(workItems).where(and(
+     eq(workItems.kind,'managed.hosted-cancel'),eq(workItems.key,active.inbox.id))).limit(1);
+  let canCancel=false;
+  if(!record){
+   const current=await provider.retrieveTurn(active.sessionID,active.root);
+   canCancel=current.id===active.root&&
+    current.session_id===active.sessionID&&current.subagent_id===null&&
+    ['in_progress','requires_action','queued','pending'].includes(current.status);
+  }
+  if(!await authorised(active.scope))return c.json({error:'Source access revoked'},403);
+  return c.json({rootTurnId:active.root,canCancel,cancelRequested:!!record,
+    requestConfirmed:!!record?.finishedAt,
+    outcomeUncertain:!!record?.error});
+ });
+ app.post('/api/delivery/conversations/:id/hosted-cancel',requireUser,async c=>{
+  const owner=c.var.actor.id,channelID=c.req.param('id'),botID=c.req.query('agentId')??'';
+  let raw:unknown;
+  try{raw=await c.req.json();}catch{return c.json({error:'Invalid cancel request'},400);}
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)||
+     Object.keys(raw).length!==1||typeof (raw as {rootTurnId?:unknown}).rootTurnId!=='string')
+   return c.json({error:'Invalid cancel request'},400);
+  const requested=(raw as {rootTurnId:string}).rootTurnId;
+  const active=await activeHostedRoot(owner,channelID,botID);
+  if(!active||requested!==active.root)return c.json({error:'Turn no longer cancellable'},409);
+  const [previous]=await database.select().from(workItems).where(and(
+    eq(workItems.kind,'managed.hosted-cancel'),eq(workItems.key,active.inbox.id))).limit(1);
+  if(previous)return c.json({error:previous.finishedAt?
+    'Cancellation already requested. Refresh to verify final turn state.':
+    'Cancellation outcome uncertain. Do not resend.'},409);
+  const [session,turns,root]=await Promise.all([
+   provider.retrieveSession(active.sessionID),
+   provider.listTurns(active.sessionID,{limit:100,order:'desc'}),
+   provider.retrieveTurn(active.sessionID,active.root)
+  ]);
+  if(session.id!==active.sessionID)return c.json({error:'Provider session identity mismatch'},409);
+  try{assertCurrentRootForCancellation(active.root,active.sessionID,root,turns,active.inbox.state);}
+  catch{return c.json({error:'Provider root is no longer uniquely active'},409);}
+  if(!await authorised(active.scope))return c.json({error:'Source access revoked'},403);
+  const receipt={ownerUserId:owner,channelId:channelID,botId:botID,
+   threadId:active.scope.threadId,inboxID:active.inbox.id,
+   sessionID:active.sessionID,rootTurnID:active.root};
+  const [winner]=await database.insert(workItems).values({
+   kind:'managed.hosted-cancel',key:active.inbox.id,payload:receipt
+  }).onConflictDoNothing().returning();
+  if(!winner)return c.json({error:'Cancellation already reserved; no automatic replay'},409);
+  try{
+   // HTTP 202 means event accepted, NOT that the worker or root is stopped.
+   await provider.cancelTurn(active.sessionID,'source_cancel_'+active.inbox.id);
+   await database.update(workItems).set({finishedAt:new Date()}).where(and(
+    eq(workItems.kind,'managed.hosted-cancel'),eq(workItems.key,active.inbox.id)));
+   return c.json({accepted:true,phase:'requested',rootTurnId:active.root},202);
+  }catch{
+   await database.update(workItems).set({
+    attempts:100,lastError:'Provider cancel outcome uncertain; inspect original root before any retry'
+   }).where(and(eq(workItems.kind,'managed.hosted-cancel'),eq(workItems.key,active.inbox.id)));
+   return c.json({error:'Cancellation outcome uncertain; inspect work status'},503);
+  }
  });
 
  // Real provider-managed subagents, scoped to the original Bot/channel's

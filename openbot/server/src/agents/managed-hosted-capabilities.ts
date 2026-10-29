@@ -17,7 +17,7 @@ export function parseHostedCapabilities(value:unknown):HostedCapabilities {
    !Number.isInteger(raw.maxConcurrentSubagents as number)||
    (raw.maxConcurrentSubagents as number)<1||(raw.maxConcurrentSubagents as number)>3||
    (!raw.delegation&&raw.maxConcurrentSubagents!==1)||
-   (raw.browser&&raw.sandbox))throw Error("Invalid hosted capabilities");
+   (raw.browser&&(raw.sandbox||raw.delegation)))throw Error("Invalid hosted capabilities");
  return{sandbox:raw.sandbox,delegation:raw.delegation,maxConcurrentSubagents:raw.maxConcurrentSubagents as number,webSearch:raw.webSearch,browser:raw.browser};
 }
 export function hostedDefinition(capabilities:HostedCapabilities):{

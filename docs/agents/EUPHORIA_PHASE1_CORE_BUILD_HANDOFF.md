@@ -1,41 +1,47 @@
 # EUPHORIA Phase 1 core non-production implementation handoff
 Date: 2026-10-29
 
-## Scope / branch
-Dedicated remote branch: `feature/phase1-interactions-tools-a2ui-20261029`
-Initial handoff base was `0290ec86e5eb631ebe84982a7f83730fffc7a8c4`; follow-up compiler-source repair and bounded Bot memory injection landed afterward. Read the branch's current SHA with `git rev-parse HEAD`.
-The handoff commit itself is necessarily newer; read the exact checked-out SHA using `git rev-parse HEAD`.
-Based on continuation `aed235fd4ae6fb13c7bd4d511700a83f556652f8`, which incorporates `fix/native-completed-choice-lifecycle` (98c71dd) and the JSONB normalization migration.
-Nothing merged to main or reset on the original laptop worktree.
+## Scope / branch and verified outcome
+**Current implementation branch:** `feature/phase1-core-e2e-convergence-20261029`
+**Source head before handoff update:** `637f37ee3e9e12f2f6589fb9075b0abdbc0bd3ed`.
+For the final immutable revision run `git rev-parse HEAD` after fetching. This file is committed after that prior head.
+Based on `feature/phase1-interactions-tools-a2ui-20261029`, itself based on continuation `aed235fd4ae6fb13c7bd4d511700a83f556652f8`; it includes completed-choice fixes `98c71dd` and inherited JSONB normalization. No merge to main, force push, worktree overwrite or paid inference.
 
-**Concurrent branch divergence:** While this branch was being committed, `feature/phase1-core-continuation-20261029` advanced **9 commits** from our common base `aed235f`. Our implementation branch has 32 source commits from that base. The newer continuation modified `managed-development.ts`, native source Chat/API, native tests, and independently created a handoff at the same path. Do not blindly merge or overwrite either handoff. In a separate Mac worktree, fetch both heads, compare those specific files, reconcile the newer native/provider recovery tests with this branch's additional question/task/memory/A2UI code, then run full offline suites. Neither side is automatically validated by this divergence check.
+**Verification:** GitHub Actions offline workflow [run 40817090772](https://github.com/mohithgowda99/EUPHORIA/actions/runs/40817090772) completed successfully on SHA `4413dcf399a897cbb9ed2695f961e7b8e4a80b4f`, running original-server Bun typecheck, isolated disposable migrated PostgreSQL for each question/task/MCP/JSONB integration suite, connector/memory tests, and gateway npm regressions. Five later commits only changed user-facing SwiftUI product-copy strings; therefore native code remains uncompiled and a Mac check remains mandatory. Check the latest branch Actions run after this handoff for a final fresh CI result.
 
-**The user specifically excluded the production backend cutover from this iteration.** That work remains blocked/unimplemented, not secretly moved. This branch is *not* a verified complete or production-ready personal-agent product.
+**Product scope:** User explicitly excluded the production backend cutover for this pass. Everything described is wired into the original-source **development** assembly. The production server still uses CopilotKit Intelligence and is not converted or deployed. This is not yet full OpenDuet parity or a verified running iPhone.
 
-## Workstream truth table
-| Area | Implemented in branch | Tested offline in this environment | Needs Mac/Xcode | Needs credentials / authorization | Not completed |
+| Workstream | Implemented | Tested offline | Needs Mac | Needs credentials | Not completed |
 |---|---|---|---|---|---|
-| A durable human interaction | Managed `euphoria_ask_person` tool definition; source `person.question` + `person.response` receipts; server-owned polling with exact original Inbox/root; authenticated one-winner answer; exact current provider required-action check; no automatic resend when uncertain; native Approvals + recovery UI | Deterministic test code committed, **not executed** | Native pending/completed/recovery UX, restart and device testing | Separately bounded live provider late-response test | Provider-expired authorized *new turn* fallback; full original write-approval bridge; production-scale worker lease handling |
-| C Bots/Tasks/Memory | Existing source Bot profiles/chat remain; original TaskStore/TaskThreads and intake mounted; actual managed Inbox turn for task; original Up Next persisted; source task replies deduplicated by client message ID; source-based report; editable MemoryStore route mounted | Deterministic task test code committed, **not executed** | Native Task create/reply/Up Next/detail and Memory edit/forget | Managed paid model execution test authorized separately | Original MCP/plugin grants/vault/connections tool calls, approved write, cloud scheduling, native push, multi-agent authority and managed memory retrieval |
-| D A2UI native | Pinned `a2ui-swift` revision `16476ba2cb3fcb4c4bcb141dfa4c2804adbdedb0` added to app Xcode project; reused comparison bridge; standard engine renders source-validated display-only compositions; original working action-backed controls preserved | **Not run** | Swift package resolution, app compile, source fixture differential, native screenshots and interaction regression | No paid inference permitted | Full generic server-authorized A2UI action+edited-value bridge, streaming/dynamic-list conformance, interactive full catalog acceptance, all general examples |
+| A durable questions/approvals | Source-owned persistent questions, one-winner decisions, current provider action check, restart restoration, explicit manually authorized new-turn recovery for expired **ordinary** questions, native recovery, pre-effect MCP write choices | YES: deterministic source+Postgres question lifecycle and expired recovery, connector write decision | Native Approvals, restart/background and read-only history | Live provider late-answer test, separately budget-approved | Real-provider long-wait/timeout, managed auto-resume, cross-device real identity |
+| C Bots/Tasks/MCP/memory | Source Bot profiles, TaskStore, Up Next, replies, report projection, memory CRUD and bounded review-scoped context, original PluginStore/vault/routes opt-in, currently-granted inventory, MCP read and user-approved write through source policy/audit | YES: fixture Bot/Tasks/dedup/restoration, grants/refusals, controlled read/write fixture with DB | Native Bots, Task, Connections, Memory screens on Simulator/device | Actual MCP server credentials + optional broker/OAuth + bounded live agent permission | Hosted tools/subagents/managed scheduling, real OAuth + external read/write acceptance, native push, per-user production auth |
+| D native A2UI | Pinned `a2ui-swift` exact revision in Xcode app, native `SurfaceViewModel`, two-way editor changes stored via source `VisualState`, authenticated source submit route, historic surface restoration | Gateway A2UI unit regressions run offline; NO native Swift tests here | **Required**: package resolve, compile, unit tests, Simulator gestures and restoration | Real-agent generated interface requires explicit API spend approval | Full 18-component upstream parity (original source graph still restrictive), expressions/dynamic templates/multi-surface streaming, full live UI acceptance |
 
-Production B excluded at user's direction. No external-effect tools or automation claims made.
+**Do not promote a tested fixture to a live provider / iPhone pass.** Do not run `OPENAI_API_KEY` inference without separate explicit authorization and a compatible hard cap.
 
 ## Functional integration
-A: `openbot/server/src/agents/managed-person-questions.ts` defines strict managed function/question call+scope correlation. `managed-development.ts` registers this tool next to the existing render tool, persists a durable original `person.question` keyed by exact call ID, and handles original `person.response` work items on the original queue. The worker projects pending human questions even when the iPhone is closed; its lookup is scoped by original Inbox ID and exact root turn. It only submits against the matching *current* provider required action. A closed/changed action preserves the answer and exposes explicit recovery; it does not fabricate tool results or automatically send a new paid turn. An uncertain remote acknowledgment never triggers an automatic second submission. This is intentionally conservative, and does not yet provide new-turn fallback.
+A: `openbot/server/src/agents/managed-person-questions.ts` defines strict managed function/question call+scope correlation. `managed-development.ts` registers this tool next to the existing render tool, persists a durable original `person.question` keyed by exact call ID, and handles original `person.response` work items on the original queue. The worker projects pending human questions even when the iPhone is closed; its lookup is scoped by original Inbox ID and exact root turn. It only submits against the matching *current* provider required action. A closed/changed action preserves the answer and exposes explicit recovery; it does not fabricate tool results or automatically send a new paid turn. An uncertain remote acknowledgment never triggers an automatic second submission. A closed ordinary question exposes an explicit, authenticated, idempotent `POST /api/approvals/recovery/:id/continue` action; it queues a **new** source Inbox turn only if the user presses the native recovery control. Connector write approvals and uncertain provider outcomes are never replayed via this route.
 
 C: `openbot/server/src/agents/managed-task-adapter.ts` is an adapter, **not** another runner or task state store. It uses original TaskStore, TaskThreads, ChannelStore, DeliveryStore, TaskIntake and ProactiveStore. Source task status checks original `delivery_inbox` (realm `managed-task`), with no shadow status column. Source task report reads original source Inbox and managed completed projections; unknown assistant completion time is left null. Proactive suggestion Start uses an atomic original DB transaction to claim the card and create one original task/channel. Managed source actor and Bot access remain enforced. Native task reply external ID is deduplicated on the original delivery ledger. Original source MemoryStore is mounted for editable provenance/confirm/disable/delete, with bounded approved Bot-scoped memory context, without Intelligence memory mirroring; unavailable connector ingestion is explicitly unavailable rather than presented as active.
 
+C tools: `managed-connected-mcp.ts` provides bounded source-granted tool inventory and exact pending-provider-call correlation. Source `PluginStore` remains the executor, policy/credential revocation gate and auditor. `managed-development.ts` exposes `euphoria_connected_mcp` only when original `PluginStore` is configured, persists read executions on original WorkQueue, and creates original `person.question` write decisions showing exact arguments. Native Approvals presents explicit **Allow once / Refuse**. The worker rechecks original scope and grants immediately before a permitted effect and does not replay uncertain provider acknowledgments. Fixture coverage is real; connected vendor credentials / live acceptance are not.
+
 D: `ios/Euphoria.xcodeproj` now includes native SwiftUI upstream renderer `A2UISwiftCore` and `A2UISwiftUI` with exact revision pin. `EuphoriaNativeA2UIEngineView.swift` uses `A2UIProjectionBridge` from the existing spike to rebuild validated display surfaces from saved `A2UIDocument`. `VisualNodesView.swift` dispatches source display-only compositions to it, leaving action-bearing forms on their existing persisted and authenticated local submission route. Do **not** claim full A2UI until value binding, edits, identity and actions are reconciled end to end against the original gateway and tested.
+
+D native continuation: `EuphoriaNativeA2UIEngineView.swift` now listens to upstream `SurfaceViewModel` bindings and passes typed edited values to the original source `VisualState` / `compositionSubmissionValues`. `VisualNodesView.swift` uses this renderer for supported `sourceComposition` components, not a new in-memory user-action authority. The original source graph validator still accepts a subset of upstream protocol; treat full A2UI as **not completed** and reject unsupported components safely.
 
 ## Files changed
 Added:
 - `openbot/server/src/agents/managed-person-questions.ts`
 - `openbot/server/src/agents/managed-task-adapter.ts`
 - `openbot/server/src/agents/managed-memory-context.ts`
+- `openbot/server/src/agents/managed-connected-mcp.ts`
 - `openbot/server/tests/managed-person-questions.integration.test.ts`
 - `openbot/server/tests/managed-source-tasks.integration.test.ts`
 - `openbot/server/tests/managed-memory-context.test.ts`
+- `openbot/server/tests/managed-connected-mcp.test.ts`
+- `openbot/server/tests/managed-source-mcp.integration.test.ts`
+- `.github/workflows/euphoria-core-gates.yml`
 - `ios/EuphoriaApp/EuphoriaNativeA2UIEngineView.swift`
 
 Modified:
@@ -44,6 +50,10 @@ Modified:
 - `openbot/server/src/memory/routes.ts`
 - `ios/EuphoriaApp/OpenDuetSourceAPI.swift`
 - `ios/EuphoriaApp/SourceApprovalsView.swift`
+- `ios/EuphoriaApp/SourceBotsView.swift`
+- `ios/EuphoriaApp/SourceTasksView.swift`
+- `ios/EuphoriaApp/SourceConnectionsView.swift`
+- `ios/EuphoriaApp/SourceMemoryView.swift`
 - `ios/EuphoriaApp/SourceConversationsView.swift`
 - `ios/EuphoriaApp/VisualNodesView.swift`
 - `ios/Spikes/A2UIRendererComparison/Package.swift`
@@ -56,7 +66,7 @@ Retired: none. Existing CopilotKit production server has not been modified. No n
 ```bash
 git fetch origin
 git worktree add ../EUPHORIA-CORE-VALIDATION -b validate/euphoria-core \
-  origin/feature/phase1-interactions-tools-a2ui-20261029
+  origin/feature/phase1-core-e2e-convergence-20261029
 cd ../EUPHORIA-CORE-VALIDATION
 git rev-parse HEAD
 cd openbot
@@ -70,29 +80,27 @@ swift test --package-path ios/VisualRuntimeCore
 swift test --package-path ios/Spikes/A2UIRendererComparison
 ```
 
-Before any tests with a database: create a **disposable** isolated PostgreSQL DB with the original migrations through 0071. DO NOT point injected-provider tests at `euphoria_live` or another owner's data.
+Use a **disposable** PostgreSQL database with the `vector` extension. Prefer the exact isolated suite workflow at `.github/workflows/euphoria-core-gates.yml` (source questions, Tasks, MCP and JSONB each receive a distinct database so the single dev actor's Inbox cannot leak across provider fixtures).
 ```bash
-export TEST_DATABASE_URL='postgres://USER:PASSWORD@127.0.0.1:55432/euphoria_core_disposable'
 cd openbot
-bun test server/tests/managed-person-questions.integration.test.ts \
-         server/tests/managed-source-tasks.integration.test.ts \
-         server/tests/managed-completed-jsonb.integration.test.ts \\
-         server/tests/managed-memory-context.test.ts
 bun run --filter server typecheck
-cd ..
-```
-The two new tests and inherited migration test are skipped without `TEST_DATABASE_URL`. Re-run whole original tests after these focused gates:
-```bash
-cd openbot
-bun test
 bun run typecheck:tests
+bun test server/tests/managed-connected-mcp.test.ts server/tests/managed-memory-context.test.ts
+# Set TEST_DATABASE_URL to a freshly migrated disposable database, never live:
+DATABASE_URL="$TEST_DATABASE_URL" bun server/scripts/migrate.ts
+bun test server/tests/managed-person-questions.integration.test.ts
+# Run Task, MCP and JSONB suites against separate fresh migrated disposable DBs:
+bun test server/tests/managed-source-tasks.integration.test.ts
+bun test server/tests/managed-source-mcp.integration.test.ts
+bun test server/tests/managed-completed-jsonb.integration.test.ts
 cd ..
-cd gateway && npm test && cd ..
+npm --prefix gateway ci
+npm --prefix gateway test
 ```
-If tests fail, fix on this validation branch and replay the suites. **None of these commands has yet run in the current GitHub-only environment.** The previous laptop's 177 gateway / 33 source / 5 PG / 76 Swift core / 39 XCTest results predate these commits and are not new evidence.
+To rerun exact complete Linux gates use GitHub Actions `EUPHORIA core branch gates` on this branch. The latest completed green source/backend run is linked above. Historical older laptop counts are not proof of current native acceptance.
 
 ## Dev backend only
-Use existing ignored `gateway/.env` without printing or committing it. Required names: `DATABASE_URL` (PostgreSQL), `OPENAI_API_KEY` (server only), `EUPHORIA_DEV_TOKEN` (>=32 chars). Optional: `EUPHORIA_MODEL`. Other API keys and production credentials are not configured by this branch.
+Use existing ignored `gateway/.env` without printing or committing it. Required names: `DATABASE_URL` (PostgreSQL), `OPENAI_API_KEY` (server only), `EUPHORIA_DEV_TOKEN` (>=32 chars). Optional: `EUPHORIA_MODEL`, `EUPHORIA_ENABLE_SOURCE_MCP=1`, `KEY_ENCRYPTION_KEY` (32 secure random bytes encoded base64, required when MCP enabled), and `OPENBOT_BROKER_PROVIDER` where supported. The original encrypted PluginStore/vault and provider are activated only by explicit flag; no connection is inferred from ChatGPT account. Do not print or commit the encryption key. Other OAuth/vendor credentials remain unconfigured.
 ```bash
 DATABASE_URL='postgres://USER:PASSWORD@127.0.0.1:55432/euphoria_dev' \
   bun --env-file=gateway/.env openbot/server/src/agents/managed-development.ts
@@ -116,20 +124,20 @@ For iOS Simulator boot/launch, select a real available UDID from `xcrun simctl l
 
 ## Manual acceptance and approval gates
 1. In disposable DB create own Bot (original source route); create a source conversation. Have deterministic fixture return `euphoria_ask_person`; stop app/backend; restart; open Approvals on second client; answer; ensure one `person.response` and one provider submission against exact pending call; conflict gets 409.
-2. Mock provider with no matching required action. Verify original response retained and recovery UI appears, with **zero** remote submission or fake completion. A future new authorized-turn recovery needs official lifecycle proof and additional implementation.
+2. Mock provider with no matching required action. Verify original response retained and recovery UI appears, with **zero** remote submission or fake completion. Use the native explicit recovery control to enqueue a new source turn only for an expired ordinary question. Verify duplicate recovery POST returns one immutable original Inbox. Connector write/unknown submissions must still refuse replay.
 3. Create Task, restart backend, confirm original task ID, own Bot/Channel, accepted Inbox and status from real receipt. Post the same `messageId` twice; one `delivery_inbox` reply. Up Next saves/states, Start claims at most once. Native report shows only source-backed content.
 4. Create, edit, confirm, disable and delete original MemoryStore entries; prove deletion/forgetting and ownership. Run `bun test server/tests/managed-memory-context.test.ts` and inspect that unreviewed, disabled, deleted and other-Bot memories never enter the provider instruction prefix. Connector-based source sync must report unavailability.
-5. Compare simple and nested display A2UI documents against source spike; perform fresh package resolve/build, incremental rebuild, expired/invalid surfaces, SwiftUI identity. Interactive forms must retain existing original `VisualNodesView` path and real saved input values.
+5. Compare simple and nested display A2UI documents against source spike; perform fresh package resolve/build, incremental rebuild, expired/invalid surfaces, SwiftUI identity. Verify interactive fields use the pinned native engine but persist edited values through original `VisualState`, and that native taps route through `compositionSubmissionValues`/original authenticated gateway. Validate the full source graph subset and historical record reopening.
 6. Run older accepted Leg day and completed choice read-only relaunch regression. Inspect tap coordinates and history order. No paid API calls for this stage.
 7. Only after a **separate explicit budget approval**: one bounded live provider question; one bounded native tool action, only when all permission gates are actually wired. No speculative comparisons or uncapped inference.
 
 ## Known failures and next engineering tasks, prioritized
-- **Immediate P0 build verification**: never claim these new TypeScript/Swift changes compile until laptop executes suites. Check imported types/signatures, original test fixture event formats, Hono task route precedence, pinned SwiftPM target linking and `A2UISurfaceView` API.
-- **A incomplete**: source question is durable, but expired provider calls do not start a new authorized turn. Full approval service integration and live late-question acceptance remain undone. Uncertain post acknowledgment is kept in an explicit recoverable receipt.
-- **C incomplete**: permissions/credentials/MCP/plugin catalog, real authorized read-only connector, pre-effect write approval, revoke in flight, managed hosted execution, Bots delegation, tasks retry/cancel, scheduled autonomy, push, skill grants and semantic memory retrieval remain undone. Source task status and read-only report are useful, not a claim of full product parity.
-- **D incomplete**: pinned engine renders validated source **display-only** documents; full open-ended A2UI forms/expressions/action payloads, streaming, deletions, and two-way authoritative state still require integration and source differential fixtures. Existing interactive forms are deliberately preserved rather than being routed through unvalidated protocol actions.
-- **B intentionally excluded**: original production server still depends on CopilotKit Intelligence; Better Auth/hosting/deployment untouched.
-- **Infrastructure**: no actual hosted deployment, Xcode, Simulator, cross-user production auth, real devices, test DB, or paid calls run here.
+- **Native mandatory**: macOS/Xcode has not compiled `EuphoriaNativeA2UIEngineView.swift` since moving the pinned engine from display-only to two-way input submission. Resolve exact upstream SwiftPM package, Xcode Debug/Release XCTest, source fixtures, Simulator and real device before declaring installed.
+- **A**: Offline ordinary human questions and expired explicit user-driven new turn are proven. Real OpenAI provider long-wait and multi-device authentication require separately authorized acceptance; no automatic replay on unknown remote acknowledgment.
+- **C**: Real source PluginStore MCP call path exists and fixture approved write/read passed offline. Vendor OAuth, authenticated external read/write, managed hosted environment/subagent delegation, managed automation integration, push notifications, broad tool discovery/retrieval and production per-user auth remain undone. Unapproved real write must not run.
+- **D**: Original source `a2uiGraph` validation still supports a narrower safe subset than the upstream 18-component catalog. Expression evaluation, dynamic templates, richer Lists/Tabs/Modals, multi-surface/streaming operation replay and complete end-to-end native input acceptance remain undone. Unsupported controls must fail closed, never become inert interactive buttons.
+- **B excluded**: Original production composition still uses CopilotKit Intelligence; Better Auth production cutover, deployment and hosted hosting credentials are not performed.
+- **Cost**: Previously deployed provider rejected `spend_control`; do not use removed one-off uncapped authorization. Offline fixtures are safe and current; paid real-provider calls are blocked until an explicit bounded budget and compatible enforcement are approved.
 
 ## Recovery / rollback
 Keep `main`, `codex/managed-native-execution`, `fix/native-completed-choice-lifecycle`, and `feature/phase1-core-continuation-20261029` intact. To abandon this experimental branch, return to old integration/fix branch; DO NOT force push or delete saved Inbox, question, answer, completion projection, Bot or task data. Inherited migration 0071 requires dump/backup of actual DB and **disposable clone proof** before being applied to a live database; it normalizes legacy double-serialized JSONB and fails safely on unsupported shapes. Do not use down migrations that drop completed projections. Source human response work items intentionally preserve uncertain/closed provider outcomes for manual reconciliation rather than automatic resubmission.

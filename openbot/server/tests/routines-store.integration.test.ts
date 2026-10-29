@@ -1337,7 +1337,7 @@ describe("explicit cloud scheduler ownership", () => {
       .update(routines)
       .set({
         executionBackend: "managed",
-        providerAutomationId: "auto_fixture_" + randomUUID(),
+        providerAutomationId: `auto_fixture_${randomUUID()}`,
         nextRunAt: due,
       })
       .where(eq(routines.id, routine.id));

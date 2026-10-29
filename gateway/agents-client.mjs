@@ -60,13 +60,28 @@ export class AgentsClient {
           'Idempotency-Key':key(submissionKey),'Content-Type':'application/json',Accept:'text/event-stream'},
         signal:AbortSignal.any([controller.signal,AbortSignal.timeout(60_000),...(signal?[signal]:[])])
       });
-      if(!response.ok||response.headers.get('content-type')?.split(';')[0].trim().toLowerCase()!=='text/event-stream'||!response.body)
+      if(!response.ok||response.headers.get('content-type')?.split(';')[0].trim().toLowerCase()!=='text/event-stream'||!response.body) {
+        // The deployed API has rejected spend_control with unknown_parameter.
+        // Reject clearly, rather than quietly creating an uncapped session.
+        if(await recognizedSpendControlError(response)) {
+          const budget=Error('Provider does not support required spend_control; no uncapped fallback');
+          budget.code='PROVIDER_SPEND_CONTROL_UNSUPPORTED';
+          budget.status=400;
+          throw budget;
+        }
         throw Error('Invalid session stream');
+      }
     }catch{
       controller.abort();try{await response?.body?.cancel();}catch{}
       const error=Error('Agents session submission outcome unknown; reconcile original source before retry');
       error.outcomeUnknown=!response||response.status>=500||response.status===408||response.ok;error.failureStage='submission';
-      if(response&&!response.ok){error.status=response.status;error.message='Agents session request rejected ('+response.status+')';}
+      if(response&&!response.ok){
+        error.status=response.status;
+        if(response.status===400&&response.headers.get('content-type')?.includes('application/json')) {
+          // Response body may already have been consumed above. Error is deliberately generic.
+          error.message='Agents session rejected (400); inspect budget compatibility before retry';
+        }else error.message='Agents session request rejected ('+response.status+')';
+      }
       throw error;
     }
     return {close:()=>controller.abort(),events:(async function*(){
@@ -349,8 +364,12 @@ export class AgentsClient {
       throw error;
     }
     if (!response.ok) {
+      const unsupported=await recognizedSpendControlError(response);
       try { await response.body?.cancel(); } catch { /* Cleanup cannot expose provider errors. */ }
-      const error = new Error(`Agents API request failed (${response.status})`);
+      const error = new Error(unsupported?
+        'Provider does not support required spend_control; no uncapped fallback':
+        `Agents API request failed (${response.status})`);
+      if(unsupported)error.code='PROVIDER_SPEND_CONTROL_UNSUPPORTED';
       error.status = response.status;
       error.failureStage = method === 'POST' ? 'submission' : 'read';
       error.outcomeUnknown = method === 'POST' && (response.status >= 500 || response.status === 408);
@@ -429,4 +448,14 @@ function configuredAgent({model,instructions,tools,reasoningEffort,verbosity}) {
   agent.text={verbosity};
  }
  return agent;
+}
+
+/** Safe error classification. Never emit provider body, secret or prompt. */
+async function recognizedSpendControlError(response) {
+  if(response.status!==400)return false;
+  try {
+    const value=await response.clone().json();
+    return value?.error?.param==='spend_control' &&
+      value?.error?.code==='unknown_parameter';
+  }catch{return false;}
 }

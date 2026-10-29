@@ -1,4 +1,5 @@
-import { jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { jsonb } from "./json";
 import { agents, channels, users } from "./core";
 import { deliveryInbox } from "./delivery";
 

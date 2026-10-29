@@ -10,6 +10,7 @@ import FoundationNetworking
 struct SourceHostedCapabilities: Codable, Sendable {
     let sandbox: Bool
     let webSearch: Bool
+    let browser: Bool
     let delegation: Bool
     let maxConcurrentSubagents: Int
 }

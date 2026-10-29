@@ -32,6 +32,8 @@ jobs:
           bun run format
       - name: Generate schema reference snapshot without duplicate SQL migration
         working-directory: openbot/server
+        env:
+          DATABASE_URL: postgres://unused:unused@127.0.0.1:5432/disposable_schema_only
         run: |
           bunx drizzle-kit generate --config=drizzle.config.ts --name section2_snapshot_probe
           test -f drizzle/meta/0076_snapshot.json

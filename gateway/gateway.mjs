@@ -9,7 +9,7 @@ import {createServer} from 'node:http';
 import {DatabaseSync} from 'node:sqlite';
 import {createHash,randomUUID} from 'node:crypto';
 import {chmodSync} from 'node:fs';
-import {GatewayError,fail,identifier,stable,decisionResult} from './visual-contract.mjs';
+import {GatewayError,fail,identifier,stable,decisionResult,requiresHumanAction} from './visual-contract.mjs';
 
 /** Single-process gateway. Authentication is mandatory and injected, never inferred from a client owner field. */
 export function createGateway({provider,authenticate,databasePath,model,verificationMode="unverified",clock=()=>Date.now()}){
@@ -56,8 +56,8 @@ export function createGateway({provider,authenticate,databasePath,model,verifica
       acknowledgedActionIDs:actions.filter(a=>a.phase==='accepted').map(a=>a.action_id),
       rejectedActionIDs:actions.filter(a=>a.phase==='cancelled').map(a=>a.action_id),
       displayAcknowledged:!row.active||actions.some(a=>a.call_id===row.call_id&&a.phase==='accepted'),
-      resolvedNodeIDs:row.active?actions.filter(a=>a.call_id===row.call_id&&a.phase==='accepted'&&JSON.parse(row.surface).nodes.some(n=>n.id===a.node_id&&['askChoice','askForm','askApproval','sourceComposition'].includes(n.kind))).map(a=>a.node_id):
-        (row.surface?JSON.parse(row.surface).nodes.filter(n=>['askChoice','askForm','askApproval','sourceComposition'].includes(n.kind)).map(n=>n.id):[])};
+      resolvedNodeIDs:row.active?actions.filter(a=>a.call_id===row.call_id&&a.phase==='accepted'&&JSON.parse(row.surface).nodes.some(n=>n.id===a.node_id&&requiresHumanAction(n))).map(a=>a.node_id):
+        (row.surface?JSON.parse(row.surface).nodes.filter(requiresHumanAction).map(n=>n.id):[])};
   }
   async function refresh(id,owner,{signal}={}){
     signal?.throwIfAborted();

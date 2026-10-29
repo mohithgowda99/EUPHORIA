@@ -33,7 +33,7 @@ export function validateGraph(d){
  if(!Array.isArray(d.components)||!d.components.length||d.components.length>200)bad();
  const budget={n:4096};bounded(d.dataModel,0,budget);
  const nodes=new Map();for(const c of d.components){if(!object(c)||!safe(c.id)||nodes.has(c.id))bad();nodes.set(c.id,c);const {id,component,...props}=c;bounded(props,0,budget);}
- const seen=new Set();let buttons=0;
+ const seen=new Set();
  function typed(raw,type,optional=false){if(raw===undefined&&optional)return;const v=resolve(raw,d.dataModel);if(type==='string'?!text(v):type==='bool'?typeof v!=='boolean':!Array.isArray(v)||v.length>20||!v.every(text))bad();}
  function visit(id,depth=0){
   const c=nodes.get(id);if(depth>24||!c||seen.has(id))bad();seen.add(id);
@@ -53,12 +53,12 @@ export function validateGraph(d){
    case 'Button':{
     shape(c,[...base,'child','action'],['variant']);if(c.variant!==undefined&&!['primary','borderless'].includes(c.variant))bad();visit(c.child,depth+1);
     shape(c.action,['event']);const e=c.action.event;shape(e,['name'],['context']);if(!safe(e.name))bad();
-    const context=e.context??{};if(!object(context)||Object.keys(context).length>20)bad();for(const [k,v] of Object.entries(context)){if(!safe(k)||!scalar(resolve(v,d.dataModel)))bad();}buttons++;break;
+    const context=e.context??{};if(!object(context)||Object.keys(context).length>20)bad();for(const [k,v] of Object.entries(context)){if(!safe(k)||!scalar(resolve(v,d.dataModel)))bad();}break;
    }
    default:bad();
   }
  }
- visit('root');if(seen.size!==nodes.size||buttons<1)bad();return d;
+ visit('root');if(seen.size!==nodes.size)bad();return d;
 }
 /** Explicit source operation input; prior authority is the existing persisted surface, never client state. */
 export function normalizeGraphInput(input,previous){

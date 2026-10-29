@@ -14,6 +14,12 @@ export function stable(value){
   return JSON.stringify(value);
 }
 const boundedText=x=>typeof x==='string'&&x.length<=2000;
+/** Rendering an answer is not a human decision. Only an admitted event can
+ * keep a generated composition waiting for a user response. */
+export function requiresHumanAction(node){
+  if(node.kind==='sourceComposition')return node.composition?.components?.some(c=>c.component==='Button')??false;
+  return ['askChoice','askForm','askApproval'].includes(node.kind);
+}
 const boundedStrings=x=>Array.isArray(x)&&x.length<=20&&new Set(x).size===x.length&&x.every(boundedText);
 function sourceValueValid(field,value){
   if(['text','textarea'].includes(field.type))return boundedText(value);
@@ -45,7 +51,7 @@ export function validateSurface(surface){
   for(const n of surface.nodes){
     // These IDs participate in local flat binding paths; exclude separators/prototype names.
     if(!/^[A-Za-z0-9_-]{1,64}$/.test(n.id))fail(502,'Unsupported node identity');
-    if(['askChoice','askForm','askApproval','sourceComposition'].includes(n.kind))decisions++;
+    if(requiresHumanAction(n))decisions++;
     if(n.submitLabel!==undefined&&n.kind!=='askForm')fail(502,'Invalid form label');
     if(!n.formEvent&&n.fields?.some(f=>['checkbox','choice'].includes(f.type)||f.choices!==undefined||f.allowsMultipleSelection!==undefined||(f.initialValue!==undefined&&!boundedText(f.initialValue))))fail(502,'Invalid native field');
     if(n.formEvent){
@@ -91,7 +97,7 @@ export function decisionResult(surface,action){
   const node=surface.nodes.find(n=>n.id===action.nodeID),v=action.values;
   if(!node||!v||Array.isArray(v)||typeof v!=='object')fail(422,'Invalid decision');
   const keys=Object.keys(v);
-  if(action.kind==='displayed'&&!surface.nodes.some(n=>['askChoice','askForm','askApproval','sourceComposition'].includes(n.kind))){
+  if(action.kind==='displayed'&&!surface.nodes.some(requiresHumanAction)){
     if(action.nodeID!==surface.nodes[0].id||keys.length)fail(422,'Invalid display receipt');
     return {status:'shown'};
   }

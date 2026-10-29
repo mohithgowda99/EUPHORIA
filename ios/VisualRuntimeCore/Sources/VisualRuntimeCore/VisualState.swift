@@ -156,7 +156,7 @@ public struct VisualState: Codable, Equatable, Sendable {
     }
 
     public var requiresDisplayReceipt: Bool {
-        surface.nodes.allSatisfy { [.showChecklist, .gallery, .htmlArtifact].contains($0.kind) } &&
+        surface.nodes.allSatisfy { !$0.requiresHumanAction } &&
             values["$displayReceipt@" + String(surface.revision)] != .flag(true)
     }
     private func compositionPrefix(nodeID:String) -> String { nodeID+".source@"+String(surface.revision)+":" }

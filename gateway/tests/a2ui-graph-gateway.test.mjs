@@ -7,9 +7,9 @@ import {join} from 'node:path';
 import {createGateway} from '../gateway.mjs';
 const d=JSON.parse(readFileSync(new URL('./fixtures/a2ui-graph-trip-v09.json',import.meta.url)));
 const packet=()=>({a2uiGraph:[{version:'v0.9',createSurface:{surfaceId:d.surfaceId,catalogId:d.catalogId}},{version:'v0.9',updateComponents:{surfaceId:d.surfaceId,components:d.components}},{version:'v0.9',updateDataModel:{surfaceId:d.surfaceId,path:'/',value:d.dataModel}}]});
-async function setup(t){
+async function setup(t,initial=packet()){
  const dir=await mkdtemp(join(tmpdir(),'euphoria-graph-'));let server,origin;
- const p={writes:[],current:{id:'session',status:'in_progress',required_actions:[{type:'function_call',name:'euphoria_render_surface',turn_id:'turn',call_id:'call',arguments:packet()}]},async createSession(){return{id:'session'};},async retrieveSession(){return structuredClone(this.current);},async submitToolResult(id,result,key){this.writes.push({id,result,key});if(this.error)throw this.error;}};
+ const p={writes:[],current:{id:'session',status:'in_progress',required_actions:[{type:'function_call',name:'euphoria_render_surface',turn_id:'turn',call_id:'call',arguments:initial}]},async createSession(){return{id:'session'};},async retrieveSession(){return structuredClone(this.current);},async submitToolResult(id,result,key){this.writes.push({id,result,key});if(this.error)throw this.error;}};
  async function reopen(){if(server)await new Promise(r=>server.close(r));server=createGateway({provider:p,databasePath:join(dir,'db.sqlite'),model:'test',authenticate:async req=>req.headers.authorization==='Bearer alice'?'alice':req.headers.authorization==='Bearer bob'?'bob':null});await new Promise(r=>server.listen(0,'127.0.0.1',r));origin=`http://127.0.0.1:${server.address().port}`;}
  await reopen();t.after(async()=>{await new Promise(r=>server.close(r));await rm(dir,{recursive:true,force:true});});
  async function request(path,{method='GET',body,user='alice'}={}){const r=await fetch(origin+path,{method,headers:{authorization:'Bearer '+user,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return{status:r.status,body:await r.json()};}
@@ -103,4 +103,38 @@ test('missing graph correction asks for creation and journals the exact refusal 
  p.rejectToolCall=async(id,result)=>{const db=new DatabaseSync(databasePath,{readOnly:true});record=db.prepare("SELECT result FROM actions WHERE phase='refusing'").get();db.close();assert.deepEqual(JSON.parse(record.result),{success:false,error:result.error});assert.match(result.error,/createSurface/);assert.doesNotMatch(result.error,/with expectedRevision/);};
  const r=await request('/v1/sessions/session');assert.equal(r.status,200);assert.equal(r.body.phase,'in_progress');assert.ok(record.result);assert.deepEqual(r.body.acknowledgedActionIDs,[]);
  await reopen();const db=new DatabaseSync(databasePath,{readOnly:true});assert.deepEqual(db.prepare('SELECT result FROM actions').get(),record);db.close();
+});
+
+test('display-only graph is acknowledged once, reopens, and accepts revisioned progress without a fake question',async t=>{
+ const initial={a2uiGraph:[
+  {version:'v0.9',createSurface:{surfaceId:'research',catalogId:d.catalogId}},
+  {version:'v0.9',updateComponents:{surfaceId:'research',components:[
+   {id:'root',component:'Text',text:{path:'/finding'}}]}},
+  {version:'v0.9',updateDataModel:{surfaceId:'research',value:{finding:'Initial finding'}}}
+ ]};
+ const {p,request,reopen}=await setup(t,initial);
+ const s=(await request('/v1/sessions/session')).body;
+ assert.equal(s.surface.nodes[0].composition.components[0].component,'Text');
+ assert.equal(s.displayAcknowledged,false);
+ const action={id:'display_1',surfaceID:s.surface.surfaceID,expectedRevision:s.surface.revision,
+  nodeID:'composition',kind:'displayed',values:{}};
+ const path=`/v1/surfaces/${s.surface.surfaceID}/actions`;
+ assert.equal((await request(path,{method:'POST',body:action,user:'bob'})).status,404);
+ assert.equal((await request(path,{method:'POST',body:action})).status,202);
+ assert.equal(p.writes.length,1);
+ assert.equal(p.writes[0].result.output.status,'shown');
+ assert.equal(p.writes[0].result.output.userAction,undefined);
+ await reopen();
+ assert.equal((await request(path,{method:'POST',body:action})).status,202);
+ assert.equal(p.writes.length,1);
+ const restored=(await request('/v1/sessions/session')).body;
+ assert.equal(restored.displayAcknowledged,true);
+ assert.deepEqual(restored.resolvedNodeIDs,[]);
+ p.current.required_actions=[{...p.current.required_actions[0],call_id:'progress',arguments:{
+  expectedRevision:s.surface.revision,a2uiGraph:[{version:'v0.9',updateDataModel:{
+   surfaceId:'research',path:'/finding',value:'Verified second finding'}}]}}];
+ const next=(await request('/v1/sessions/session')).body;
+ assert.equal(next.surface.revision,s.surface.revision+1);
+ assert.equal(next.surface.nodes[0].composition.dataModel.finding,'Verified second finding');
+ assert.equal(next.displayAcknowledged,false);
 });

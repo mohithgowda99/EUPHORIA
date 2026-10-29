@@ -1,5 +1,5 @@
 import {createHash,randomUUID} from 'node:crypto';
-import {fail,identifier,stable} from './visual-contract.mjs';
+import {fail,identifier,stable,requiresHumanAction} from './visual-contract.mjs';
 import {taskStatus} from '../openbot/server/src/openduet/task-status.ts';
 const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const exact=(x,keys)=>object(x)&&Object.keys(x).sort().join(',')===[...keys].sort().join(',');
@@ -29,7 +29,7 @@ export function taskServices({db,provider,create,refresh,conversation,locked}){
   const resolved=!!row.resolved_at&&!newer&&row.resolved_turn===(turn?.id??null);
   const pending=inputs(c.session_id).some(x=>['submitting','uncertain'].includes(x.phase));
   const awaiting=accepted.some(x=>x.base_turn_id===(turn?.id??null));
-  const needs=snap.phase==='waiting'&&!snap.displayAcknowledged&&snap.surface?.nodes.some(n=>['askChoice','askApproval','askForm','sourceComposition'].includes(n.kind));
+  const needs=snap.phase==='waiting'&&!snap.displayAcknowledged&&snap.surface?.nodes.some(requiresHumanAction);
   const working=pending||awaiting||!['idle','completed','accepted'].includes(snap.phase)||!turn||['queued','in_progress','waiting'].includes(turn.status);
   const matches=e=>e.kind==='message'&&e.role==='assistant'&&e.turnID===turn?.id&&e.status==='completed'&&e.text.trim();
   let hasReply=history.entries.some(matches),page=history,scanned=1;const cursors=new Set();
@@ -39,7 +39,7 @@ export function taskServices({db,provider,create,refresh,conversation,locked}){
   }
   const failed=turn&&(['failed','cancelled'].includes(turn.status)||turn.status==='completed'&&!hasReply);
   const status=taskStatus({needsInput:needs,working,resolved,failed:!!failed});
-  const task={...base,status,resolvedAt:resolved?row.resolved_at:null,deliveryPhase:pending||snap.phase==='uncertain'?'uncertain':c.phase,pendingNodeIDs:needs?snap.surface.nodes.filter(n=>['askChoice','askApproval','askForm','sourceComposition'].includes(n.kind)).map(n=>n.id):[],failure:failed?(turn.status==='cancelled'?'The task was stopped.':hasReply?'The task could not finish.':'The task ended without a saved reply.'):null};
+  const task={...base,status,resolvedAt:resolved?row.resolved_at:null,deliveryPhase:pending||snap.phase==='uncertain'?'uncertain':c.phase,pendingNodeIDs:needs?snap.surface.nodes.filter(requiresHumanAction).map(n=>n.id):[],failure:failed?(turn.status==='cancelled'?'The task was stopped.':hasReply?'The task could not finish.':'The task ended without a saved reply.'):null};
   return{task,turn,history};
  }
  async function get(owner,id){const row=lookup(owner,id),sid=creation(row)?.session_id;return sid?locked(sid,async()=> (await inspect(row)).task):(await inspect(row)).task;}

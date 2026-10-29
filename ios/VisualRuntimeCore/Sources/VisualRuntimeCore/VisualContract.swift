@@ -157,6 +157,14 @@ public struct VisualNode: Codable, Equatable, Sendable, Identifiable {
     public let submitLabel: String?
     public let formEvent: VisualFormEvent?
     public let composition: A2UIDocument?
+    /// A native display receipt acknowledges presentation only. It must never
+    /// substitute for a source-defined button event or human approval.
+    public var requiresHumanAction: Bool {
+        if kind == .sourceComposition {
+            return composition?.components.contains(where: { $0.component == "Button" }) ?? false
+        }
+        return [.askChoice, .askForm, .askApproval, .pageChecklist].contains(kind)
+    }
     public init(id: String, kind: VisualKind, title: String, summary: String? = nil,
                 options: [VisualOption]? = nil, fields: [VisualField]? = nil,
                 items: [VisualChecklistItem]? = nil, gallery: VisualGallery? = nil, html: String? = nil, submitLabel: String? = nil, formEvent: VisualFormEvent? = nil, composition: A2UIDocument? = nil) {

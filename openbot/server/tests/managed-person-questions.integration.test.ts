@@ -89,6 +89,15 @@ for(const expires of [false,true])test.skipIf(!url)(
    expect(saved?.lastError).toContain("Provider question closed");
    const recovered=await second.app.request("/api/approvals",{headers});
    expect((await recovered.json()).recoveries[0].id).toBe(callID);
+   const reauthorize=()=>second.app.request("/api/approvals/recovery/"+callID+"/continue",{method:"POST",headers});
+   const once=await reauthorize();expect(once.status).toBe(202);
+   const savedRecovery=await once.json();expect(savedRecovery.accepted).toBe(true);
+   expect((await reauthorize()).status).toBe(202);
+   const denied=await second.app.request("/api/approvals/recovery/"+callID+"/continue",{method:"POST",headers:{cookie:"bad"}});
+   expect(denied.status).toBe(401);
+   // This queues one newly user-authorized source input; it never submits a fake
+   // result against the expired provider call.
+   expect(posts).toBe(0);
   } else expect(saved?.finishedAt).not.toBeNull();
  }finally{await db.$client.close();}
 });

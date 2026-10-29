@@ -157,6 +157,9 @@ struct SourceConversationDetailView: View {
     @State private var needsHumanAnswer = false
     @State private var visualCompleted = false
     @State private var completedVisuals: [SourceCompletedVisual] = []
+    @State private var browserApprovals: [SourceBrowserApproval] = []
+    @State private var pendingBrowserAllowID: String?
+    @State private var browserDecisionBusy = false
     @State private var hostedActivity: SourceHostedActivity?
     @State private var confirmingHostedCancel = false
     @State private var cancelNotice: String?
@@ -265,6 +268,35 @@ struct SourceConversationDetailView: View {
                             .padding(16).frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
                             .accessibilityElement(children: .contain)
+                        }
+                        if !browserApprovals.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label("Browser access requests", systemImage: "globe")
+                                    .font(.subheadline.weight(.semibold))
+                                Text("OpenAI hosts the browser. Grant access only to these public documentation origins. Website writes are not authorized.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                ForEach(browserApprovals) { request in
+                                    VStack(alignment: .leading, spacing: 7) {
+                                        Text(request.kind == "authentication" ? "Sign-in blocked" : (request.origin ?? "Unknown origin"))
+                                            .font(.subheadline.weight(.medium)).textSelection(.enabled)
+                                        if let reason = request.reason { Text(reason).font(.caption).foregroundStyle(.secondary) }
+                                        if request.submitted {
+                                            Text(request.uncertain ? "Decision outcome uncertain. Refresh status." : "Decision submitted.")
+                                                .font(.caption).foregroundStyle(.secondary)
+                                        } else {
+                                            HStack(spacing: 14) {
+                                                if request.kind == "origin" && request.canApprove {
+                                                    Button("Allow origin") { pendingBrowserAllowID = request.id }
+                                                }
+                                                Button(request.kind == "authentication" ? "Cancel sign-in" : "Deny access") {
+                                                    Task { await decideBrowser(request, decision:
+                                                        request.kind == "authentication" ? "cancel" : "deny") }
+                                                }
+                                            }.disabled(browserDecisionBusy || busy)
+                                        }
+                                    }.padding(10).background(botColor.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+                                }
+                            }.padding(12).background(botColor, in: RoundedRectangle(cornerRadius: 16))
                         }
                         if !subagents.isEmpty {
                             VStack(alignment: .leading, spacing: 10) {
@@ -404,6 +436,20 @@ struct SourceConversationDetailView: View {
                 .background(surfaceColor.opacity(0.96))
             }
         }
+        .confirmationDialog("Allow this public documentation website?", isPresented: Binding(
+            get: { pendingBrowserAllowID != nil },
+            set: { if !$0 { pendingBrowserAllowID = nil } }
+        ), titleVisibility: .visible) {
+            Button("Allow this origin") {
+                guard let id = pendingBrowserAllowID,
+                      let request = browserApprovals.first(where: { $0.id == id && $0.canApprove }) else { return }
+                pendingBrowserAllowID = nil
+                Task { await decideBrowser(request, decision: "approve") }
+            }
+            Button("Cancel", role: .cancel) { pendingBrowserAllowID = nil }
+        } message: {
+            Text("This approves the displayed public website origin, not website writes or sign-in.")
+        }
         .confirmationDialog("Stop this Bot's current hosted run?",
                             isPresented: $confirmingHostedCancel, titleVisibility: .visible) {
             Button("Request stop", role: .destructive) {
@@ -432,6 +478,8 @@ struct SourceConversationDetailView: View {
         }
         .onChange(of: selectedBotID) { _, _ in
             hostedActivity = nil
+            browserApprovals = []
+            pendingBrowserAllowID = nil
             cancelNotice = nil
             previewURL = nil
             hostedArtifacts = []
@@ -495,6 +543,8 @@ struct SourceConversationDetailView: View {
             }
             hostedActivity = try? await client.sourceHostedActivity(
                 channelID: conversation.id, botID: selectedBotID)
+            browserApprovals = (try? await client.sourceBrowserApprovals(
+                channelID: conversation.id, botID: selectedBotID)) ?? []
             hostedArtifacts = (try? await client.sourceHostedArtifacts(channelID: conversation.id, botID: selectedBotID)) ?? []
             subagents = (try? await client.sourceHostedSubagents(channelID: conversation.id,
                                                                   botID: selectedBotID)) ?? []
@@ -533,6 +583,24 @@ struct SourceConversationDetailView: View {
             if let previous = exportedArtifact?.url { try? FileManager.default.removeItem(at: previous) }
             exportedArtifact = nil
             self.error = "The original conversation could not be read. Your saved outgoing intent has not been replayed."
+        }
+    }
+
+    private func decideBrowser(_ request: SourceBrowserApproval, decision: String) async {
+        guard !browserDecisionBusy, !busy, !request.submitted,
+              browserApprovals.contains(where: { $0.id == request.id }),
+              request.kind != "authentication" || decision == "cancel",
+              decision != "approve" || request.canApprove else { return }
+        browserDecisionBusy = true
+        defer { browserDecisionBusy = false }
+        do {
+            try await client.decideSourceBrowserApproval(channelID: conversation.id,
+                botID: selectedBotID, requestID: request.id, decision: decision)
+            browserApprovals = try await client.sourceBrowserApprovals(
+                channelID: conversation.id, botID: selectedBotID)
+            self.error = nil
+        } catch {
+            self.error = "Browser decision not confirmed. Refresh this Bot before attempting another response."
         }
     }
 

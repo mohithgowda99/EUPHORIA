@@ -1,5 +1,4 @@
 import SwiftUI
-import CryptoKit
 import A2UISwiftCore
 import A2UISwiftUI
 
@@ -11,6 +10,9 @@ import A2UISwiftUI
 @MainActor
 struct EuphoriaNativeA2UIEngineView: View {
     let document: A2UIDocument
+    var onEdit: ((String, A2UIValue) -> Void)? = nil
+    var onSubmit: ((String) -> Void)? = nil
+    @State private var subscriptions: [DataSubscription<AnyCodable>] = []
     @State private var model = SurfaceViewModel(catalog: basicCatalog)
     @State private var error: String?
 
@@ -20,9 +22,13 @@ struct EuphoriaNativeA2UIEngineView: View {
                 Label(error, systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.red)
             } else {
-                A2UISurfaceView(viewModel: model, scrolls: false) { _ in
+                A2UISurfaceView(viewModel: model, scrolls: false) { action in
                     Task { @MainActor in
-                        error = "This interface attempted an action without an EUPHORIA authorization binding."
+                        if let onSubmit {
+                            onSubmit(action.sourceComponentId)
+                        } else {
+                            error = "This interface attempted an action without an EUPHORIA authorization binding."
+                        }
                     }
                 }
             }
@@ -34,10 +40,32 @@ struct EuphoriaNativeA2UIEngineView: View {
                 let messages = try A2UIProjectionBridge.messages(from: document)
                 let errors = model.processMessages(messages)
                 if !errors.isEmpty { throw errors[0] }
+                for subscription in subscriptions { subscription.unsubscribe() }
+                subscriptions.removeAll()
+                if let onEdit {
+                    let context = model.makeDataContext()
+                    for component in document.components {
+                        guard ["TextField", "CheckBox", "ChoicePicker"].contains(component.component),
+                              let path = component.properties["value"]?.object?["path"]?.text else { continue }
+                        let componentID = component.id
+                        let subscription = context.subscribeDynamicValue(.dataBinding(path)) { value in
+                            guard let value,
+                                  let bytes = try? JSONEncoder().encode(value),
+                                  let converted = try? JSONDecoder().decode(A2UIValue.self, from: bytes)
+                            else { return }
+                            Task { @MainActor in onEdit(componentID, converted) }
+                        }
+                        subscriptions.append(subscription)
+                    }
+                }
                 error = nil
             } catch {
                 error = "The A2UI surface could not be validated. No action was submitted."
             }
+        }
+        .onDisappear {
+            for subscription in subscriptions { subscription.unsubscribe() }
+            subscriptions.removeAll()
         }
     }
 
@@ -45,9 +73,8 @@ struct EuphoriaNativeA2UIEngineView: View {
         // Source data / component changes need a new projection. This
         // deterministic fingerprint is strictly a rendering invalidation key,
         // never an idempotency key or provider correlation.
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let bytes = (try? encoder.encode(document)) ?? Data()
-        return document.surfaceId + ":" + SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        // Source revision changes reflect authoritative server updates.
+        // Local edits do not replace the engine or reset a text cursor.
+        return document.surfaceId + ":" + String(document.revision)
     }
 }

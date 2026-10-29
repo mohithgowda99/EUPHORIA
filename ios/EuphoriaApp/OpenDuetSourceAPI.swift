@@ -64,6 +64,26 @@ struct SourceHostedCancelReceipt: Decodable, Sendable {
     let rootTurnId: String
 }
 
+struct SourceBrowserApproval: Decodable, Identifiable, Sendable {
+    let id: String
+    let kind: String
+    let origin: String?
+    let reason: String?
+    let canApprove: Bool
+    let submitted: Bool
+    let uncertain: Bool
+}
+struct SourceBrowserApprovalEnvelope: Decodable, Sendable {
+    let requests: [SourceBrowserApproval]
+}
+private struct SourceBrowserDecision: Encodable {
+    let decision: String
+}
+struct SourceBrowserDecisionReceipt: Decodable, Sendable {
+    let accepted: Bool
+    let phase: String
+}
+
 struct SourceBot: Decodable, Identifiable, Sendable {
     let id: String
     let name: String
@@ -796,6 +816,28 @@ struct OpenDuetSourceAPI: Sendable {
 
     /// Only the exact server-correlated original Inbox root can be cancelled.
     /// A cancellation receipt means request accepted, not work stopped.
+    func sourceBrowserApprovals(channelID: String, botID: String) async throws -> [SourceBrowserApproval] {
+        let result: SourceBrowserApprovalEnvelope = try await request(
+            "api/delivery/conversations/" + checkedID(channelID) + "/browser-approvals",
+            method: "GET", queryItems: [URLQueryItem(name: "agentId", value: checkedID(botID))])
+        guard result.requests.count <= 50,
+              Set(result.requests.map(\.id)).count == result.requests.count,
+              result.requests.allSatisfy({ ["origin","authentication"].contains($0.kind) })
+        else { throw SourceAPIError.invalidResponse }
+        return result.requests
+    }
+
+    func decideSourceBrowserApproval(channelID: String, botID: String,
+                                     requestID: String, decision: String) async throws {
+        guard ["approve","deny","cancel"].contains(decision) else { throw SourceAPIError.invalidInput }
+        let result: SourceBrowserDecisionReceipt = try await request(
+            "api/delivery/conversations/" + checkedID(channelID) + "/browser-approvals/" + checkedID(requestID),
+            method: "POST", body: SourceBrowserDecision(decision: decision),
+            queryItems: [URLQueryItem(name: "agentId", value: checkedID(botID))])
+        guard result.accepted, result.phase == "submitted"
+        else { throw SourceAPIError.invalidResponse }
+    }
+
     func sourceHostedActivity(channelID: String, botID: String) async throws -> SourceHostedActivity {
         return try await request(
             "api/delivery/conversations/" + checkedID(channelID) + "/hosted-activity",

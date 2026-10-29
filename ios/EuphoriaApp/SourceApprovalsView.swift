@@ -15,7 +15,7 @@ struct SourceApprovalsView: View {
     var body: some View {
         List {
             Section {
-                Text("OpenDuet decides which tools require your permission. An agent-generated screen cannot override its approval policies.")
+                Text("EUPHORIA decides which tools require your permission. An agent-generated screen cannot override its approval policies.")
                     .font(.caption).foregroundStyle(.secondary)
                 if client == nil {
                     Text("Sign in through Bots to review your original account's approvals.")
@@ -121,7 +121,7 @@ struct SourceApprovalsView: View {
         } message: {
             Text("Review the exact connector arguments shown in the request. A lost acknowledgment is never automatically replayed.")
         }
-        .confirmationDialog("Deny this original OpenDuet request?", isPresented: Binding(
+        .confirmationDialog("Deny this EUPHORIA request?", isPresented: Binding(
             get: { confirmDenyID != nil },
             set: { if !$0 { confirmDenyID = nil } }
         ), titleVisibility: .visible) {

@@ -47,6 +47,22 @@ struct SourceApprovalsView: View {
                         Text("Nothing waiting for approval.").foregroundStyle(.secondary)
                     }
                 }
+                if let recoveries = inbox.recoveries, !recoveries.isEmpty {
+                    Section("Answers requiring recovery") {
+                        ForEach(recoveries) { recovery in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Label("Answer saved, continuation not confirmed", systemImage: "exclamationmark.triangle")
+                                    .font(.subheadline.weight(.semibold))
+                                Text(recovery.error ?? "The provider outcome needs reconciliation.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                Text("Reference: " + recovery.id)
+                                    .font(.caption2).textSelection(.enabled)
+                            }
+                        }
+                        Text("EUPHORIA has not replayed these answers. No external action is reported as complete.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 Section("Questions from Bots") {
                     ForEach(inbox.questions ?? []) { question in
                         VStack(alignment: .leading, spacing: 8) {

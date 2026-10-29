@@ -72,7 +72,7 @@ export function createManagedSessionLinkStore(database: Database) {
         // Serialise the ORIGINAL permission row with the FIRST provider
         // reservation, even across two backend processes.
         await tx.execute(
-          sql`SELECT pg_advisory_xact_lock(hashtextextended(${scope.ownerUserId + ":" + scope.botId}, 0))`,
+          sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${scope.ownerUserId}:${scope.botId}`}, 0))`,
         );
         const [created] = await tx
           .insert(managedAgentSessionLinks)

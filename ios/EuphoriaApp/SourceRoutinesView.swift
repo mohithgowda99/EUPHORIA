@@ -174,9 +174,9 @@ struct SourceRoutinesView: View {
 
     private func backendLabel(_ routine: SourceRoutine) -> String {
         switch routine.executionBackend {
-        case "managed": "OpenAI managed"
-        case "provisioning", "sync_unknown": "Reconciliation required"
-        default: "Original source"
+        case "managed": return "OpenAI managed"
+        case "provisioning", "sync_unknown": return "Reconciliation required"
+        default: return "Original source"
         }
     }
     private func beginEdit(_ routine: SourceRoutine) {

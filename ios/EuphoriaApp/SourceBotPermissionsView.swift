@@ -43,6 +43,11 @@ struct SourceBotPermissionsView: View {
             Section("Hosted compute & delegation") {
                 Text("Optional OpenAI-hosted compute. The sandbox has no network access, and delegated subagents inherit only this Bot's approved tools. Hosted execution can incur API charges.")
                     .font(.caption).foregroundStyle(.secondary)
+                Toggle("Live web research", isOn: Binding(
+                    get: { hosted?.capabilities.webSearch ?? false },
+                    set: { value in Task { await updateHosted(webSearch: value) } }
+                ))
+                .disabled(busy || hosted == nil || hosted?.locked == true)
                 Toggle("Hosted sandbox", isOn: Binding(
                     get: { hosted?.capabilities.sandbox ?? false },
                     set: { value in Task { await updateHosted(sandbox: value) } }
@@ -125,7 +130,7 @@ struct SourceBotPermissionsView: View {
             availableTools = []
         }
     }
-    private func updateHosted(sandbox: Bool? = nil, delegation: Bool? = nil,
+    private func updateHosted(sandbox: Bool? = nil, webSearch: Bool? = nil, delegation: Bool? = nil,
                               maxSubagents: Int? = nil) async {
         guard !busy, let previous = hosted, !previous.locked else { return }
         busy = true
@@ -133,6 +138,7 @@ struct SourceBotPermissionsView: View {
         let delegate = delegation ?? previous.capabilities.delegation
         let wanted = SourceHostedCapabilities(
             sandbox: sandbox ?? previous.capabilities.sandbox,
+            webSearch: webSearch ?? previous.capabilities.webSearch,
             delegation: delegate,
             maxConcurrentSubagents: delegate ? (maxSubagents ?? previous.capabilities.maxConcurrentSubagents) : 1)
         do {

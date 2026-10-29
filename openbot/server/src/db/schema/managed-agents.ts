@@ -65,6 +65,7 @@ export const managedBotHostedCapabilities=pgTable("managed_bot_hosted_capabiliti
  ownerUserId:text("owner_user_id").notNull().references(()=>users.id,{onDelete:"cascade"}),
  botId:text("bot_id").notNull().references(()=>agents.id,{onDelete:"cascade"}),
  sandbox:boolean("sandbox").notNull().default(false),
+ browser:boolean("browser").notNull().default(false),
  webSearch:boolean("web_search").notNull().default(false),
  delegation:boolean("delegation").notNull().default(false),
  maxConcurrentSubagents:integer("max_concurrent_subagents").notNull().default(1),

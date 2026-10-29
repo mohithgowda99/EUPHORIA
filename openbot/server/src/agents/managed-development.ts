@@ -34,7 +34,6 @@ import {
   createPolicyStore,
   DEFAULT_ACTION_POLICY,
 } from "../computer/policy-store";
-import { standingRoleMessage } from "../copilot";
 import { createCredentialStore } from "../credentials";
 import { createDatabase, type Database } from "../db/client";
 import {
@@ -124,6 +123,7 @@ import { canManageAgent } from "./profile-policy";
 import { createAgentProfileStore } from "./profile-store";
 import { createAgentRoutes } from "./routes";
 import { createRuntimeAgentLoader } from "./runtime-agents";
+import { standingRoleMessage } from "./standing-role";
 
 export async function createManagedDevelopment(input: {
   database: Database;

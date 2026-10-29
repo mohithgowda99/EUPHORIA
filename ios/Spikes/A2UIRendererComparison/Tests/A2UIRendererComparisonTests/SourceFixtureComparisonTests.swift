@@ -27,6 +27,15 @@ final class SourceFixtureComparisonTests: XCTestCase {
         return engine
     }
 
+    func testPinnedUntypedUpdateReplacesPropertiesAndRetainsExistingType() throws {
+        let document=try fixture("a2ui-nested-trip-v09.json")
+        let engine=try processor(document)
+        XCTAssertTrue(engine.processMessages([.updateComponents(UpdateComponentsPayload(surfaceId:document.surfaceId,components:[RawComponent(id:"title",component:"",properties:["text":.string("Revised heading")])]))]).isEmpty)
+        let title=try XCTUnwrap(engine.model.getSurface(document.surfaceId)?.componentsModel.get("title"))
+        XCTAssertEqual(title.type,"Text")
+        XCTAssertEqual(title.properties,["text":.string("Revised heading")])
+    }
+
     func testNumericDateControlsRestoreThroughPinnedEngine() throws {
         var document=try fixture("a2ui-numeric-date-v09.json")
         _=try document.edit(componentID:"confidence",value:.number(75))

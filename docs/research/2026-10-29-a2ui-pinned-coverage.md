@@ -32,7 +32,7 @@ All function expressions remain refused by application admission at this checkpo
 
 ## Operations and authority
 
-- Existing source input admits createSurface, revision-checked updateComponents upserts and updateDataModel subtree replacement/deletion in bounded batches. Resulting complete graph must validate atomically.
+- Existing source input admits createSurface, revision-checked updateComponents upserts (existing component type may be omitted; properties replace rather than merge, matching the pinned engine) and updateDataModel subtree replacement/deletion in bounded batches. Resulting complete graph must validate atomically.
 - deleteSurface is available in the pinned engine/projection bridge but is not yet a source operation; progressive incomplete graphs and component-field patches need separate evidence.
 - One source-owned composition per visual surface; unsupported catalogs, functions, ambiguous objects, cycles, reused child identities, orphan nodes, unsafe paths and oversize payloads fail closed.
 - Read-only compositions now receive an exact display receipt and complete/reopen using original source persistence. Button-bearing compositions cannot use that receipt to bypass a decision.
@@ -40,7 +40,7 @@ All function expressions remain refused by application admission at this checkpo
 
 ## Executed evidence for layout increment
 
-Gateway 204/204; Swift core 82/82; pinned upstream comparison package 8/8, including shared synthetic layout tree. Contract RED observed before implementation in JavaScript and Swift. These are deterministic/offline tests, not Simulator usability or live-provider acceptance. New layout fixtures are identical in gateway and Swift core; no paid request was made.
+Gateway 205/205; Swift core 82/82; pinned upstream comparison package 9/9, including shared synthetic layout tree. Contract RED observed before implementation in JavaScript and Swift. These are deterministic/offline tests, not Simulator usability or live-provider acceptance. New layout fixtures are identical in gateway and Swift core; no paid request was made.
 
 Section 3 remains incomplete: media/functions/progressive lifecycle and broader source-backed Simulator journeys are outstanding. Sections 4–5 have not started; Section 2's current partial checkpoint has not been integrated.
 

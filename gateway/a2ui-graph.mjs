@@ -100,7 +100,7 @@ export function normalizeGraphInput(input,previous){
    if(!d||v?.surfaceId!==d.surfaceId)bad();
    if(kind==='updateComponents'){
     shape(v,['surfaceId','components']);if(!Array.isArray(v.components)||!v.components.length||v.components.length>200)bad();const seen=new Set();
-    for(const c of v.components){if(!object(c)||!safe(c.id)||seen.has(c.id))bad();seen.add(c.id);const i=d.components.findIndex(n=>n.id===c.id);if(i<0)d.components.push(structuredClone(c));else d.components[i]=structuredClone(c);}
+    for(const c of v.components){if(!object(c)||!safe(c.id)||seen.has(c.id))bad();seen.add(c.id);const i=d.components.findIndex(n=>n.id===c.id);if(i<0)d.components.push(structuredClone(c));else d.components[i]={...structuredClone(c),component:c.component??d.components[i].component};}
    }else if(kind==='updateDataModel'){
     shape(v,['surfaceId'],['path','value']);if(Object.hasOwn(v,'value'))bounded(v.value);d.dataModel=replace(d.dataModel,v.path??'/',v.value,Object.hasOwn(v,'value'));
    }else bad();

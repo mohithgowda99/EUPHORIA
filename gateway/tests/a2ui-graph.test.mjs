@@ -77,3 +77,13 @@ test('v2 provider envelope preserves exact v1 event and exposes explicit revisio
  assert.deepEqual(f.toolResult.userAction,load('fixtures/a2ui-graph-v1.json').toolResult.userAction);assert.equal(f.nextPartialUpdate.expectedRevision,f.toolResult.euphoria.revision);
  assert.equal(valid({...f.toolResult,euphoria:{...f.toolResult.euphoria,revision:0}}),false);
 });
+
+test('pinned component updates may omit an existing type but replace rather than merge properties',async()=>{
+ const s=normalizeRenderInput(packet());
+ const update={expectedRevision:s.revision,a2uiGraph:[{version:'v0.9',updateComponents:{surfaceId:'trip',components:[{id:'title',text:'Revised heading'}]}}]};
+ const n=normalizeRenderInput(update,s),title=n.nodes[0].composition.components.find(c=>c.id==='title');
+ assert.deepEqual(title,{id:'title',component:'Text',text:'Revised heading'});
+ assert.deepEqual(s.nodes[0].composition.components,doc().components);
+ const {default:Ajv}=await import('ajv/dist/2020.js');const {renderInputSchema}=await import('../a2ui-form.mjs');const check=new Ajv({strict:false}).compile(renderInputSchema);assert.equal(check(update),true,JSON.stringify(check.errors));
+ for(const components of [[{id:'brandNew',text:'Unknown type'}],[{id:'title',variant:'h1'}],[{id:'title',text:'x',script:'bad'}]])assert.throws(()=>normalizeRenderInput({expectedRevision:0,a2uiGraph:[{version:'v0.9',updateComponents:{surfaceId:'trip',components}}]},s));
+});

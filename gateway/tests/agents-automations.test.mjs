@@ -101,8 +101,9 @@ test('reject unsafe target, weak cron, malformed updates and bad pagination befo
 test('new-session input is validated without accepting arbitrary agent tools',async()=>{
  const {client,sent}=fixture();
  await client.createAutomation({name:'Independent',runAt:Math.floor(Date.now()/1000)+3600,
-   target:{type:'new_session',agent_id:'agent_1',input:[{role:'user',content:'Prepare brief'}]}},'new-session');
+   target:{type:'new_session',agent_id:'agent_1',environment:{type:'openai_hosted',container_size:'small',network:{access:'disabled'}},input:[{role:'user',content:'Prepare brief'}]}},'new-session');
  assert.equal(sent[0].body.target.type,'new_session');
+ assert.deepEqual(sent[0].body.target.input,[{role:'user',content:[{type:'input_text',text:'Prepare brief'}]}]);
  await assert.rejects(client.createAutomation({name:'Bad',runAt:Math.floor(Date.now()/1000)+3600,
    target:{type:'new_session',agent_id:'agent_1',input:[{role:'system',content:'bypass'}]}},'bad-session'));
  assert.equal(sent.length,1);

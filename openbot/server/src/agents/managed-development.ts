@@ -262,6 +262,30 @@ export async function createManagedDevelopment(input:{database:Database;provider
  // deduplicated replies happen here; a lost submission is never re-executed.
  async function tick(){
   await router.sweep('delivery.inbound');
+  // The phone may be terminated. Inspect ORIGINAL accepted source receipts
+  // for newly required person questions in the server worker, not just when
+  // a SwiftUI screen happens to GET /visual. Read-only provider inspection
+  // never sends a second turn or spends model inference.
+  const accepted=await database.select({
+    id:deliveryInbox.id,owner:deliveryInbox.ownerUserId,
+    channelId:deliveryInbox.channelId,agentId:deliveryInbox.agentId,
+  }).from(deliveryInbox)
+   .where(eq(deliveryInbox.state,'accepted'))
+   .orderBy(desc(deliveryInbox.createdAt)).limit(25);
+  for(const inbox of accepted){
+   const [openQuestion]=await database.select({id:workItems.key}).from(workItems).where(and(
+    eq(workItems.kind,'person.question'),isNull(workItems.finishedAt),
+    sql`${workItems.payload}->>'runId' = ${inbox.id}`)).limit(1);
+   if(openQuestion)continue;
+   try{
+    if(await scopeFor(inbox.owner,inbox.channelId,inbox.agentId))
+      await pendingVisual(inbox.owner,inbox.channelId,inbox.agentId);
+   }catch{
+    // Exact provider action cannot yet be read or is invalid. Do not guess
+    // a human question or fabricate a provider tool result.
+    console.error('Managed accepted turn awaits valid provider question projection');
+   }
+  }
   for(const item of await queue.claim({kind:'managed.native-response',owner:'managed-native-response',leaseMs:60000,limit:10,maxAttempts:100})){
    // A reclaimed claim may have sent a result before a crash. Never resend it.
    try{

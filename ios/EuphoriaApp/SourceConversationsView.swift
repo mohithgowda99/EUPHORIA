@@ -1,4 +1,5 @@
 import SwiftUI
+import QuickLook
 import UniformTypeIdentifiers
 import SwiftData
 
@@ -162,6 +163,7 @@ struct SourceConversationDetailView: View {
     @State private var hostedArtifacts: [SourceHostedArtifact] = []
     @State private var subagents: [SourceHostedSubagent] = []
     @State private var exportedArtifact: (id: String, url: URL)?
+    @State private var previewURL: URL?
     @State private var downloadingArtifactID: String?
     @State private var selectingInputFile = false
     @State private var preparingInputFile = false
@@ -321,8 +323,15 @@ struct SourceConversationDetailView: View {
                                              ByteCountFormatter.string(fromByteCount: Int64(artifact.sizeBytes), countStyle: .file))
                                             .font(.caption2).foregroundStyle(.secondary)
                                         if exportedArtifact?.id == artifact.id, let file = exportedArtifact?.url {
-                                            ShareLink(item: file) {
-                                                Label("Save or share", systemImage: "square.and.arrow.up")
+                                            HStack(spacing: 16) {
+                                                if ["pdf","png","jpg","jpeg","txt","csv"].contains(file.pathExtension.lowercased()) {
+                                                    Button { previewURL = file } label: {
+                                                        Label("Preview", systemImage: "eye")
+                                                    }
+                                                }
+                                                ShareLink(item: file) {
+                                                    Label("Save or share", systemImage: "square.and.arrow.up")
+                                                }
                                             }
                                         } else {
                                             Button {
@@ -404,6 +413,7 @@ struct SourceConversationDetailView: View {
         } message: {
             Text("A stop request is not instant. EUPHORIA keeps the original task and any completed results; it will not retry an uncertain cancellation.")
         }
+        .quickLookPreview($previewURL)
         .fileImporter(isPresented: $selectingInputFile, allowedContentTypes: [.item]) { selection in
             switch selection {
             case .success(let file):
@@ -423,7 +433,7 @@ struct SourceConversationDetailView: View {
         .onChange(of: selectedBotID) { _, _ in
             hostedActivity = nil
             cancelNotice = nil
-            hostedActivity = nil
+            previewURL = nil
             hostedArtifacts = []
             subagents = []
             if let previous = exportedArtifact?.url { try? FileManager.default.removeItem(at: previous) }

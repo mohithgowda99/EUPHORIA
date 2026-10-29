@@ -1,0 +1,69 @@
+{
+  "version": "v0.9",
+  "surfaceId": "decision_controls",
+  "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json",
+  "revision": 0,
+  "components": [
+    {
+      "id": "root",
+      "component": "Column",
+      "children": [
+        "confidence",
+        "date",
+        "submit"
+      ]
+    },
+    {
+      "id": "confidence",
+      "component": "Slider",
+      "label": "Confidence",
+      "value": {
+        "path": "/decision/confidence"
+      },
+      "min": 0,
+      "max": 100
+    },
+    {
+      "id": "date",
+      "component": "DateTimeInput",
+      "label": "Review on",
+      "value": {
+        "path": "/decision/date"
+      },
+      "enableDate": true,
+      "enableTime": true,
+      "min": "2026-10-01T00:00:00Z",
+      "max": "2026-12-31T23:59:59Z"
+    },
+    {
+      "id": "submit",
+      "component": "Button",
+      "child": "submitLabel",
+      "action": {
+        "event": {
+          "name": "save_decision",
+          "context": {
+            "confidence": {
+              "path": "/decision/confidence"
+            },
+            "date": {
+              "path": "/decision/date"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "submitLabel",
+      "component": "Text",
+      "text": "Save decision"
+    }
+  ],
+  "dataModel": {
+    "decision": {
+      "confidence": 50,
+      "date": "2026-10-29T12:00:00Z"
+    }
+  },
+  "localEdits": {}
+}

@@ -10,18 +10,19 @@ Authority: BBC6BAE9/a2ui-swift `16476ba2cb3fcb4c4bcb141dfa4c2804adbdedb0`, linke
 | Row, Column | Static children; exact align/justify enums | Templates not admitted |
 | Card | Exact child reference | Common properties not admitted |
 | List | Static children; vertical/horizontal direction and alignment | Templates and array-index paths not admitted |
-| Tabs | Bounded named children, literal/path titles | Native selected-tab restoration not yet verified |
-| Modal | Exact trigger/content references | A trigger must actually activate (use Button); event buttons still dispatch through source authorization. No local-only action shortcut added. Native restoration not yet verified |
-| Divider | Horizontal/vertical axis | Native visual acceptance pending |
+| Tabs | Bounded named children, literal/path titles | Native switching verified; selected-tab restoration not yet implemented |
+| Modal | Exact trigger/content references | A trigger must actually activate (use Button); event buttons still dispatch through source authorization. No local-only action shortcut added. Native opening verified; modal presentation restoration not yet implemented |
+| Divider | Horizontal/vertical axis | Rendered in native layout fixture; broader visual quality acceptance pending |
 | Icon | Bounded literal/path named symbols | Custom SVG objects not admitted; unknown upstream icon mapping can fall back |
 | Button | Event action; primary/borderless variants; source-validated scalar context | Function-call actions/checks not admitted |
 | TextField | Literal/path label/value | Other variants, regexp/checks not admitted |
 | CheckBox | Literal/path label/boolean | Checks not admitted |
 | ChoicePicker | Bound string-list, bounded options, single/multiple selection | Display style/filter/checks not admitted |
-| Slider, DateTimeInput | Not yet admitted | Native bindings, numerical/date constraints and correction/restart evidence needed |
+| Slider | Literal/path finite numeric value; optional min/default0, required max, canonical draft/event binding | Checks not admitted; finite strictly increasing range required |
+| DateTimeInput | Literal/path ISO8601 UTC second-resolution value/min/max; native date/time flags; canonical draft/event binding | Deliberately bounded to `YYYY-MM-DDTHH:mm:ssZ`, one picker flag required; broader upstream date formats/checks not admitted |
 | Image, Video, AudioPlayer | Not yet admitted | Source-authorized URL/media policy and loading/failure behavior needed |
 
-13 of 18 standard component kinds are admitted at this checkpoint. A component kind being admitted does not mean every standard property is supported. The existing gallery's tables/charts/metrics remain a separate existing native contract, not invented Basic Catalog components.
+15 of 18 standard component kinds are admitted at this checkpoint. A component kind being admitted does not mean every standard property is supported. The existing gallery's tables/charts/metrics remain a separate existing native contract, not invented Basic Catalog components.
 
 ## Functions
 
@@ -39,6 +40,8 @@ All function expressions remain refused by application admission at this checkpo
 
 ## Executed evidence for layout increment
 
-Gateway 200/200; Swift core 80/80; pinned upstream comparison package 7/7, including shared synthetic layout tree. Contract RED observed before implementation in JavaScript and Swift. These are deterministic/offline tests, not Simulator usability or live-provider acceptance. New layout fixtures are identical in gateway and Swift core; no paid request was made.
+Gateway 204/204; Swift core 82/82; pinned upstream comparison package 8/8, including shared synthetic layout tree. Contract RED observed before implementation in JavaScript and Swift. These are deterministic/offline tests, not Simulator usability or live-provider acceptance. New layout fixtures are identical in gateway and Swift core; no paid request was made.
 
-Section 3 remains incomplete: controls/media/functions/progressive lifecycle and actual Simulator journeys are outstanding. Sections 4–5 have not started; Section 2's current partial checkpoint has not been integrated.
+Section 3 remains incomplete: media/functions/progressive lifecycle and broader source-backed Simulator journeys are outstanding. Sections 4–5 have not started; Section 2's current partial checkpoint has not been integrated.
+
+Current shipping Debug/Release builds pass; 41/41 XCTest cases pass, including the missing-choice/layout/control resource registration regression. Actual isolated Simulator: numeric/date UI renders, system time picker opens, save produces one pending canonical action, and termination/relaunch/re-entry restores that one action. Research tabs switch to Evidence; Inspect evidence opens a native sheet and retains the canonical event. Screenshots are under the Section 3 handoff evidence directory. Slider adjustment and date-value editing were not automated in Simulator; canonical edit tests cover those separately. These development fixtures do not constitute a source-connected/live-provider journey.

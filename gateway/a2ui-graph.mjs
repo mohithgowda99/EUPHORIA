@@ -20,8 +20,12 @@ function replace(model,path,value,hasValue=true){
  if(hasValue)v[p.at(-1)]=structuredClone(value);else delete v[p.at(-1)];return model;
 }
 function scalar(v){return text(v)||typeof v==='boolean'||typeof v==='number'&&Number.isFinite(v)||Array.isArray(v)&&v.length<=20&&v.every(text);}
-const editable=c=>['TextField','CheckBox','ChoicePicker'].includes(c.component);
+const editable=c=>['TextField','CheckBox','ChoicePicker','Slider','DateTimeInput'].includes(c.component);
 const resolve=(raw,model)=>binding(raw)?lookup(model,raw.path):raw;
+function instant(value){
+ if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value))bad();
+ const time=Date.parse(value);if(!Number.isFinite(time)||new Date(time).toISOString().replace('.000Z','Z')!==value)bad();return time;
+}
 function checkChoice(c,v){
  if(!Array.isArray(v)||v.length>20||!v.every(text)||new Set(v).size!==v.length||c.variant==='mutuallyExclusive'&&v.length>1)bad();
  if(v.some(x=>!c.options.some(o=>o.value===x)))bad();
@@ -34,7 +38,7 @@ export function validateGraph(d){
  const budget={n:4096};bounded(d.dataModel,0,budget);
  const nodes=new Map();for(const c of d.components){if(!object(c)||!safe(c.id)||nodes.has(c.id))bad();nodes.set(c.id,c);const {id,component,...props}=c;bounded(props,0,budget);}
  const seen=new Set();
- function typed(raw,type,optional=false){if(raw===undefined&&optional)return;const v=resolve(raw,d.dataModel);if(type==='string'?!text(v):type==='bool'?typeof v!=='boolean':!Array.isArray(v)||v.length>20||!v.every(text))bad();}
+ function typed(raw,type,optional=false){if(raw===undefined&&optional)return;const v=resolve(raw,d.dataModel);if(type==='string'?!text(v):type==='bool'?typeof v!=='boolean':type==='number'?typeof v!=='number'||!Number.isFinite(v):!Array.isArray(v)||v.length>20||!v.every(text))bad();}
  function visit(id,depth=0){
   const c=nodes.get(id);if(depth>24||!c||seen.has(id))bad();seen.add(id);
   const base=['id','component'];
@@ -52,6 +56,17 @@ export function validateGraph(d){
    case 'Card':shape(c,[...base,'child']);visit(c.child,depth+1);break;
    case 'Text':shape(c,[...base,'text'],['variant']);typed(c.text,'string');if(c.variant!==undefined&&!['h1','h2','h3','h4','h5','caption','body'].includes(c.variant))bad();break;
    case 'TextField':shape(c,[...base,'label'],['value']);typed(c.label,'string');typed(c.value,'string',true);break;
+   case 'Slider':{
+    shape(c,[...base,'value','max'],['label','min']);typed(c.label,'string',true);typed(c.value,'number');
+    const min=c.min??0,max=c.max,value=resolve(c.value,d.dataModel);
+    if(typeof min!=='number'||!Number.isFinite(min)||typeof max!=='number'||!Number.isFinite(max)||min>=max||value<min||value>max)bad();break;
+   }
+   case 'DateTimeInput':{
+    shape(c,[...base,'value'],['label','enableDate','enableTime','min','max']);typed(c.label,'string',true);typed(c.value,'string');
+    if(c.enableDate!==undefined&&typeof c.enableDate!=='boolean'||c.enableTime!==undefined&&typeof c.enableTime!=='boolean'||!(c.enableDate||c.enableTime))bad();
+    const value=instant(resolve(c.value,d.dataModel));const min=c.min===undefined?-Infinity:instant(resolve(c.min,d.dataModel)),max=c.max===undefined?Infinity:instant(resolve(c.max,d.dataModel));
+    if(min>max||value<min||value>max)bad();break;
+   }
    case 'CheckBox':shape(c,[...base,'label','value']);typed(c.label,'string');typed(c.value,'bool');break;
    case 'ChoicePicker':{
     shape(c,[...base,'options','value'],['label','variant']);typed(c.label,'string',true);typed(c.value,'list');

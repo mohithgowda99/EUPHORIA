@@ -113,7 +113,7 @@ public struct A2UIDocument: Codable, Equatable, Sendable {
             guard depth <= 24, let n = byID[id], !stack.contains(id) else { throw A2UIError.invalidTree }
             if visited.contains(id) { throw A2UIError.invalidTree }
             guard Self.safeKey(id) else { throw A2UIError.invalidTree }
-            let allowed: Set<String> = ["Column", "Row", "Card", "Text", "Button", "TextField", "CheckBox", "ChoicePicker", "List", "Tabs", "Modal", "Divider", "Icon"]
+            let allowed: Set<String> = ["Column", "Row", "Card", "Text", "Button", "TextField", "CheckBox", "ChoicePicker", "Slider", "DateTimeInput", "List", "Tabs", "Modal", "Divider", "Icon"]
             guard allowed.contains(n.component) else { throw A2UIError.unsupportedComponent(n.component) }
             let keys: Set<String>
             switch n.component {
@@ -127,6 +127,8 @@ public struct A2UIDocument: Codable, Equatable, Sendable {
             case "Button": keys = ["child","action","variant"]
             case "Text": keys = ["text","variant"]
             case "TextField": keys = ["label","value"]
+            case "Slider": keys = ["label","value","min","max"]
+            case "DateTimeInput": keys = ["label","value","enableDate","enableTime","min","max"]
             case "CheckBox": keys = ["label","value"]
             case "ChoicePicker": keys = ["label","options","value","variant"]
             default: throw A2UIError.invalidTree
@@ -171,6 +173,21 @@ public struct A2UIDocument: Codable, Equatable, Sendable {
                 if n.component == "Button" { try validateAction(n.properties["action"]) }
             case "Text": try require(.string, n.properties["text"])
             case "TextField": try require(.string, n.properties["label"]); if let value = n.properties["value"] { try require(.string,value) }
+            case "Slider":
+                if let label=n.properties["label"] {try require(.string,label)}
+                try require(.number,n.properties["value"])
+                guard let raw=n.properties["value"],case .number(let value)=try resolve(raw),
+                      case .number(let min)=n.properties["min"] ?? .number(0),
+                      case .number(let max)?=n.properties["max"],min.isFinite,max.isFinite,min<max,value>=min,value<=max else {throw A2UIError.invalidData}
+            case "DateTimeInput":
+                if let label=n.properties["label"] {try require(.string,label)}
+                for key in ["enableDate","enableTime"] {if let flag=n.properties[key],flag.boolean==nil {throw A2UIError.invalidData}}
+                guard n.properties["enableDate"]?.boolean==true || n.properties["enableTime"]?.boolean==true,
+                      let raw=n.properties["value"],let value=try Self.instant(resolve(raw)) else {throw A2UIError.invalidData}
+                var min=Date.distantPast,max=Date.distantFuture
+                if let raw=n.properties["min"] {guard let date=try Self.instant(resolve(raw)) else {throw A2UIError.invalidData};min=date}
+                if let raw=n.properties["max"] {guard let date=try Self.instant(resolve(raw)) else {throw A2UIError.invalidData};max=date}
+                guard min<=max,value>=min,value<=max else {throw A2UIError.invalidData}
             case "CheckBox": try require(.string,n.properties["label"]); try require(.bool,n.properties["value"])
             case "ChoicePicker":
                 if let label = n.properties["label"] { try require(.string,label) }
@@ -191,7 +208,7 @@ public struct A2UIDocument: Codable, Equatable, Sendable {
         try visit("root",depth:0)
         guard visited.count == components.count else { throw A2UIError.invalidTree }
         // Every bound path used by this slice must resolve to the expected type.
-        let editablePaths=Set(components.filter{["TextField","CheckBox","ChoicePicker"].contains($0.component)}.compactMap{$0.properties["value"]?.object?["path"]?.text})
+        let editablePaths=Set(components.filter{["TextField","CheckBox","ChoicePicker","Slider","DateTimeInput"].contains($0.component)}.compactMap{$0.properties["value"]?.object?["path"]?.text})
         for (path,value) in localEdits {
             try Self.checkPath(path)
             guard editablePaths.contains(path), let original = try? Self.lookup(path, in:dataModel), Self.sameShape(original,value) else { throw A2UIError.invalidData }
@@ -201,12 +218,19 @@ public struct A2UIDocument: Codable, Equatable, Sendable {
         for node in components { try Self.validateValue(.object(node.properties),depth:0,budget:&budget) }
         for value in localEdits.values { try Self.validateValue(value,depth:0,budget:&budget) }
     }
-    private enum Expected { case string, bool, list }
+    private static func instant(_ raw:A2UIValue) -> Date? {
+        guard let value=raw.text,value.range(of:"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",options:.regularExpression) != nil else {return nil}
+        let formatter=ISO8601DateFormatter()
+        guard let date=formatter.date(from:value),formatter.string(from:date)==value else {return nil}
+        return date
+    }
+    private enum Expected { case string, bool, list, number }
     private func require(_ type:Expected,_ raw:A2UIValue?) throws {
         guard let raw else { throw A2UIError.invalidTree }
         let value=try resolve(raw)
         let valid: Bool
         switch(type,value) { case (.string,.string),(.bool,.bool): valid=true
+        case (.number,.number(let n)): valid=n.isFinite
         case (.list,.array(let a)): valid=a.count<=20 && a.allSatisfy({ $0.text != nil })
         default: valid=false }
         guard valid else { throw A2UIError.invalidData }
@@ -237,7 +261,7 @@ public struct A2UIDocument: Codable, Equatable, Sendable {
     /// Local model edit: no agent response or remote effect is claimed. Caller persists via existing snapshot.
     public mutating func edit(componentID:String, value:A2UIValue) throws -> String {
         guard let node=components.first(where:{$0.id==componentID}),
-              ["TextField","CheckBox","ChoicePicker"].contains(node.component),
+              ["TextField","CheckBox","ChoicePicker","Slider","DateTimeInput"].contains(node.component),
               let raw=node.properties["value"],case .object(let bind)=raw,
               Set(bind.keys)==Set(["path"]),let path=bind["path"]?.text else { throw A2UIError.invalidAction }
         try Self.checkPath(path)

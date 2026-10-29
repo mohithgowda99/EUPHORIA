@@ -756,6 +756,186 @@
                               ]
                             }
                           }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "component",
+                            "value",
+                            "max"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "component": {
+                              "const": "Slider"
+                            },
+                            "label": {
+                              "oneOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 2000
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "path"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^/"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "value": {
+                              "oneOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "path"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^/"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "min": {
+                              "type": "number"
+                            },
+                            "max": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "component",
+                            "value"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "component": {
+                              "const": "DateTimeInput"
+                            },
+                            "label": {
+                              "oneOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 2000
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "path"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^/"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "value": {
+                              "oneOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 2000
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "path"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^/"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "min": {
+                              "oneOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 2000
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "path"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^/"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "max": {
+                              "oneOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 2000
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "path"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^/"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "enableDate": {
+                              "type": "boolean"
+                            },
+                            "enableTime": {
+                              "type": "boolean"
+                            }
+                          }
                         }
                       ]
                     }

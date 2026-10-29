@@ -27,6 +27,15 @@ final class SourceFixtureComparisonTests: XCTestCase {
         return engine
     }
 
+    func testNumericDateControlsRestoreThroughPinnedEngine() throws {
+        var document=try fixture("a2ui-numeric-date-v09.json")
+        _=try document.edit(componentID:"confidence",value:.number(75))
+        _=try document.edit(componentID:"date",value:.string("2026-11-02T08:00:00Z"))
+        let engine=try processor(document)
+        XCTAssertEqual(engine.model.getSurface(document.surfaceId)?.dataModel.get("/decision/confidence")?.numberValue,75)
+        XCTAssertEqual(engine.model.getSurface(document.surfaceId)?.dataModel.get("/decision/date")?.stringValue,"2026-11-02T08:00:00Z")
+    }
+
     func testLayoutCatalogBuildsThroughPinnedNativeEngine() throws {
         let document=try fixture("a2ui-layout-v09.json")
         let engine=try processor(document)

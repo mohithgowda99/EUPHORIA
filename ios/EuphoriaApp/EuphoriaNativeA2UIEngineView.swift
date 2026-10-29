@@ -2,11 +2,10 @@ import SwiftUI
 import A2UISwiftCore
 import A2UISwiftUI
 
-/// Pinned community A2UI Swift renderer, only for source-validated display
-/// compositions. EUPHORIA's original server/SwiftData remain authoritative.
-/// A live interactive surface still uses VisualNodesView's persisted action
-/// adapter until native engine event values can be verified against the source
-/// continuation contract. Never send a raw engine action as an approval.
+/// Pinned community A2UI Swift renderer for source-validated compositions.
+/// Edits persist through VisualNodesView's canonical state adapter; button IDs
+/// resolve against that state before submission. Original source authorization
+/// remains authoritative. Never send a raw engine action as an approval.
 @MainActor
 struct EuphoriaNativeA2UIEngineView: View {
     let document: A2UIDocument
@@ -45,7 +44,7 @@ struct EuphoriaNativeA2UIEngineView: View {
                 if let onEdit {
                     let context = model.makeDataContext()
                     for component in document.components {
-                        guard ["TextField", "CheckBox", "ChoicePicker"].contains(component.component),
+                        guard ["TextField", "CheckBox", "ChoicePicker", "Slider", "DateTimeInput"].contains(component.component),
                               let path = component.properties["value"]?.object?["path"]?.text else { continue }
                         let componentID = component.id
                         let subscription = context.subscribeDynamicValue(.dataBinding(path: path)) { value in

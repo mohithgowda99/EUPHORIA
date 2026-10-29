@@ -28,6 +28,9 @@
         0000000000000000000000D1 /* TaskCreationSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000D0 /* TaskCreationSnapshot.swift */; };
         0000000000000000000000C1 /* NativeTaskAcceptanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C0 /* NativeTaskAcceptanceView.swift */; };
         0000000000000000000000B4 = {isa = PBXBuildFile; fileRef = 0000000000000000000000A4; };
+        0000000000000000000000B4 = {isa = PBXBuildFile; fileRef = 0000000000000000000000A4; };
+        0000000000000000000000B5 = {isa = PBXBuildFile; fileRef = 0000000000000000000000C5; };
+        0000000000000000000000B6 = {isa = PBXBuildFile; fileRef = 0000000000000000000000C6; };
         0000000000000000000000B3 = {isa = PBXBuildFile; fileRef = 0000000000000000000000A3; };
         0000000000000000000000B2 = {isa = PBXBuildFile; fileRef = 0000000000000000000000A2; };
         0000000000000000000000B1 = {isa = PBXBuildFile; fileRef = 0000000000000000000000A1; };
@@ -89,6 +92,8 @@
         0000000000000000000000E2 /* SourceBotsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceBotsView.swift; sourceTree = "<group>"; };
         0000000000000000000000D0 /* TaskCreationSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskCreationSnapshot.swift; sourceTree = "<group>"; };
         0000000000000000000000C0 /* NativeTaskAcceptanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeTaskAcceptanceView.swift; sourceTree = "<group>"; };
+        0000000000000000000000C5 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/Fixtures/a2ui-layout-v09.json"; sourceTree = "<group>"; };
+        0000000000000000000000C6 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/Fixtures/a2ui-numeric-date-v09.json"; sourceTree = "<group>"; };
         0000000000000000000000A4 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/Fixtures/a2ui-choice-deployment-v09.json"; sourceTree = "<group>"; };
         0000000000000000000000A3 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/Fixtures/a2ui-nested-trip-v09.json"; sourceTree = "<group>"; };
         0000000000000000000000A2 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../VisualRuntimeCore/Sources/VisualRuntimeCore/A2UICompositionView.swift"; sourceTree = "<group>"; };
@@ -172,6 +177,8 @@
                 000000000000000000000042 /* GatewaySessionModel.swift */,
                 000000000000000000000043 /* GatewaySessionView.swift */,
                 000000000000000000000084,
+                0000000000000000000000C5,
+                0000000000000000000000C6,
                 0000000000000000000000A4,
                 0000000000000000000000A3,
                 0000000000000000000000A2,
@@ -275,7 +282,7 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-        00000000000000000000000A /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (0000000000000000000000B3,000000000000000000000090 /* gallery-v2.json in Resources */,000000000000000000000091 /* a2ui-trip-native.json in Resources */,000000000000000000000092 /* a2ui-controls-native.json in Resources */); runOnlyForDeploymentPostprocessing = 0; };
+        00000000000000000000000A /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (0000000000000000000000B4,0000000000000000000000B5,0000000000000000000000B6,0000000000000000000000B3,000000000000000000000090 /* gallery-v2.json in Resources */,000000000000000000000091 /* a2ui-trip-native.json in Resources */,000000000000000000000092 /* a2ui-controls-native.json in Resources */); runOnlyForDeploymentPostprocessing = 0; };
         00000000000000000000000D /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 

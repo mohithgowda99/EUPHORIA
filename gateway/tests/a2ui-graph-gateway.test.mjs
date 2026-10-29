@@ -138,3 +138,19 @@ test('display-only graph is acknowledged once, reopens, and accepts revisioned p
  assert.equal(next.surface.nodes[0].composition.dataModel.finding,'Verified second finding');
  assert.equal(next.displayAcknowledged,false);
 });
+
+// Same persisted HTTP/action boundary for contrasting generated compositions.
+for(const [fixture,values] of [
+ ['a2ui-layout-v09',{'$button':'open'}],
+ ['a2ui-numeric-date-v09',{'$button':'submit','context:confidence':75,'context:date':'2026-11-02T08:00:00Z'}]
+])test(`native ${fixture} uses owner revision and durable source-event submission`,async t=>{
+ const d=JSON.parse(readFileSync(new URL(`./fixtures/${fixture}.json`,import.meta.url)));
+ const initial={a2uiGraph:[{version:'v0.9',createSurface:{surfaceId:d.surfaceId,catalogId:d.catalogId}},{version:'v0.9',updateComponents:{surfaceId:d.surfaceId,components:d.components}},{version:'v0.9',updateDataModel:{surfaceId:d.surfaceId,value:d.dataModel}}]};
+ const {p,request,reopen}=await setup(t,initial),s=(await request('/v1/sessions/session')).body;
+ const path=`/v1/surfaces/${s.surface.surfaceID}/actions`,a={id:'source-event',surfaceID:s.surface.surfaceID,expectedRevision:s.surface.revision,nodeID:'composition',kind:'submitForm',values};
+ assert.equal((await request(path,{method:'POST',body:a,user:'bob'})).status,404);
+ assert.equal((await request(path,{method:'POST',body:{...a,kind:'displayed',values:{}}})).status,422);
+ assert.equal((await request(path,{method:'POST',body:a})).status,202);
+ assert.equal(p.writes.length,1);assert.equal(p.writes[0].result.output.userAction.surfaceId,d.surfaceId);
+ await reopen();assert.equal((await request(path,{method:'POST',body:a})).status,202);assert.equal(p.writes.length,1);
+});

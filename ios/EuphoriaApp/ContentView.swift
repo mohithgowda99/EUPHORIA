@@ -44,6 +44,8 @@ struct DevelopmentToolsView: View {
             Form {
                 #if DEBUG
                 Section("Visual contract proof") {
+                    NavigationLink("A2UI research layout study") { VisualFixtureView(kind:.layout) }
+                    NavigationLink("A2UI numeric and date study") { VisualFixtureView(kind:.numericDate) }
                     NavigationLink("Nested A2UI composition study") { VisualFixtureView(kind:.composition) }
                     NavigationLink("A2UI deployment choice study") { VisualFixtureView(kind:.compositionChoice) }
                     NavigationLink("Open gateway session") { GatewaySessionView() }

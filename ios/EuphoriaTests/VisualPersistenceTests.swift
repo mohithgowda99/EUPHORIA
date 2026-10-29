@@ -4,6 +4,14 @@ import SwiftData
 
 @MainActor
 final class VisualPersistenceTests: XCTestCase {
+    func testShippingBundleContainsAdmittedCompositionFixtures() throws {
+        for name in ["a2ui-nested-trip-v09","a2ui-choice-deployment-v09","a2ui-layout-v09","a2ui-numeric-date-v09"] {
+            let url=try XCTUnwrap(Bundle.main.url(forResource:name,withExtension:"json"),"Missing native fixture: \(name)")
+            let document=try JSONDecoder().decode(A2UIDocument.self,from:Data(contentsOf:url))
+            try document.validate()
+        }
+    }
+
     func testA2UICompositionUsesExistingDiskSnapshotForSharedDraftAndPendingEvent() throws {
         let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true)

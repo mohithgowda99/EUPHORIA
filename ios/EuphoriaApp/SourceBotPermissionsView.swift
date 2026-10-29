@@ -68,7 +68,7 @@ struct SourceBotPermissionsView: View {
                     get: { hosted?.capabilities.delegation ?? false },
                     set: { value in Task { await updateHosted(delegation: value) } }
                 ))
-                .disabled(busy || hosted == nil || hosted?.locked == true)
+                .disabled(busy || hosted == nil || hosted?.locked == true || hosted?.capabilities.browser == true)
                 if hosted?.capabilities.delegation == true {
                     Picker("Max concurrent subagents", selection: Binding(
                         get: { hosted?.capabilities.maxConcurrentSubagents ?? 1 },

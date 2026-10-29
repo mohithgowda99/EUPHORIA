@@ -36,7 +36,11 @@ export type { RoutineStore } from "./store";
 export function createRoutineRoutes(
   routineStore: RoutineStore,
   requireUser: MiddlewareHandler<{ Variables: AppVariables }>,
-  options: { runner?: RoutineRunner; auditStore?: AuditStore; managed?: ManagedRoutineBridge } = {},
+  options: {
+    runner?: RoutineRunner;
+    auditStore?: AuditStore;
+    managed?: ManagedRoutineBridge;
+  } = {},
 ) {
   const routes = new Hono<{ Variables: AppVariables }>();
 
@@ -51,17 +55,31 @@ export function createRoutineRoutes(
     routes.post("/:id/run", requireUser, async (context) => {
       const id = context.req.param("id");
       try {
-        const owned = (await routineStore.listFor(context.var.actor.id)).find(r=>r.id===id);
-        if(!owned)throw new RoutineNotFoundError();
-        if(owned.executionBackend && owned.executionBackend!=="source"){
-          if(owned.executionBackend!=="managed"||!options.managed)
-            throw new RoutineRefusedError("This routine is not available for manual execution.");
-          const requestId=(await context.req.json().catch(()=>null) as {requestId?:unknown}|null)?.requestId;
-          if(typeof requestId!=="string")return context.json({error:"requestId required"},400);
-          const result=await options.managed.manual(context.var.actor.id,id,requestId);
-          return context.json(result,202);
+        const owned = (await routineStore.listFor(context.var.actor.id)).find(
+          (r) => r.id === id,
+        );
+        if (!owned) throw new RoutineNotFoundError();
+        if (owned.executionBackend && owned.executionBackend !== "source") {
+          if (owned.executionBackend !== "managed" || !options.managed)
+            throw new RoutineRefusedError(
+              "This routine is not available for manual execution.",
+            );
+          const requestId = (
+            (await context.req.json().catch(() => null)) as {
+              requestId?: unknown;
+            } | null
+          )?.requestId;
+          if (typeof requestId !== "string")
+            return context.json({ error: "requestId required" }, 400);
+          const result = await options.managed.manual(
+            context.var.actor.id,
+            id,
+            requestId,
+          );
+          return context.json(result, 202);
         }
-        if(!runner)throw new RoutineRefusedError("Original routine runner unavailable");
+        if (!runner)
+          throw new RoutineRefusedError("Original routine runner unavailable");
         const { runId } = await routineStore.startManualRun(
           context.var.actor.id,
           id,
@@ -82,56 +100,97 @@ export function createRoutineRoutes(
     });
   }
 
-
   // Original owner-scoped routine identity is immutable. OpenAI-only controls
   // are opt-in and never inherit permission from generated UI or provider IDs.
   if (options.managed) {
-    const managed=options.managed;
-    const nonce=async(c:Context)=>{
-      const body=await c.req.json().catch(()=>null) as Record<string,unknown>|null;
-      if(!body||typeof body.requestId!=="string"||
-         !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(body.requestId))
-        throw new RoutineRefusedError("A stable requestId is required for a managed change.");
+    const managed = options.managed;
+    const nonce = async (c: Context) => {
+      const body = (await c.req.json().catch(() => null)) as Record<
+        string,
+        unknown
+      > | null;
+      if (
+        !body ||
+        typeof body.requestId !== "string" ||
+        !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(body.requestId)
+      )
+        throw new RoutineRefusedError(
+          "A stable requestId is required for a managed change.",
+        );
       return body;
     };
-    routes.post("/:id/managed/migrate",requireUser,async c=>{
-      try{
-        const body=await nonce(c);
-        return c.json(await managed.migrate(c.var.actor.id,c.req.param("id"),
-          body.requestId as string),202);
-      }catch(error){return mapStoreError(c,error);}
+    routes.post("/:id/managed/migrate", requireUser, async (c) => {
+      try {
+        const body = await nonce(c);
+        return c.json(
+          await managed.migrate(
+            c.var.actor.id,
+            c.req.param("id"),
+            body.requestId as string,
+          ),
+          202,
+        );
+      } catch (error) {
+        return mapStoreError(c, error);
+      }
     });
-    for(const operation of ["pause","resume","delete"] as const){
-      routes.post("/:id/managed/"+operation,requireUser,async c=>{
-        try{
-          const body=await nonce(c);
-          return c.json(await managed.change(c.var.actor.id,c.req.param("id"),
-            operation,body.requestId as string),202);
-        }catch(error){return mapStoreError(c,error);}
+    for (const operation of ["pause", "resume", "delete"] as const) {
+      routes.post("/:id/managed/" + operation, requireUser, async (c) => {
+        try {
+          const body = await nonce(c);
+          return c.json(
+            await managed.change(
+              c.var.actor.id,
+              c.req.param("id"),
+              operation,
+              body.requestId as string,
+            ),
+            202,
+          );
+        } catch (error) {
+          return mapStoreError(c, error);
+        }
       });
     }
-    routes.post("/:id/managed/edit",requireUser,async c=>{
-      try{
-        const body=await nonce(c);
-        const patch=body.patch;
-        if(!patch||typeof patch!=="object"||Array.isArray(patch))
-          return c.json({error:"Invalid managed routine edit"},400);
-        return c.json(await managed.edit(c.var.actor.id,c.req.param("id"),
-          patch as {instruction?:string;cron?:string;timezone?:string},
-          body.requestId as string),202);
-      }catch(error){return mapStoreError(c,error);}
+    routes.post("/:id/managed/edit", requireUser, async (c) => {
+      try {
+        const body = await nonce(c);
+        const patch = body.patch;
+        if (!patch || typeof patch !== "object" || Array.isArray(patch))
+          return c.json({ error: "Invalid managed routine edit" }, 400);
+        return c.json(
+          await managed.edit(
+            c.var.actor.id,
+            c.req.param("id"),
+            patch as { instruction?: string; cron?: string; timezone?: string },
+            body.requestId as string,
+          ),
+          202,
+        );
+      } catch (error) {
+        return mapStoreError(c, error);
+      }
     });
-    routes.get("/:id/managed/state",requireUser,async c=>{
-      try{return c.json(await managed.state(c.var.actor.id,c.req.param("id")));}
-      catch(error){return mapStoreError(c,error);}
+    routes.get("/:id/managed/state", requireUser, async (c) => {
+      try {
+        return c.json(await managed.state(c.var.actor.id, c.req.param("id")));
+      } catch (error) {
+        return mapStoreError(c, error);
+      }
     });
-    routes.post("/:id/managed/repair",requireUser,async c=>{
-      try{return c.json(await managed.repair(c.var.actor.id,c.req.param("id")));}
-      catch(error){return mapStoreError(c,error);}
+    routes.post("/:id/managed/repair", requireUser, async (c) => {
+      try {
+        return c.json(await managed.repair(c.var.actor.id, c.req.param("id")));
+      } catch (error) {
+        return mapStoreError(c, error);
+      }
     });
-    routes.post("/:id/managed/reconcile",requireUser,async c=>{
-      try{return c.json(await managed.sync(c.var.actor.id,c.req.param("id")));}
-      catch(error){return mapStoreError(c,error);}
+    routes.post("/:id/managed/reconcile", requireUser, async (c) => {
+      try {
+        return c.json(await managed.sync(c.var.actor.id, c.req.param("id")));
+      } catch (error) {
+        return mapStoreError(c, error);
+      }
     });
   }
 

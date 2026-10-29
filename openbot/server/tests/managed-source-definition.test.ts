@@ -16,11 +16,13 @@ const profile = {
   deletedAt: null,
 } as AgentProfile;
 
-function context(overrides: {
-  profile?: AgentProfile | null;
-  registered?: RegisteredAgent[];
-  roleContent?: unknown;
-} = {}) {
+function context(
+  overrides: {
+    profile?: AgentProfile | null;
+    registered?: RegisteredAgent[];
+    roleContent?: unknown;
+  } = {},
+) {
   let profileReads = 0;
   let rosterReads = 0;
   const profiles = {
@@ -38,14 +40,23 @@ function context(overrides: {
     registered: async (readActor: typeof actor): Promise<RegisteredAgent[]> => {
       rosterReads++;
       expect(readActor).toEqual(actor);
-      return overrides.registered ?? [{
-        id: "bot-a", name: "Research Bot", type: "built_in",
-        systemPrompt: "Never invent evidence.",
-      }];
+      return (
+        overrides.registered ?? [
+          {
+            id: "bot-a",
+            name: "Research Bot",
+            type: "built_in",
+            systemPrompt: "Never invent evidence.",
+          },
+        ]
+      );
     },
     model: "test-model",
     roleMessage: ({ id, name }: AgentStandingProfile) => ({
-      content: overrides.roleContent === undefined ? `Role ${id}: ${name}` : overrides.roleContent,
+      content:
+        overrides.roleContent === undefined
+          ? `Role ${id}: ${name}`
+          : overrides.roleContent,
     }),
     reads: () => ({ profileReads, rosterReads }),
   };
@@ -69,18 +80,32 @@ test("original profile and registered built-in Bot define managed agent, with no
 test("removed or unowned Bots never request registrations or execution", async () => {
   for (const value of [null, { ...profile, deletedAt: new Date() }]) {
     const input = context({ profile: value });
-    await expect(resolveManagedSourceBot(input)).rejects.toBeInstanceOf(ManagedSourceBotRefusal);
+    await expect(resolveManagedSourceBot(input)).rejects.toBeInstanceOf(
+      ManagedSourceBotRefusal,
+    );
     expect(input.reads()).toEqual({ profileReads: 1, rosterReads: 0 });
   }
 });
 
 test("remote endpoints and tombstones are NOT replaced with a managed agent", async () => {
   for (const entry of [
-    { id: "bot-a", name: "Research Bot", type: "remote_ag_ui", endpoint: "https://other.test" },
-    { id: "bot-a", name: "Research Bot", type: "unavailable", reason: "deleted" },
+    {
+      id: "bot-a",
+      name: "Research Bot",
+      type: "remote_ag_ui",
+      endpoint: "https://other.test",
+    },
+    {
+      id: "bot-a",
+      name: "Research Bot",
+      type: "unavailable",
+      reason: "deleted",
+    },
   ] as RegisteredAgent[]) {
     const input = context({ registered: [entry] });
-    await expect(resolveManagedSourceBot(input)).rejects.toBeInstanceOf(ManagedSourceBotRefusal);
+    await expect(resolveManagedSourceBot(input)).rejects.toBeInstanceOf(
+      ManagedSourceBotRefusal,
+    );
   }
 });
 
@@ -88,9 +113,15 @@ test("an inconsistent profile/registration, blank role or system prompt is refus
   for (const input of [
     context({ profile: { ...profile, id: "bot-b" } }),
     context({ registered: [] }),
-    context({ registered: [{ id: "bot-a", name: "Bot", type: "built_in", systemPrompt: " " }] }),
+    context({
+      registered: [
+        { id: "bot-a", name: "Bot", type: "built_in", systemPrompt: " " },
+      ],
+    }),
     context({ roleContent: null }),
   ]) {
-    await expect(resolveManagedSourceBot(input)).rejects.toBeInstanceOf(ManagedSourceBotRefusal);
+    await expect(resolveManagedSourceBot(input)).rejects.toBeInstanceOf(
+      ManagedSourceBotRefusal,
+    );
   }
 });

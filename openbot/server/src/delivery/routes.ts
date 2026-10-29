@@ -207,15 +207,21 @@ export function createDeliveryRoutes(deps: {
     const input = z
       .strictObject({
         id: z.string().uuid(),
-        token: z.string().refine(token => deps.nativeAPNs
-          ? /^[a-fA-F0-9]{64}$/.test(token)
-          : /^(Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/.test(token)),
+        token: z
+          .string()
+          .refine((token) =>
+            deps.nativeAPNs
+              ? /^[a-fA-F0-9]{64}$/.test(token)
+              : /^(Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$/.test(token),
+          ),
         projectId: z.string().uuid(),
         platform: z.enum(["ios", "android"]),
       })
       .parse(await c.req.json());
     if (deps.nativeAPNs && input.platform !== "ios")
-      throw new DeliveryRefusedError("This delivery service only accepts native iOS devices.");
+      throw new DeliveryRefusedError(
+        "This delivery service only accepts native iOS devices.",
+      );
     if (input.projectId !== deps.pushProjectId)
       throw new DeliveryRefusedError(
         "This device belongs to another push project.",

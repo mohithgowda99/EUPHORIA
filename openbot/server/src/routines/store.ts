@@ -496,7 +496,9 @@ export function createRoutineStore(database: Database): RoutineStore {
   ): Promise<Routine> {
     const existing = await loadOwned(ownerUserId, id);
     if (existing.executionBackend !== "source")
-      throw new RoutineRefusedError("Managed routine changes require provider synchronization; use the managed routine controls.");
+      throw new RoutineRefusedError(
+        "Managed routine changes require provider synchronization; use the managed routine controls.",
+      );
 
     const values: Partial<typeof routines.$inferInsert> = {
       updatedAt: new Date(),
@@ -679,7 +681,13 @@ export function createRoutineStore(database: Database): RoutineStore {
       // Hard, unlike a channel: nothing reads a routine that was deleted, and its runs cascade.
       const deleted = await database
         .delete(routines)
-        .where(and(eq(routines.id, id), eq(routines.ownerUserId, ownerUserId), eq(routines.executionBackend, "source")))
+        .where(
+          and(
+            eq(routines.id, id),
+            eq(routines.ownerUserId, ownerUserId),
+            eq(routines.executionBackend, "source"),
+          ),
+        )
         .returning({ id: routines.id });
       if (deleted.length === 0) throw new RoutineNotFoundError();
     },
@@ -687,7 +695,9 @@ export function createRoutineStore(database: Database): RoutineStore {
     async startManualRun(ownerUserId, id) {
       const routine = await loadOwned(ownerUserId, id);
       if (routine.executionBackend !== "source")
-        throw new RoutineRefusedError("Managed routines use the provider invocation workflow.");
+        throw new RoutineRefusedError(
+          "Managed routines use the provider invocation workflow.",
+        );
       if (!routine.enabled)
         throw new RoutineRefusedError(
           "This routine is paused, and paused routines never run. Switch it on first.",
@@ -699,12 +709,20 @@ export function createRoutineStore(database: Database): RoutineStore {
         );
         // Same lock as provider migration. Recheck AFTER the lock so a manual
         // original-source firing cannot slip past a concurrent cloud cutover.
-        const [current] = await transaction.select({
-          backend:routines.executionBackend,enabled:routines.enabled
-        }).from(routines).where(and(eq(routines.id,id),
-          eq(routines.ownerUserId,ownerUserId))).limit(1);
-        if(current?.backend!=="source"||!current.enabled)
-          throw new RoutineRefusedError("Routine execution backend changed; refresh before running.");
+        const [current] = await transaction
+          .select({
+            backend: routines.executionBackend,
+            enabled: routines.enabled,
+          })
+          .from(routines)
+          .where(
+            and(eq(routines.id, id), eq(routines.ownerUserId, ownerUserId)),
+          )
+          .limit(1);
+        if (current?.backend !== "source" || !current.enabled)
+          throw new RoutineRefusedError(
+            "Routine execution backend changed; refresh before running.",
+          );
         const [open] = await transaction
           .select({ id: routineRuns.id })
           .from(routineRuns)
@@ -831,7 +849,13 @@ export function createRoutineStore(database: Database): RoutineStore {
       const moved = await database
         .update(routines)
         .set({ nextRunAt: next, lastRunAt: from, updatedAt: sql`now()` })
-        .where(and(eq(routines.id, id), eq(routines.executionBackend, "source"), eq(routines.nextRunAt, from)))
+        .where(
+          and(
+            eq(routines.id, id),
+            eq(routines.executionBackend, "source"),
+            eq(routines.nextRunAt, from),
+          ),
+        )
         .returning({ id: routines.id });
       return moved.length > 0;
     },
@@ -868,18 +892,29 @@ export function createRoutineStore(database: Database): RoutineStore {
         .innerJoin(routines, eq(routines.id, routineRuns.routineId))
         .where(eq(routineRuns.id, runId))
         .limit(1);
-      return row ? {...row, enabled:row.enabled && row.executionBackend === "source"} : null;
+      return row
+        ? { ...row, enabled: row.enabled && row.executionBackend === "source" }
+        : null;
     },
 
     async routineForFiring(id) {
       // A single select, not owner-scoped — the sweep's read, like `dueRoutines`. A routine id here
       // comes from a work item's own payload, not from a person, so there is no owner to check.
       const [row] = await database
-        .select({ id: routines.id, enabled: routines.enabled, executionBackend: routines.executionBackend })
+        .select({
+          id: routines.id,
+          enabled: routines.enabled,
+          executionBackend: routines.executionBackend,
+        })
         .from(routines)
         .where(eq(routines.id, id))
         .limit(1);
-      return row ? {id:row.id, enabled:row.enabled && row.executionBackend==="source"} : null;
+      return row
+        ? {
+            id: row.id,
+            enabled: row.enabled && row.executionBackend === "source",
+          }
+        : null;
     },
 
     async finishRun(runId, status, error, waiting) {
@@ -945,9 +980,13 @@ export function createRoutineStore(database: Database): RoutineStore {
         .where(
           and(
             isNull(routineRuns.status),
-            inArray(routineRuns.routineId,
-              database.select({id:routines.id}).from(routines)
-                .where(eq(routines.executionBackend,"source"))),
+            inArray(
+              routineRuns.routineId,
+              database
+                .select({ id: routines.id })
+                .from(routines)
+                .where(eq(routines.executionBackend, "source")),
+            ),
             lte(
               routineRuns.startedAt,
               sql`now() - (${olderThanMs} * interval '1 millisecond')`,
@@ -962,7 +1001,9 @@ export function createRoutineStore(database: Database): RoutineStore {
       const disabled = await database
         .update(routines)
         .set({ enabled: false, updatedAt: sql`now()` })
-        .where(and(eq(routines.id, id), eq(routines.executionBackend,"source")))
+        .where(
+          and(eq(routines.id, id), eq(routines.executionBackend, "source")),
+        )
         .returning({ id: routines.id });
       // Deleted between the sweep's read and this write: gone is gone, and a run row inserted here
       // would only violate the foreign key of a routine nobody can see any more.

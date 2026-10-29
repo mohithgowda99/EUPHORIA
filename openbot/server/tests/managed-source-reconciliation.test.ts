@@ -58,50 +58,95 @@ function fixture() {
         providerReads++;
         return { ...response, required_actions: requirements };
       },
-      retrieveTurn: async () => ({...root, session_id: "session"}),
-      listTurnItems: async (_sessionID: string, _turnID: string,
-        options: {after?: string}) => options.after
-          ? {data: nextPage ?? [], has_more:false}
-          : {data:items, has_more:nextPage !== null,
-              ...(nextPage !== null ? {last_id:"cursor_first"} : {})},
+      retrieveTurn: async () => ({ ...root, session_id: "session" }),
+      listTurnItems: async (
+        _sessionID: string,
+        _turnID: string,
+        options: { after?: string },
+      ) =>
+        options.after
+          ? { data: nextPage ?? [], has_more: false }
+          : {
+              data: items,
+              has_more: nextPage !== null,
+              ...(nextPage !== null ? { last_id: "cursor_first" } : {}),
+            },
     },
-    turnBelongsToInbox: async (request: { inboxId: string; sessionID: string; rootTurnID: string }) =>
-      correctTurn && request.inboxId === "inbox" &&
-      request.sessionID === "session" && request.rootTurnID === "root",
+    turnBelongsToInbox: async (request: {
+      inboxId: string;
+      sessionID: string;
+      rootTurnID: string;
+    }) =>
+      correctTurn &&
+      request.inboxId === "inbox" &&
+      request.sessionID === "session" &&
+      request.rootTurnID === "root",
     authorise: async () => {
       checks++;
       return access;
     },
     botAvailable: async () => bot,
-    recordSourceReply: async (actual: unknown, text: string, source: string) => {
-      replies.push({scope: actual, text, source});
+    recordSourceReply: async (
+      actual: unknown,
+      text: string,
+      source: string,
+    ) => {
+      replies.push({ scope: actual, text, source });
     },
   };
   return {
-    deps, replies, settled,
-    get status() { return status; },
-    get providerReads() { return providerReads; },
-    get checks() { return checks; },
-    setAccess(value: boolean) { access = value; },
-    setBot(value: boolean) { bot = value; },
-    setLink(value: string) { linked = value; },
-    setTurnBinding(value: boolean) { correctTurn = value; },
-    setRoot(value: typeof turn) { root = value; },
-    setItems(value: typeof items) { items = value; },
-    setNextPage(value: typeof items | null) { nextPage = value; },
-    setActions(value: unknown[]) { requirements = value; },
-    setStatus(value: string) { status = value; },
+    deps,
+    replies,
+    settled,
+    get status() {
+      return status;
+    },
+    get providerReads() {
+      return providerReads;
+    },
+    get checks() {
+      return checks;
+    },
+    setAccess(value: boolean) {
+      access = value;
+    },
+    setBot(value: boolean) {
+      bot = value;
+    },
+    setLink(value: string) {
+      linked = value;
+    },
+    setTurnBinding(value: boolean) {
+      correctTurn = value;
+    },
+    setRoot(value: typeof turn) {
+      root = value;
+    },
+    setItems(value: typeof items) {
+      items = value;
+    },
+    setNextPage(value: typeof items | null) {
+      nextPage = value;
+    },
+    setActions(value: unknown[]) {
+      requirements = value;
+    },
+    setStatus(value: string) {
+      status = value;
+    },
   };
 }
 
 test("verified original owner and exact root turn publish one original source reply", async () => {
   const f = fixture();
   expect(await reconcileManagedSourceInbox(f.deps)).toBe("completed");
-  expect(f.replies).toEqual([{
-    text: "Verified output",
-    source: "delivery-reply:inbox",
-    scope,
-  }]);
+  expect(f.replies).toEqual([
+    {
+      text: "Verified output",
+      source: "delivery-reply:inbox",
+      scope,
+    },
+  ]);
   expect(f.settled).toEqual(["sent"]);
   expect(await reconcileManagedSourceInbox(f.deps)).toBe("already_settled");
   expect(f.replies).toHaveLength(1);
@@ -109,14 +154,18 @@ test("verified original owner and exact root turn publish one original source re
 test("provider session ID cannot be swapped across owner-scoped source channels", async () => {
   const f = fixture();
   f.setLink("foreign_session");
-  await expect(reconcileManagedSourceInbox(f.deps)).rejects.toThrow(/not owned/);
+  await expect(reconcileManagedSourceInbox(f.deps)).rejects.toThrow(
+    /not owned/,
+  );
   expect(f.providerReads).toBe(0);
   expect(f.replies).toHaveLength(0);
 });
 test("different completed root turn in the same provider session cannot impersonate the original inbox", async () => {
   const f = fixture();
   f.setTurnBinding(false);
-  await expect(reconcileManagedSourceInbox(f.deps)).rejects.toThrow(/not bound/);
+  await expect(reconcileManagedSourceInbox(f.deps)).rejects.toThrow(
+    /not bound/,
+  );
   expect(f.providerReads).toBe(0);
   expect(f.replies).toHaveLength(0);
 });
@@ -133,19 +182,23 @@ test("revoked channel or deleted Bot refuses completion before any provider read
 });
 test("unverified, foreign and incomplete turns never settle or post an answer", async () => {
   const f = fixture();
-  f.setRoot({id:"other", status:"completed"});
-  await expect(reconcileManagedSourceInbox(f.deps)).rejects.toThrow("identity mismatch");
-  f.setRoot({id:"root",status:"in_progress"});
+  f.setRoot({ id: "other", status: "completed" });
+  await expect(reconcileManagedSourceInbox(f.deps)).rejects.toThrow(
+    "identity mismatch",
+  );
+  f.setRoot({ id: "root", status: "in_progress" });
   expect(await reconcileManagedSourceInbox(f.deps)).toBe("pending");
-  f.setRoot({id:"root",status:"completed"});
-  f.setItems([{...item, turn_id:"other"}]);
+  f.setRoot({ id: "root", status: "completed" });
+  f.setItems([{ ...item, turn_id: "other" }]);
   expect(await reconcileManagedSourceInbox(f.deps)).toBe("pending");
   expect(f.replies).toHaveLength(0);
   expect(f.settled).toHaveLength(0);
 });
 test("original approval gate remains intact when provider reports required_actions", async () => {
   const f = fixture();
-  f.setActions([{type:"function_call",name:"purchase",call_id:"pending"}]);
+  f.setActions([
+    { type: "function_call", name: "purchase", call_id: "pending" },
+  ]);
   expect(await reconcileManagedSourceInbox(f.deps)).toBe("waiting_for_human");
   expect(f.replies).toHaveLength(0);
   expect(f.settled).toHaveLength(0);
@@ -158,7 +211,7 @@ test("completed root without assistant output does not fabricate source completi
 });
 test("verified root failure settles original delivery as failed without a fake reply", async () => {
   const f = fixture();
-  f.setRoot({id:"root",status:"failed"});
+  f.setRoot({ id: "root", status: "failed" });
   expect(await reconcileManagedSourceInbox(f.deps)).toBe("failed");
   expect(f.settled).toEqual(["failed"]);
   expect(f.replies).toHaveLength(0);
@@ -166,7 +219,9 @@ test("verified root failure settles original delivery as failed without a fake r
 test("inbox not yet accepted is refused before provider read", async () => {
   const f = fixture();
   f.setStatus("queued");
-  await expect(reconcileManagedSourceInbox(f.deps)).rejects.toThrow(/not accepted/);
+  await expect(reconcileManagedSourceInbox(f.deps)).rejects.toThrow(
+    /not accepted/,
+  );
   expect(f.providerReads).toBe(0);
 });
 

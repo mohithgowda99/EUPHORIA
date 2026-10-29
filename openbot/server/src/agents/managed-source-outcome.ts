@@ -36,25 +36,37 @@ export function managedTurnOutcome(input: {
   if (Array.isArray(input.requiredActions) && input.requiredActions.length > 0)
     return { kind: "waiting_for_human" };
   const turns = Array.isArray(input.turns?.data) ? input.turns.data : [];
-  const turn = turns.find((entry) =>
-    entry.id === input.turnID &&
-    (entry.subagent_id === null || entry.subagent_id === undefined));
+  const turn = turns.find(
+    (entry) =>
+      entry.id === input.turnID &&
+      (entry.subagent_id === null || entry.subagent_id === undefined),
+  );
   if (!turn) return { kind: "pending" };
   if (turn.status === "failed" || turn.status === "cancelled")
     return { kind: "failed", reason: turn.status };
   if (turn.status !== "completed") return { kind: "pending" };
-  const matching = (Array.isArray(input.items?.data) ? input.items.data : [])
-    .filter((item) => item.turn_id === input.turnID && item.type === "message" &&
-      item.role === "assistant" && item.status === "completed");
-  const text = matching.flatMap((item) => {
-    const contents = Array.isArray(item.content) ? item.content : [];
-    return contents.flatMap((part: unknown) => {
-      if (!part || typeof part !== "object") return [];
-      const p = part as { type?: unknown; text?: unknown };
-      return p.type === "output_text" && typeof p.text === "string"
-        ? [p.text] : [];
-    });
-  }).join("\n").slice(0, 8_000);
+  const matching = (
+    Array.isArray(input.items?.data) ? input.items.data : []
+  ).filter(
+    (item) =>
+      item.turn_id === input.turnID &&
+      item.type === "message" &&
+      item.role === "assistant" &&
+      item.status === "completed",
+  );
+  const text = matching
+    .flatMap((item) => {
+      const contents = Array.isArray(item.content) ? item.content : [];
+      return contents.flatMap((part: unknown) => {
+        if (!part || typeof part !== "object") return [];
+        const p = part as { type?: unknown; text?: unknown };
+        return p.type === "output_text" && typeof p.text === "string"
+          ? [p.text]
+          : [];
+      });
+    })
+    .join("\n")
+    .slice(0, 8_000);
   // An empty response is possible; do not invent a successful tool or answer.
   return { kind: "completed", replyText: text };
 }

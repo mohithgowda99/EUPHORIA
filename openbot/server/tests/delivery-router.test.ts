@@ -202,20 +202,32 @@ test("managed asynchronous 202 remains accepted, not a completed source reply", 
     providers: {
       slack: {
         send: async () => {
-          throw Error("Provider must not be notified before a verified completed turn");
+          throw Error(
+            "Provider must not be notified before a verified completed turn",
+          );
         },
       },
     },
   });
   await router.sweep("delivery.inbound");
   expect(f.statuses).toContainEqual({ state: "accepted", error: undefined });
-  expect(f.statuses.some((entry) =>
-    typeof entry === "object" && entry !== null && "state" in entry &&
-    entry.state === "sent")).toBe(false);
+  expect(
+    f.statuses.some(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        "state" in entry &&
+        entry.state === "sent",
+    ),
+  ).toBe(false);
   expect(f.offered).toHaveLength(0);
   const reply = await router.converse({
-    transport: "slack", realm: "T", identity: "U",
-    externalId: "new-event", text: "Please research this", signal: new AbortController().signal,
+    transport: "slack",
+    realm: "T",
+    identity: "U",
+    externalId: "new-event",
+    text: "Please research this",
+    signal: new AbortController().signal,
   });
   expect(reply.kind).toBe("waiting");
   expect(f.statuses.at(-1)).toMatchObject({ state: "accepted" });
@@ -224,28 +236,43 @@ test("managed asynchronous 202 remains accepted, not a completed source reply", 
 test("uncertain managed source write stays accepted without fake reply or failure notification", async () => {
   const f = fixture();
   const unknown = Object.assign(new Error("Provider response lost"), {
-    outcomeUnknown: true, failureStage: "submission",
+    outcomeUnknown: true,
+    failureStage: "submission",
   });
   const router = createDeliveryRouter({
-    store: f.store, queue: f.queue, owner: "worker",
+    store: f.store,
+    queue: f.queue,
+    owner: "worker",
     authoriseScope: async () => true,
-    runTurn: async () => { throw unknown; },
+    runTurn: async () => {
+      throw unknown;
+    },
     providers: {
       slack: {
-        send: async () => { throw Error("No notification before verified completion"); },
+        send: async () => {
+          throw Error("No notification before verified completion");
+        },
       },
     },
   });
   await router.sweep("delivery.inbound");
-  expect(f.statuses.at(-1)).toMatchObject({state:"accepted"});
-  expect(f.statuses.some((value)=> (value as {state?:string}).state==="failed")).toBe(false);
+  expect(f.statuses.at(-1)).toMatchObject({ state: "accepted" });
+  expect(
+    f.statuses.some(
+      (value) => (value as { state?: string }).state === "failed",
+    ),
+  ).toBe(false);
   expect(f.offered).toHaveLength(0);
-  const result=await router.converse({
-    transport:"slack",realm:"T",identity:"U",externalId:"uncertain",
-    text:"Do safe work",signal:new AbortController().signal,
+  const result = await router.converse({
+    transport: "slack",
+    realm: "T",
+    identity: "U",
+    externalId: "uncertain",
+    text: "Do safe work",
+    signal: new AbortController().signal,
   });
-  expect(result).toMatchObject({kind:"waiting",replyText:""});
-  expect(f.statuses.at(-1)).toMatchObject({state:"accepted"});
+  expect(result).toMatchObject({ kind: "waiting", replyText: "" });
+  expect(f.statuses.at(-1)).toMatchObject({ state: "accepted" });
 });
 
 test("revoked source ownership and lost lease cannot execute turns or sends", async () => {

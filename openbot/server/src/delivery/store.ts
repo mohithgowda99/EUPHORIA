@@ -367,9 +367,12 @@ export function createDeliveryStore(database: Database) {
       state: "sent" | "failed",
       error: string | null = null,
     ): Promise<boolean> {
-      const rows = await database.update(deliveryInbox)
+      const rows = await database
+        .update(deliveryInbox)
         .set({ state, error })
-        .where(and(eq(deliveryInbox.id, id), eq(deliveryInbox.state, "accepted")))
+        .where(
+          and(eq(deliveryInbox.id, id), eq(deliveryInbox.state, "accepted")),
+        )
         .returning({ id: deliveryInbox.id });
       return rows.length === 1;
     },

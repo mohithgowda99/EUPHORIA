@@ -26,6 +26,8 @@ import {repeatAfterEach} from '../work/loop';
 import {createApprovalQuestions} from '../approvals/questions';
 import {MANAGED_ASK_PERSON_TOOL,parseManagedQuestionCall,parseManagedQuestion,parseManagedCorrelation,pendingManagedQuestion} from './managed-person-questions';
 import {createManagedTaskAdapter} from './managed-task-adapter';
+import {createMemoryStore} from '../memory/store';
+import {createMemoryRoutes} from '../memory/routes';
 import {resolveManagedSourceBot} from './managed-source-definition';
 import {createManagedSessionLinkStore} from './managed-session-links';
 import {createManagedInboxTurnStore} from './managed-inbox-turns';
@@ -120,6 +122,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
    });
   },
  });
+ app.route('/api/memory',createMemoryRoutes(createMemoryStore(database),null,requireUser));
  app.route('/api/openduet/tasks',managedTasks.routes);
  app.route('/api/openduet/tasks',managedTasks.extras);
  app.route('/api/proactive/suggestions',managedTasks.suggestions);

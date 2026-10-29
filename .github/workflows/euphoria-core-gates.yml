@@ -45,17 +45,25 @@ jobs:
       - name: Typecheck server
         working-directory: openbot
         run: bun run --filter server typecheck
-      - name: Migrate disposable Postgres
-        working-directory: openbot
-        run: DATABASE_URL="$TEST_DATABASE_URL" bun server/scripts/migrate.ts
-      - name: Test original source managed adapters
+      # Each integration suite gets a fresh migrated database. The managed
+      # development actor is singular; DB reuse would make one test's Inbox
+      # visible to the next test's deterministic provider fixture.
+      - name: Run isolated source integration suites
         working-directory: openbot
         run: |
           bun test server/tests/managed-memory-context.test.ts server/tests/managed-connected-mcp.test.ts
-          bun test server/tests/managed-person-questions.integration.test.ts
-          bun test server/tests/managed-source-tasks.integration.test.ts
-          bun test server/tests/managed-source-mcp.integration.test.ts
-          bun test server/tests/managed-completed-jsonb.integration.test.ts
+          for suite in questions tasks mcp jsonb; do
+            export TEST_DB_NAME="euphoria_${suite}"
+            bun -e 'import postgres from "postgres"; const db=postgres(process.env.TEST_DATABASE_URL); await db.unsafe("CREATE DATABASE "+process.env.TEST_DB_NAME); await db.end();'
+            export TEST_DATABASE_URL="postgres://euphoria_test:test_only_password@127.0.0.1:5432/${TEST_DB_NAME}"
+            DATABASE_URL="$TEST_DATABASE_URL" bun server/scripts/migrate.ts
+            case "$suite" in
+              questions) bun test server/tests/managed-person-questions.integration.test.ts;;
+              tasks) bun test server/tests/managed-source-tasks.integration.test.ts;;
+              mcp) bun test server/tests/managed-source-mcp.integration.test.ts;;
+              jsonb) bun test server/tests/managed-completed-jsonb.integration.test.ts;;
+            esac
+          done
       - name: Check gateway regressions
         working-directory: gateway
         run: |

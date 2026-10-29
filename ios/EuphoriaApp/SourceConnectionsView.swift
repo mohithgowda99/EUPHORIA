@@ -12,7 +12,7 @@ struct SourceConnectionsView: View {
     var body: some View {
         List {
             Section {
-                Text("Only connections reported by your original OpenDuet plugin service are shown. Account linking, reauthorization and revocation must be enforced by its source broker and user-grant policies.")
+                Text("Only connections reported by your EUPHORIA plugin service are shown. Account linking, reauthorization and revocation must be enforced by its source broker and user-grant policies.")
                     .font(.caption).foregroundStyle(.secondary)
                 if let error {
                     Text(error).foregroundStyle(.red)

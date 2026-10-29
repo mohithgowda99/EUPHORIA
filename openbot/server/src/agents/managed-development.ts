@@ -23,6 +23,8 @@ import {createDeliveryRoutes} from '../delivery/routes';
 import type {DeliveryScope} from '../delivery/types';
 import {createWorkQueue} from '../work/queue';
 import {repeatAfterEach} from '../work/loop';
+import {createApprovalQuestions} from '../approvals/questions';
+import {MANAGED_ASK_PERSON_TOOL,parseManagedQuestionCall,parseManagedQuestion,parseManagedCorrelation,pendingManagedQuestion} from './managed-person-questions';
 import {resolveManagedSourceBot} from './managed-source-definition';
 import {createManagedSessionLinkStore} from './managed-session-links';
 import {createManagedInboxTurnStore} from './managed-inbox-turns';
@@ -58,13 +60,17 @@ export async function createManagedDevelopment(input:{database:Database;provider
   return {ownerUserId:owner,channelId,agentId,threadId:channel.threadId};
  };
  const authorised=async(scope:DeliveryScope)=>(await scopeFor(scope.ownerUserId,scope.channelId,scope.agentId))?.threadId===scope.threadId;
+ const questions=createApprovalQuestions(database,async question=>{
+  const current=await scopeFor(question.actorId,question.channelId??'',question.botId);
+  if(!current||current.threadId!==question.threadId)throw Error('Question owner, Bot or channel access revoked');
+ });
  const router=createDeliveryRouter({store,queue,owner:'managed-development-delivery',providers:{},authoriseScope:authorised,
   runTurn:async scope=>{
    if(!await authorised(scope))throw Error('Source access revoked');
    const resolved=await resolveManagedSourceBot({actor,botId:scope.agentId,profiles,registered,model:input.model,roleMessage:standingRoleMessage});
    await channels.recordActivity(actor,scope.channelId,{text:scope.text,agentId:null,at:new Date()},{id:'delivery-input:'+scope.runId});
    await submitManagedSourceInput({scope:{ownerUserId:scope.ownerUserId,channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId},
-    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema}]},links,turns,provider});
+    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL]},links,turns,provider});
    return {replyText:'',pending:true};
   }});
  const app=new Hono<{Variables:AppVariables}>();
@@ -77,6 +83,27 @@ export async function createManagedDevelopment(input:{database:Database;provider
  app.use('*',bodyLimit({maxSize:128*1024}));
  app.onError((error,c)=>{if('status' in error && [409,422,502].includes(Number(error.status)))return c.json({error:error.message},Number(error.status) as 409|422|502);console.error(JSON.stringify({type:'managed-development-error',name:error.name}));return c.json({error:'Managed source operation unavailable'},503);});
  app.get('/api/auth/get-session',requireUser,c=>c.json({user:{...DEV_ACTOR,name:'Development'}}));
+ // Original OpenDuet questions, accepted through its transactional one-winner
+ // person.response store. The native Approvals tab already uses these paths.
+ app.get('/api/approvals',requireUser,async c=>{
+  const owner=c.var.actor.id;
+  const recoveries=await database.select({id:workItems.key,error:workItems.lastError}).from(workItems)
+    .where(and(eq(workItems.kind,'person.response'),isNull(workItems.finishedAt),
+      eq(workItems.attempts,100),sql`${workItems.payload}->>'ownerUserId' = ${owner}`))
+    .orderBy(desc(workItems.createdAt)).limit(100);
+  return c.json({requests:[],questions:await questions.list(owner),recoveries});
+ });
+ app.post('/api/approvals/questions/:id/respond',requireUser,async c=>{
+  let body:unknown;
+  try{body=await c.req.json();}catch{return c.json({error:'Invalid answer'},400);}
+  if(!body||typeof body!=='object'||Array.isArray(body)||
+    Object.keys(body).some(k=>k!=='response')||
+    typeof (body as {response?:unknown}).response!=='string'||
+    !(body as {response:string}).response.trim()||
+    (body as {response:string}).response.length>6000)return c.json({error:'Invalid answer'},400);
+  try{return c.json(await questions.respond(c.var.actor.id,c.req.param('id'),(body as {response:string}).response),202);}
+  catch{return c.json({error:'Question already answered, missing or unauthorized'},409);}
+ });
  app.route('/api/agents',createAgentRoutes(profiles,requireUser,false,undefined,undefined,undefined,true));
  app.route('/api/channels',createChannelRoutes(channels,requireUser));
  app.route('/api/delivery',createDeliveryRoutes({store,router,requireUser,scopeFor,
@@ -140,9 +167,23 @@ export async function createManagedDevelopment(input:{database:Database;provider
   if(session.id!==link.providerSessionId)throw Error('Provider identity mismatch');
   const calls=(session.required_actions??[]).filter((call:any)=>call.turn_id===current.receipt!.rootTurnId);
   if(!calls.length)return{surface:null};
-  if(calls.length!==1||calls[0].type!=='function_call'||calls[0].name!=='euphoria_render_surface')throw Error('Unsupported managed tool');
+  if(calls.length!==1||calls[0].type!=='function_call')throw Error('Unsupported managed tool');
   const call=calls[0];const args=typeof call.arguments==='string'?JSON.parse(call.arguments):call.arguments;
   argumentFingerprint(args); // Bound size/depth before rendering.
+  if(call.name==='euphoria_ask_person'){
+   const savedCall=parseManagedQuestionCall(call);
+   if(savedCall.turn_id!==current.receipt.rootTurnId)throw Error('Question root correlation mismatch');
+   const ask=parseManagedQuestion(savedCall.arguments);
+   const payload={actorId:owner,botId,threadId:scope.threadId,runId:current.inbox.id,
+     channelId,mode:'completed_question' as const,...ask,
+     managed:{sessionID:session.id,call:savedCall,scope}};
+   await queue.offer({kind:'person.question',key:savedCall.call_id,payload});
+   const [existing]=await database.select({payload:workItems.payload}).from(workItems)
+    .where(and(eq(workItems.kind,'person.question'),eq(workItems.key,savedCall.call_id))).limit(1);
+   if(!existing||stable(existing.payload)!==stable(payload))throw Error('Question call identity collision');
+   return{surface:null};
+  }
+  if(call.name!=='euphoria_render_surface')throw Error('Unsupported managed tool');
   let surface;
   try{surface={...normalizeRenderInput(args),surfaceID:call.call_id,revision:0};}
   catch{throw Object.assign(Error('The generated interface did not satisfy the native contract'),{status:502,renderCall:call,renderScope:scope,renderSessionID:session.id});}
@@ -230,6 +271,46 @@ export async function createManagedDevelopment(input:{database:Database;provider
     await database.update(workItems).set({attempts:100,lastError:'Provider response outcome uncertain; manual reconciliation required'})
      .where(and(eq(workItems.kind,item.kind),eq(workItems.key,item.key)));
     console.error('Native result outcome uncertain; original receipt retained');
+   }
+  }
+  // A second process may claim this only after the first lease expires.
+  // If the first process crashed after HTTP POST, attempts>1 cannot be
+  // replayed, even with the same provider idempotency key.
+  for(const item of await queue.claim({kind:'person.response',owner:'managed-person-response',
+    leaseMs:60000,limit:10,maxAttempts:100})){
+   try{
+    if(item.attempts!==1)throw Error('Prior person answer dispatch is uncertain');
+    const received=item.payload as {ownerUserId?:string;response?:string};
+    const [question]=await database.select({payload:workItems.payload,finishedAt:workItems.finishedAt})
+     .from(workItems).where(and(eq(workItems.kind,'person.question'),eq(workItems.key,item.key))).limit(1);
+    if(!question?.finishedAt||typeof received.response!=='string'||!received.response.trim())
+      throw Error('Source decision receipt missing');
+    const raw=question.payload as {actorId?:string;botId?:string;channelId?:string;threadId?:string;managed?:unknown};
+    const correlation=parseManagedCorrelation(raw.managed);
+    if(received.ownerUserId!==raw.actorId||raw.actorId!==correlation.scope.ownerUserId||
+      raw.botId!==correlation.scope.agentId||raw.channelId!==correlation.scope.channelId||
+      raw.threadId!==correlation.scope.threadId||!await authorised(correlation.scope))
+      throw Error('Source person answer no longer authorized');
+    const fresh=await provider.retrieveSession(correlation.sessionID);
+    if(fresh.id!==correlation.sessionID)throw Error('Provider session identity mismatch');
+    const pending=pendingManagedQuestion(fresh.required_actions??[],correlation);
+    if(pending!=='pending')throw Error(pending==='closed'?
+      'Provider question closed; human answer saved, authorized new continuation required':
+      'Provider question changed; human answer saved, no tool result submitted');
+    await provider.submitToolResult(correlation.sessionID,{
+      turnID:correlation.call.turn_id,callID:correlation.call.call_id,
+      name:correlation.call.name,output:{answer:received.response}
+    },'person_answer_'+item.key,{expectedArguments:correlation.call.arguments});
+    if(!await queue.finish({kind:item.kind,key:item.key,owner:'managed-person-response'}))
+      throw Error('Person answer lease lost after submission');
+   }catch(error){
+    await database.update(workItems).set({attempts:100,
+      lastError:error instanceof Error&&(
+        error.message.startsWith('Provider question closed')||
+        error.message.startsWith('Provider question changed')||
+        error.message.startsWith('Source person answer no longer authorized'))
+        ?error.message:'Human answer provider dispatch uncertain; manual reconciliation required'
+    }).where(and(eq(workItems.kind,item.kind),eq(workItems.key,item.key)));
    }
   }
   const pending=await database.select({inboxId:deliveryInbox.id,sessionID:managedAgentInboxTurns.providerSessionId,rootTurnID:managedAgentInboxTurns.rootTurnId})

@@ -210,7 +210,7 @@ export async function reconcileManagedSourceInbox(input: {
     const changed = await input.inbox.settleAcceptedInbox(
       input.inboxId,
       "failed",
-      "The managed agent turn " + state.reason + ".",
+      `The managed agent turn ${state.reason}.`,
     );
     return changed ? "failed" : "already_settled";
   }
@@ -222,7 +222,7 @@ export async function reconcileManagedSourceInbox(input: {
   await input.recordSourceReply(
     scope,
     state.replyText,
-    "delivery-reply:" + input.inboxId,
+    `delivery-reply:${input.inboxId}`,
   );
   const changed = await input.inbox.settleAcceptedInbox(input.inboxId, "sent");
   return changed ? "completed" : "already_settled";

@@ -28,6 +28,7 @@ import {MANAGED_ASK_PERSON_TOOL,parseManagedQuestionCall,parseManagedQuestion,pa
 import {createManagedTaskAdapter} from './managed-task-adapter';
 import {createMemoryStore} from '../memory/store';
 import {createMemoryRoutes} from '../memory/routes';
+import {managedMemoryContext} from './managed-memory-context';
 import {resolveManagedSourceBot} from './managed-source-definition';
 import {createManagedSessionLinkStore} from './managed-session-links';
 import {createManagedInboxTurnStore} from './managed-inbox-turns';
@@ -55,6 +56,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
  const store=createDeliveryStore(database),queue=createWorkQueue(database);
  const links=createManagedSessionLinkStore(database),turns=createManagedInboxTurnStore(database,links);
  const registered=createRuntimeAgentLoader(database);
+ const memory=createMemoryStore(database);
  const actor={id:DEV_ACTOR.id,role:DEV_ACTOR.role};
  const scopeFor=async(owner:string,channelId:string,agentId:string)=>{
   if(owner!==actor.id)return null;
@@ -71,9 +73,10 @@ export async function createManagedDevelopment(input:{database:Database;provider
   runTurn:async scope=>{
    if(!await authorised(scope))throw Error('Source access revoked');
    const resolved=await resolveManagedSourceBot({actor,botId:scope.agentId,profiles,registered,model:input.model,roleMessage:standingRoleMessage});
+   const approvedMemory=managedMemoryContext(await memory.list(scope.ownerUserId),scope.agentId);
    await channels.recordActivity(actor,scope.channelId,{text:scope.text,agentId:null,at:new Date()},{id:'delivery-input:'+scope.runId});
    await submitManagedSourceInput({scope:{ownerUserId:scope.ownerUserId,channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId},
-    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL]},links,turns,provider});
+    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL]},links,turns,provider});
    return {replyText:'',pending:true};
   }});
  const app=new Hono<{Variables:AppVariables}>();
@@ -122,7 +125,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
    });
   },
  });
- app.route('/api/memory',createMemoryRoutes(createMemoryStore(database),null,requireUser));
+ app.route('/api/memory',createMemoryRoutes(memory,null,requireUser));
  app.route('/api/openduet/tasks',managedTasks.routes);
  app.route('/api/openduet/tasks',managedTasks.extras);
  app.route('/api/proactive/suggestions',managedTasks.suggestions);

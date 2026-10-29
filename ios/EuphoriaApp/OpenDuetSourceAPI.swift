@@ -377,9 +377,14 @@ struct SourcePersonQuestion: Decodable, Identifiable, Sendable {
     let botId: String
     let channelId: String?
 }
+struct SourceQuestionRecovery: Decodable, Identifiable, Sendable {
+    let id: String
+    let error: String?
+}
 struct SourceApprovalInbox: Decodable, Sendable {
     let requests: [SourceApproval]
     let questions: [SourcePersonQuestion]?
+    let recoveries: [SourceQuestionRecovery]?
 }
 private struct SourceQuestionResponse: Encodable { let response: String }
 private struct SourceApprovalDecisionInput: Encodable { let decision: String }
@@ -1024,7 +1029,7 @@ private struct AnyEncodableSource: Encodable {
 }
 
 struct SourceCompletedVisual: Decodable, Sendable { let afterMessageID: String; let surface: VisualSurface; let selectedLabel: String? }
-struct SourceVisualResponse: Decodable, Sendable { let completedSurfaces: [SourceCompletedVisual]?; let surface: VisualSurface?; let completed: Bool?; let submissionUncertain: Bool?; let deliveryState: String?; let deliveryError: String? }
+struct SourceVisualResponse: Decodable, Sendable { let completedSurfaces: [SourceCompletedVisual]?; let surface: VisualSurface?; let completed: Bool?; let submissionUncertain: Bool?; let deliveryState: String?; let deliveryError: String?; let pendingQuestion: Bool?; let decisionRecoveryRequired: String? }
 extension OpenDuetSourceAPI {
     func sourceVisual(channelID: String, agentID: String) async throws -> SourceVisualResponse {
         let result: SourceVisualResponse = try await request(

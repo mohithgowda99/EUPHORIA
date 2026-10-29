@@ -168,59 +168,105 @@ test.skipIf(!url)(
 
       // The ORIGINAL ProactiveStore accepts owner-authorized settings drafts,
       // but must never activate recurring managed inference without a hard cap.
-      const draftInput={
-        agentId:bot.id,channelId:created.channelId,
-        focus:"Track read-only updates",intervalMinutes:240,enabled:false
+      const draftInput = {
+        agentId: bot.id,
+        channelId: created.channelId,
+        focus: "Track read-only updates",
+        intervalMinutes: 240,
+        enabled: false,
       };
-      const denied=await app2.app.request("/api/proactive/settings",{
-        method:"POST",headers,body:JSON.stringify({...draftInput,enabled:true})
+      const denied = await app2.app.request("/api/proactive/settings", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ...draftInput, enabled: true }),
       });
       expect(denied.status).toBe(409);
-      const original=await app2.app.request("/api/proactive/settings",{headers});
-      const existing=(await original.json()).settings.find(
-        (setting:{agentId:string})=>setting.agentId===bot.id
+      const original = await app2.app.request("/api/proactive/settings", {
+        headers,
+      });
+      const existing = (await original.json()).settings.find(
+        (setting: { agentId: string }) => setting.agentId === bot.id,
       );
-      let draftID:string;
-      if(existing){
+      let draftID: string;
+      if (existing) {
         // Original OpenDuet may have enabled background research by default
         // after first contact. Do not create a duplicate or silently assume
         // that it is managed provider work. Explicitly disable that source row.
-        draftID=existing.id;
-        const paused=await app2.app.request("/api/proactive/settings/"+draftID,{
-          method:"PATCH",headers,
-          body:JSON.stringify({focus:draftInput.focus,enabled:false})
-        });
+        draftID = existing.id;
+        const paused = await app2.app.request(
+          "/api/proactive/settings/" + draftID,
+          {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify({ focus: draftInput.focus, enabled: false }),
+          },
+        );
         expect(paused.status).toBe(200);
         expect((await paused.json()).setting.enabled).toBe(false);
-      }else{
-        const draft=await app2.app.request("/api/proactive/settings",{
-          method:"POST",headers,body:JSON.stringify(draftInput)
+      } else {
+        const draft = await app2.app.request("/api/proactive/settings", {
+          method: "POST",
+          headers,
+          body: JSON.stringify(draftInput),
         });
         expect(draft.status).toBe(201);
-        draftID=(await draft.json()).setting.id;
+        draftID = (await draft.json()).setting.id;
       }
-      expect((await app2.app.request("/api/proactive/settings",{
-        method:"POST",headers,body:JSON.stringify(draftInput)
-      })).status).toBe(409);
-      const listed=await app2.app.request("/api/proactive/settings",{headers});
-      const prefs=await listed.json();
-      expect(prefs.autonomousExecution).toBe("blocked_until_verified_execution_and_budget");
+      expect(
+        (
+          await app2.app.request("/api/proactive/settings", {
+            method: "POST",
+            headers,
+            body: JSON.stringify(draftInput),
+          })
+        ).status,
+      ).toBe(409);
+      const listed = await app2.app.request("/api/proactive/settings", {
+        headers,
+      });
+      const prefs = await listed.json();
+      expect(prefs.autonomousExecution).toBe(
+        "blocked_until_verified_execution_and_budget",
+      );
       expect(prefs.settings).toHaveLength(1);
       expect(prefs.settings[0].enabled).toBe(false);
-      expect((await app2.app.request("/api/proactive/settings/"+draftID,{
-        method:"PATCH",headers,body:JSON.stringify({enabled:true})
-      })).status).toBe(409);
-      const updated=await app2.app.request("/api/proactive/settings/"+draftID,{
-        method:"PATCH",headers,body:JSON.stringify({focus:"Only read-only highlights",enabled:false})
-      });
+      expect(
+        (
+          await app2.app.request("/api/proactive/settings/" + draftID, {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify({ enabled: true }),
+          })
+        ).status,
+      ).toBe(409);
+      const updated = await app2.app.request(
+        "/api/proactive/settings/" + draftID,
+        {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({
+            focus: "Only read-only highlights",
+            enabled: false,
+          }),
+        },
+      );
       expect(updated.status).toBe(200);
       expect((await updated.json()).setting.enabled).toBe(false);
-      expect((await app2.app.request("/api/proactive/settings",{
-        headers:{cookie:"wrong"}
-      })).status).toBe(401);
-      expect((await app2.app.request("/api/proactive/settings/"+draftID,{
-        method:"DELETE",headers
-      })).status).toBe(204);
+      expect(
+        (
+          await app2.app.request("/api/proactive/settings", {
+            headers: { cookie: "wrong" },
+          })
+        ).status,
+      ).toBe(401);
+      expect(
+        (
+          await app2.app.request("/api/proactive/settings/" + draftID, {
+            method: "DELETE",
+            headers,
+          })
+        ).status,
+      ).toBe(204);
 
       expect(
         (

@@ -69,15 +69,16 @@ export function advanceInvocationCursor(
  * regress to queued. Neither state proves agent execution.
  */
 export function mergeDeliveryStatus(
-  prior:"unknown"|"queued"|"completed"|"failed"|"skipped",
-  incoming:AutomationDeliveryEvidence["status"]
-):AutomationDeliveryEvidence["status"]{
-  if(prior==="failed"||prior==="skipped"){
-    if(incoming==="failed"||incoming==="skipped"){
-      if(prior!==incoming)throw Error("Conflicting terminal delivery evidence");
+  prior: "unknown" | "queued" | "completed" | "failed" | "skipped",
+  incoming: AutomationDeliveryEvidence["status"],
+): AutomationDeliveryEvidence["status"] {
+  if (prior === "failed" || prior === "skipped") {
+    if (incoming === "failed" || incoming === "skipped") {
+      if (prior !== incoming)
+        throw Error("Conflicting terminal delivery evidence");
     }
     return prior;
   }
-  if(prior==="completed"&&incoming==="queued")return "completed";
+  if (prior === "completed" && incoming === "queued") return "completed";
   return incoming;
 }

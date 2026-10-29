@@ -47,7 +47,7 @@ export async function resolveManagedSourceBot(input: {
   // channel remains. The original Store.get is the authorization boundary.
   const entries = await input.registered(input.actor);
   const resolved = entries.find((agent) => agent.id === profile.id);
-  if (!resolved || resolved.type !== "built_in") {
+  if (resolved?.type !== "built_in") {
     throw new ManagedSourceBotRefusal(
       "This Bot has no supported managed OpenAI execution configuration",
     );

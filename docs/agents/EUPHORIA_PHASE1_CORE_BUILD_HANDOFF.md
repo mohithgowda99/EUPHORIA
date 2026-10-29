@@ -3,7 +3,7 @@ Date: 2026-10-29
 
 ## Scope / branch
 Dedicated remote branch: `feature/phase1-interactions-tools-a2ui-20261029`
-Last implementation commit before this handoff: `0290ec86e5eb631ebe84982a7f83730fffc7a8c4`.
+Initial handoff base was `0290ec86e5eb631ebe84982a7f83730fffc7a8c4`; follow-up compiler-source repair and bounded Bot memory injection landed afterward. Read the branch's current SHA with `git rev-parse HEAD`.
 The handoff commit itself is necessarily newer; read the exact checked-out SHA using `git rev-parse HEAD`.
 Based on continuation `aed235fd4ae6fb13c7bd4d511700a83f556652f8`, which incorporates `fix/native-completed-choice-lifecycle` (98c71dd) and the JSONB normalization migration.
 Nothing merged to main or reset on the original laptop worktree.
@@ -22,7 +22,7 @@ Production B excluded at user's direction. No external-effect tools or automatio
 ## Functional integration
 A: `openbot/server/src/agents/managed-person-questions.ts` defines strict managed function/question call+scope correlation. `managed-development.ts` registers this tool next to the existing render tool, persists a durable original `person.question` keyed by exact call ID, and handles original `person.response` work items on the original queue. The worker projects pending human questions even when the iPhone is closed; its lookup is scoped by original Inbox ID and exact root turn. It only submits against the matching *current* provider required action. A closed/changed action preserves the answer and exposes explicit recovery; it does not fabricate tool results or automatically send a new paid turn. An uncertain remote acknowledgment never triggers an automatic second submission. This is intentionally conservative, and does not yet provide new-turn fallback.
 
-C: `openbot/server/src/agents/managed-task-adapter.ts` is an adapter, **not** another runner or task state store. It uses original TaskStore, TaskThreads, ChannelStore, DeliveryStore, TaskIntake and ProactiveStore. Source task status checks original `delivery_inbox` (realm `managed-task`), with no shadow status column. Source task report reads original source Inbox and managed completed projections; unknown assistant completion time is left null. Proactive suggestion Start uses an atomic original DB transaction to claim the card and create one original task/channel. Managed source actor and Bot access remain enforced. Native task reply external ID is deduplicated on the original delivery ledger. Original source MemoryStore is mounted for editable provenance/confirm/disable/delete, without Intelligence memory mirroring; unavailable connector ingestion is explicitly unavailable rather than presented as active.
+C: `openbot/server/src/agents/managed-task-adapter.ts` is an adapter, **not** another runner or task state store. It uses original TaskStore, TaskThreads, ChannelStore, DeliveryStore, TaskIntake and ProactiveStore. Source task status checks original `delivery_inbox` (realm `managed-task`), with no shadow status column. Source task report reads original source Inbox and managed completed projections; unknown assistant completion time is left null. Proactive suggestion Start uses an atomic original DB transaction to claim the card and create one original task/channel. Managed source actor and Bot access remain enforced. Native task reply external ID is deduplicated on the original delivery ledger. Original source MemoryStore is mounted for editable provenance/confirm/disable/delete, with bounded approved Bot-scoped memory context, without Intelligence memory mirroring; unavailable connector ingestion is explicitly unavailable rather than presented as active.
 
 D: `ios/Euphoria.xcodeproj` now includes native SwiftUI upstream renderer `A2UISwiftCore` and `A2UISwiftUI` with exact revision pin. `EuphoriaNativeA2UIEngineView.swift` uses `A2UIProjectionBridge` from the existing spike to rebuild validated display surfaces from saved `A2UIDocument`. `VisualNodesView.swift` dispatches source display-only compositions to it, leaving action-bearing forms on their existing persisted and authenticated local submission route. Do **not** claim full A2UI until value binding, edits, identity and actions are reconciled end to end against the original gateway and tested.
 
@@ -30,8 +30,10 @@ D: `ios/Euphoria.xcodeproj` now includes native SwiftUI upstream renderer `A2UIS
 Added:
 - `openbot/server/src/agents/managed-person-questions.ts`
 - `openbot/server/src/agents/managed-task-adapter.ts`
+- `openbot/server/src/agents/managed-memory-context.ts`
 - `openbot/server/tests/managed-person-questions.integration.test.ts`
 - `openbot/server/tests/managed-source-tasks.integration.test.ts`
+- `openbot/server/tests/managed-memory-context.test.ts`
 - `ios/EuphoriaApp/EuphoriaNativeA2UIEngineView.swift`
 
 Modified:
@@ -72,7 +74,8 @@ export TEST_DATABASE_URL='postgres://USER:PASSWORD@127.0.0.1:55432/euphoria_core
 cd openbot
 bun test server/tests/managed-person-questions.integration.test.ts \
          server/tests/managed-source-tasks.integration.test.ts \
-         server/tests/managed-completed-jsonb.integration.test.ts
+         server/tests/managed-completed-jsonb.integration.test.ts \\
+         server/tests/managed-memory-context.test.ts
 bun run --filter server typecheck
 cd ..
 ```
@@ -113,7 +116,7 @@ For iOS Simulator boot/launch, select a real available UDID from `xcrun simctl l
 1. In disposable DB create own Bot (original source route); create a source conversation. Have deterministic fixture return `euphoria_ask_person`; stop app/backend; restart; open Approvals on second client; answer; ensure one `person.response` and one provider submission against exact pending call; conflict gets 409.
 2. Mock provider with no matching required action. Verify original response retained and recovery UI appears, with **zero** remote submission or fake completion. A future new authorized-turn recovery needs official lifecycle proof and additional implementation.
 3. Create Task, restart backend, confirm original task ID, own Bot/Channel, accepted Inbox and status from real receipt. Post the same `messageId` twice; one `delivery_inbox` reply. Up Next saves/states, Start claims at most once. Native report shows only source-backed content.
-4. Create, edit, confirm, disable and delete original MemoryStore entries; prove delete/forget and ownership. Connector-based source sync must report unavailability.
+4. Create, edit, confirm, disable and delete original MemoryStore entries; prove deletion/forgetting and ownership. Run `bun test server/tests/managed-memory-context.test.ts` and inspect that unreviewed, disabled, deleted and other-Bot memories never enter the provider instruction prefix. Connector-based source sync must report unavailability.
 5. Compare simple and nested display A2UI documents against source spike; perform fresh package resolve/build, incremental rebuild, expired/invalid surfaces, SwiftUI identity. Interactive forms must retain existing original `VisualNodesView` path and real saved input values.
 6. Run older accepted Leg day and completed choice read-only relaunch regression. Inspect tap coordinates and history order. No paid API calls for this stage.
 7. Only after a **separate explicit budget approval**: one bounded live provider question; one bounded native tool action, only when all permission gates are actually wired. No speculative comparisons or uncapped inference.

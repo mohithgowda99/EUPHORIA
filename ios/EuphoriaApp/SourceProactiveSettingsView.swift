@@ -32,7 +32,14 @@ struct SourceProactiveSettingsView: View {
                             .font(.headline)
                         LabeledContent("Bot", value: setting.agentId)
                         LabeledContent("Interval preference", value: "\(setting.intervalMinutes) minutes")
-                        LabeledContent("Execution", value: setting.enabled ? "Unexpectedly enabled" : "Disabled")
+                        LabeledContent("Source preference", value: setting.enabled ? "Enabled in original Store" : "Disabled")
+                        if setting.enabled {
+                            Text("This existing source preference is enabled. Managed cloud research is not activated here; you can disable the original preference.")
+                                .font(.caption).foregroundStyle(.orange)
+                            Button("Disable original preference") {
+                                Task { await disable(setting) }
+                            }.disabled(busy)
+                        }
                         Button("Delete research preference", role: .destructive) {
                             Task { await delete(setting.id) }
                         }.disabled(busy)
@@ -80,9 +87,6 @@ struct SourceProactiveSettingsView: View {
             _ = try await source.sourceSession()
             let page = try await source.sourceProactiveSettings()
             let owned = try await source.sourceRoutines()
-            guard page.settings.allSatisfy({ !$0.enabled }) else {
-                throw SourceAPIError.invalidResponse
-            }
             settings = page.settings
             routines = owned.routines.filter { !$0.channel.gone }
             if !routines.contains(where: { $0.id == selectedRoutineID }) {
@@ -107,6 +111,20 @@ struct SourceProactiveSettingsView: View {
             error = nil
         } catch {
             error = "Preference not saved. The Bot or channel may be unauthorized, or a setting already exists."
+        }
+    }
+
+    private func disable(_ setting: SourceProactiveSetting) async {
+        guard !busy, let client else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            _ = try await client.editProactiveDraft(id: setting.id,
+                focus: setting.focus, interval: setting.intervalMinutes)
+            settings = try await client.sourceProactiveSettings().settings
+            error = nil
+        } catch {
+            error = "Could not confirm the original setting was disabled."
         }
     }
 

@@ -257,6 +257,79 @@ export class AgentsClient {
     }]},submissionKey);
   }
 
+  /** Managed provider scheduling transport, NOT an owner/grant decision.
+   * Only existing source-authorized sessions may be targeted by the caller.
+   * Never equate invocation delivery with completed agent execution.
+   */
+  async createAutomation({name,sessionID,instructions,expression,timezone,runAt},submissionKey) {
+    identifier(sessionID);key(submissionKey);
+    if(typeof name!=='string'||!name.trim()||name.length>120||
+       typeof instructions!=='string'||!instructions.trim()||instructions.length>4000)
+      throw Error('Invalid automation name or instructions');
+    const periodic=typeof expression==='string'&&expression.length<=80&&
+      expression.split(/\\s+/).length===5&&
+      /^([0-9]|[1-5][0-9])$/.test(expression.split(' ')[0]);
+    const once=Number.isSafeInteger(runAt)&&runAt>Math.floor(Date.now()/1000)+60&&
+      runAt<Math.floor(Date.now()/1000)+366*86400;
+    if(periodic===once)throw Error('Specify exactly one bounded automation schedule');
+    if(periodic){
+      if(typeof timezone!=='string'||timezone.length>64)throw Error('Invalid automation timezone');
+      try{new Intl.DateTimeFormat('en-US',{timeZone:timezone});}
+      catch{throw Error('Unknown automation timezone');}
+    }
+    const body={type:periodic?'periodic':'once',name,
+      ...(periodic?{expression,timezone}:{run_at:runAt}),
+      target:{type:'existing_session',session_id:sessionID,instructions}};
+    return this.#automationRequest('POST','',body,submissionKey);
+  }
+  async retrieveAutomation(id) {
+    return this.#automationRequest('GET','/'+identifier(id));
+  }
+  async listAutomationInvocations(id) {
+    const result=await this.#automationRequest('GET','/'+identifier(id)+'/invocations');
+    if(!result||!Array.isArray(result.data))throw Error('Invalid automation invocation list');
+    return result;
+  }
+  async pauseAutomation(id,submissionKey) {
+    return this.#automationRequest('POST','/'+identifier(id)+'/pause',undefined,submissionKey);
+  }
+  async resumeAutomation(id,submissionKey) {
+    return this.#automationRequest('POST','/'+identifier(id)+'/resume',undefined,submissionKey);
+  }
+  async deleteAutomation(id) {
+    // DELETE is a consequential remote mutation. An unknown outcome is NOT
+    // automatically retried, and an in-flight invocation may still deliver.
+    return this.#automationRequest('DELETE','/'+identifier(id));
+  }
+  async #automationRequest(method,path,body,submissionKey) {
+    const headers={Authorization:'Bearer '+this.#apiKey,
+      'OpenAI-Beta':'agents=v1','Content-Type':'application/json'};
+    if(method==='POST')headers['Idempotency-Key']=key(submissionKey);
+    let response;
+    try{
+      response=await this.#fetch('https://api.openai.com/v1/agents/automations'+path,{
+        method,headers,redirect:'error',signal:AbortSignal.timeout(30_000),
+        ...(body===undefined?{}:{body:JSON.stringify(body)})
+      });
+    }catch{
+      const error=Error('Automation request outcome unknown; inspect provider state before retry');
+      error.outcomeUnknown=method!=='GET';throw error;
+    }
+    if(!response.ok){
+      await response.body?.cancel().catch(()=>{});
+      const error=Error('Automation API refused request ('+response.status+')');
+      error.status=response.status;
+      error.outcomeUnknown=method!=='GET'&&(response.status>=500||response.status===408);
+      throw error;
+    }
+    if(response.status===204)return null;
+    try{return await response.json();}
+    catch{
+      const error=Error('Automation response invalid; inspect provider state');
+      error.outcomeUnknown=method!=='GET';throw error;
+    }
+  }
+
   async #request(method, path, body, submissionKey,signal) {
     const headers = {'Authorization': 'Bearer ' + this.#apiKey,
       'OpenAI-Beta': 'agents=v1', 'Content-Type': 'application/json'};

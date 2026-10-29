@@ -325,6 +325,26 @@ private struct SourceChecklistChange: Encodable {
     let expectedChecklistRevision: String
 }
 
+/// Original DeliveryStore registration, never a second notification backend.
+struct SourceDeliveryConfiguration: Decodable, Sendable {
+    struct Availability: Decodable, Sendable {
+        let push: Bool
+        let nativeAPNs: Bool?
+    }
+    let pushProjectId: String?
+    let available: Availability
+}
+struct SourcePushRegistration: Encodable, Sendable {
+    let id: String
+    let token: String
+    let projectId: String
+    let platform = "ios"
+}
+struct SourceRegisteredPushDevice: Decodable, Sendable {
+    struct Device: Decodable, Sendable { let id: String?; let enabled: Bool? }
+    let device: Device
+}
+
 struct SourceRoutine: Decodable, Identifiable, Sendable {
     let id: String
     let agentId: String
@@ -785,6 +805,33 @@ struct OpenDuetSourceAPI: Sendable {
         // another origin, including a maliciously configured agent endpoint.
         self.session = session ?? URLSession(configuration: config,
             delegate: SourceRejectRedirects(), delegateQueue: nil)
+    }
+
+    func deliveryConfiguration() async throws -> SourceDeliveryConfiguration {
+        try await get("api/delivery")
+    }
+
+    /// APNs device token belongs to the authenticated ORIGINAL user.
+    /// The backend checks the project, token format and owner isolation.
+    func registerNativePush(token: String, deviceID: UUID) async throws {
+        guard token.range(of: "^[a-fA-F0-9]{64}$", options: .regularExpression) != nil
+        else { throw SourceAPIError.invalidInput }
+        let config = try await deliveryConfiguration()
+        guard config.available.push, config.available.nativeAPNs == true,
+              let projectId = config.pushProjectId, UUID(uuidString: projectId) != nil
+        else { throw SourceAPIError.unavailable }
+        let response: SourceRegisteredPushDevice = try await request(
+            "api/delivery/devices", method: "POST",
+            body: SourcePushRegistration(id: deviceID.uuidString.lowercased(),
+                token: token.lowercased(), projectId: projectId))
+        guard response.device.id == deviceID.uuidString.lowercased(),
+              response.device.enabled == true
+        else { throw SourceAPIError.invalidResponse }
+    }
+
+    func unregisterNativePush(deviceID: UUID) async throws {
+        let _: SourceVoidResponse = try await request(
+            "api/delivery/devices/" + deviceID.uuidString.lowercased(), method: "DELETE")
     }
 
     func capabilities() async throws -> DeploymentCapabilities {

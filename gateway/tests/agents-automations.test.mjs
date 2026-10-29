@@ -47,7 +47,7 @@ test('reject malformed, unbounded or minute-by-minute schedules before a provide
  assert.equal(sent.length,0);
 });
 test('read invocation delivery independently from agent task result',async()=>{
- const {client,sent}=fixture(async({url})=>Response.json(url.endsWith('/invocations')?
+ const {client,sent}=fixture(async({url})=>Response.json(url.includes('/invocations?')?
   {data:[{id:'ainv_1',status:'completed',session_id:'sess_1'}]}:{id:'auto_1'}));
  const listing=await client.listAutomationInvocations('auto_1');
  assert.equal(listing.data[0].status,'completed');

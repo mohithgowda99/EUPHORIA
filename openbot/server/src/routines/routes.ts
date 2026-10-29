@@ -53,7 +53,7 @@ export function createRoutineRoutes(
       try {
         const owned = (await routineStore.listFor(context.var.actor.id)).find(r=>r.id===id);
         if(!owned)throw new RoutineNotFoundError();
-        if(owned.executionBackend!=="source"){
+        if(owned.executionBackend && owned.executionBackend!=="source"){
           if(owned.executionBackend!=="managed"||!options.managed)
             throw new RoutineRefusedError("This routine is not available for manual execution.");
           const requestId=(await context.req.json().catch(()=>null) as {requestId?:unknown}|null)?.requestId;

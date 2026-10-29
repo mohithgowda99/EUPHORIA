@@ -1262,7 +1262,6 @@ struct OpenDuetSourceAPI: Sendable {
     func sourceProactiveSettings() async throws -> SourceProactiveSettingsEnvelope {
         let result: SourceProactiveSettingsEnvelope = try await get("api/proactive/settings")
         guard result.settings.count <= 500,
-              result.settings.allSatisfy({ !$0.enabled }),
               result.autonomousExecution == "blocked_until_verified_execution_and_budget"
         else { throw SourceAPIError.invalidResponse }
         return result

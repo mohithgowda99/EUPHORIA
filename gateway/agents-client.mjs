@@ -348,6 +348,18 @@ export class AgentsClient {
     }]},submissionKey);
   }
 
+  async cancelBrowserAuthentication(sessionID,requestID,submissionKey){
+    identifier(sessionID);identifier(requestID);
+    const session=await this.retrieveSession(sessionID);
+    const present=(session.required_actions??[]).some(a=>
+      a.type==='computer_use_approval_request'&&a.request_id===requestID&&
+      a.request?.type==='browser_authentication');
+    if(!present)throw Error('Browser authentication request no longer pending');
+    return this.#request('POST','/'+sessionID+'/events',{events:[{
+      type:'agent.session.input.computer_use_approval_request_result',
+      request_id:requestID,response:{type:'browser_authentication',action:'cancel'}
+    }]},submissionKey);
+  }
   async cancelTurn(sessionID, submissionKey) {
     return this.#request('POST', '/' + identifier(sessionID) + '/events',
       {events: [{type: 'agent.session.input.cancel'}]}, submissionKey);

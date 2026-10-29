@@ -2,6 +2,7 @@ import { resolveUpdateRoute, type UpdateRoute } from "../agents/lifecycle";
 import type { DrawnComponent } from "@openbot/toolkit/run-turn";
 import type { WorkItem, WorkQueue } from "../work/queue";
 import type { ExpoPushTransport } from "./push";
+import type { ApnsPushTransport } from "./apns";
 import type { DeliveryStore } from "./store";
 import {
   type ChatTransport,
@@ -94,7 +95,7 @@ export function createDeliveryRouter(deps: {
     slack?: TextTransport;
     teams?: TextTransport;
     sms?: TextTransport;
-    push?: ExpoPushTransport;
+    push?: ExpoPushTransport | ApnsPushTransport;
   };
   /** The person's routing by kind; defaults to the lifecycle lane's `resolveUpdateRoute`. */
   routeFor?(input: {
@@ -451,10 +452,10 @@ export function createDeliveryRouter(deps: {
         current.transport !== "push" ||
         current.state !== "accepted" ||
         !current.providerId ||
-        !deps.providers.push
+        !deps.providers.push?.receipt
       )
         return;
-      const receipt = await deps.providers.push.receipt(current.providerId);
+      const receipt = await deps.providers.push!.receipt!(current.providerId);
       if (!(await owns())) return;
       if (receipt.status === "pending") {
         await deps.store.setOutbox(
@@ -557,7 +558,8 @@ export function createDeliveryRouter(deps: {
         null,
         result.id,
       );
-      if (row.transport === "push") await deps.store.offerReceipt(row.id);
+      if (row.transport === "push" && result.status === "accepted" && deps.providers.push?.receipt)
+         await deps.store.offerReceipt(row.id);
       await deps.audit?.({
         ownerUserId: row.ownerUserId,
         channelId: row.channelId,
@@ -595,7 +597,7 @@ export function createDeliveryRouter(deps: {
       );
       if (
         error instanceof DeliveryProviderError &&
-        error.code === "DeviceNotRegistered" &&
+        ["DeviceNotRegistered", "BadDeviceToken", "Unregistered", "DeviceTokenNotForTopic"].includes(error.code) &&
         row.deviceId
       )
         await deps.store.removeDevice(row.ownerUserId, row.deviceId);

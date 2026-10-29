@@ -5,7 +5,7 @@
 import {Hono, type MiddlewareHandler} from 'hono';
 import {bodyLimit} from 'hono/body-limit';
 import {timingSafeEqual,createHash} from 'node:crypto';
-import {and,eq,desc,isNull,isNotNull} from 'drizzle-orm';
+import {and,eq,desc,isNull,isNotNull,sql} from 'drizzle-orm';
 import {createDatabase,type Database} from '../db/client';
 import {loadTenantPackage,synchronizeTenantPackage} from '../tenant-package';
 import {deliveryInbox,managedAgentInboxTurns,managedAgentSessionLinks,workItems} from '../db/schema';
@@ -159,6 +159,15 @@ export async function createManagedDevelopment(input:{database:Database;provider
    .innerJoin(managedAgentInboxTurns,eq(deliveryInbox.id,managedAgentInboxTurns.inboxId))
    .where(and(eq(deliveryInbox.ownerUserId,c.var.actor.id),eq(deliveryInbox.channelId,c.req.param('id')??''),eq(deliveryInbox.agentId,c.req.query('agentId')??''),eq(deliveryInbox.state,'sent')))
    .orderBy(desc(deliveryInbox.createdAt)).limit(100);
+  // A closed provider call can leave a source-accepted decision unresolved.
+  // Read the original durable work receipt rather than presenting endless Thinking.
+  const [unresolved]=await database.select({error:workItems.lastError}).from(workItems)
+   .where(and(eq(workItems.kind,'managed.native-response'),isNull(workItems.finishedAt),
+    eq(workItems.attempts,100),
+    sql`${workItems.payload}->'scope'->>'ownerUserId' = ${c.var.actor.id}`,
+    sql`${workItems.payload}->'scope'->>'channelId' = ${c.req.param('id')??''}`,
+    sql`${workItems.payload}->'scope'->>'agentId' = ${c.req.query('agentId')??''}`))
+   .orderBy(desc(workItems.createdAt)).limit(1);
   const completedSurfaces=[];
   for(const row of saved.reverse())for(const surface of row.output?.surfaces??[]){
    const selectedLabel=row.output?.selectedLabels?.[(surface as {surfaceID?:string}).surfaceID??'']??
@@ -167,7 +176,8 @@ export async function createManagedDevelopment(input:{database:Database;provider
    completedSurfaces.push({afterMessageID:row.inboxID,surface,selectedLabel});
   }
   return c.json({surface:result.surface,completedSurfaces,submissionUncertain:result.submissionUncertain??false,
-   deliveryState:latest?.state??null,deliveryError:latest?.error??null});
+   deliveryState:latest?.state??null,deliveryError:latest?.error??null,
+   decisionRecoveryRequired:latest?.state==='sent'?null:unresolved?.error??null});
  });
  app.post(visualPath+'/actions',requireUser,async c=>{
   const action=await c.req.json();
@@ -195,6 +205,23 @@ export async function createManagedDevelopment(input:{database:Database;provider
     if(item.attempts!==1)throw Error('Previous response dispatch outcome uncertain');
     const payload=item.payload as unknown as {scope:DeliveryScope;sessionID:string;call:{turn_id:string;call_id:string;name:string;arguments:unknown};output:unknown;refusal?:string};
     if(!await authorised(payload.scope))throw Error('Source access revoked');
+    // Only the CURRENT required action authorizes a tool result. A historical
+    // function_call in items is not sufficient after provider expiry/cancel.
+    const fresh=await provider.retrieveSession(payload.sessionID);
+    if(fresh.id!==payload.sessionID)throw Error('Provider session identity mismatch');
+    const required=(fresh.required_actions??[]).find((a:any)=>
+      a?.type==='function_call'&&a.turn_id===payload.call.turn_id&&
+      a.call_id===payload.call.call_id&&a.name===payload.call.name);
+    if(!required){
+      await database.update(workItems).set({
+        attempts:100,
+        lastError:'Provider action closed before the accepted answer could be delivered. Decision preserved; a separately authorized continuation is required.'
+      }).where(and(eq(workItems.kind,item.kind),eq(workItems.key,item.key)));
+      continue; // Never send a fabricated result to a closed provider action.
+    }
+    const currentArguments=typeof required.arguments==='string'?JSON.parse(required.arguments):required.arguments;
+    const acceptedArguments=typeof payload.call.arguments==='string'?JSON.parse(payload.call.arguments):payload.call.arguments;
+    if(stable(currentArguments)!==stable(acceptedArguments))throw Error('Pending provider action arguments changed');
     if(payload.refusal)await provider.rejectToolCall(payload.sessionID,{turnID:payload.call.turn_id,callID:payload.call.call_id,name:payload.call.name,error:payload.refusal},'source_action_'+item.key,{expectedArguments:payload.call.arguments});
     else await provider.submitToolResult(payload.sessionID,{turnID:payload.call.turn_id,callID:payload.call.call_id,name:payload.call.name,output:payload.output},'source_action_'+item.key,{expectedArguments:payload.call.arguments});
     await queue.finish({kind:item.kind,key:item.key,owner:'managed-native-response'});

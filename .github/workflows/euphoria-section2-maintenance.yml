@@ -1,0 +1,50 @@
+# One-time branch-only formatter and Drizzle snapshot repair.
+# Editing this file triggers this workflow once; its source commit does not
+# retrigger because no changes are made to this workflow.
+name: Section 2 maintenance (isolated branch)
+on:
+  push:
+    branches:
+      - feature/phase1-section2-autonomous-bots
+    paths:
+      - .github/workflows/euphoria-section2-maintenance.yml
+permissions:
+  contents: write
+jobs:
+  format-and-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+          ref: feature/phase1-section2-autonomous-bots
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - name: Format touched source with repository formatter
+        working-directory: openbot
+        run: |
+          bun install --frozen-lockfile
+          bun run format
+      - name: Generate schema reference snapshot without duplicate SQL migration
+        working-directory: openbot/server
+        run: |
+          bunx drizzle-kit generate --config=drizzle.config.ts --name section2_snapshot_probe
+          test -f drizzle/meta/0076_snapshot.json
+          test -f drizzle/0076_section2_snapshot_probe.sql
+          cp drizzle/meta/0076_snapshot.json drizzle/meta/0075_snapshot.json
+          rm drizzle/meta/0076_snapshot.json drizzle/0076_section2_snapshot_probe.sql
+          git checkout -- drizzle/meta/_journal.json
+      - name: Format snapshot and commit ONLY to isolated Section 2
+        run: |
+          cd openbot
+          bun run format
+          cd ..
+          git config user.name "euphoria-section2-ci"
+          git config user.email "euphoria-section2-ci@users.noreply.github.com"
+          git add openbot/ .github/workflows/euphoria-core-gates.yml
+          if ! git diff --cached --quiet; then
+            git commit -m "Section 2: apply repository formatting and current Drizzle schema snapshot"
+            git push origin HEAD:feature/phase1-section2-autonomous-bots
+          fi

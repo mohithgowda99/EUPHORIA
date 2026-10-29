@@ -595,7 +595,7 @@ struct SourceConversationDetailView: View {
                     awaitingAgent = false
                     lastSendAccepted = false
                     self.error = response.deliveryState == "failed"
-                        ? "The agent request was rejected. Your message is saved. No automatic retry was made."
+                        ? "The Bot run stopped without completing. Your message is saved. No automatic retry was made."
                         : "The agent request could not be confirmed. Your message is saved; no automatic retry was made."
                 } else if ["queued", "running", "accepted"].contains(response.deliveryState ?? "") {
                     awaitingAgent = true

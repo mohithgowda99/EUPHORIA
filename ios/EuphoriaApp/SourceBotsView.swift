@@ -172,6 +172,23 @@ struct SourceBotsView: View {
         loading = true
         defer { loading = false }
         do {
+            #if DEBUG
+            // Use the same loopback-only account boundary as every other tab.
+            // Validation must never save a development token into Keychain.
+            if ProcessInfo.processInfo.environment["EUPHORIA_SOURCE_ORIGIN"] != nil {
+                let signed = try SavedOpenDuetAccount.client()
+                let account = try await signed.sourceSession()
+                let options = try await signed.botCapabilities()
+                currentEndpoint = signed.endpoint
+                serverOrigin = signed.endpoint.baseURL.absoluteString
+                client = signed
+                user = account.user
+                builtInAvailable = options.builtInAvailable
+                bots = try await signed.bots()
+                errorMessage = nil
+                return
+            }
+            #endif
             let origin = try OpenBotEndpoint(serverOrigin)
             currentEndpoint = origin
             let publicAPI = OpenDuetSourceAPI(endpoint: origin)

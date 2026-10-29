@@ -731,11 +731,19 @@ function checkedAutomationTarget(value) {
     if(Object.keys(value).some(k=>!['type','agent_id','input','environment'].includes(k))||
        !value.agent_id||!Array.isArray(value.input)||value.input.length<1||
        value.input.length>10||!value.input.every(m=>m&&m.role==='user'&&
-       typeof m.content==='string'&&m.content.trim()&&m.content.length<=4000))
+         (typeof m.content==='string'&&m.content.trim()&&m.content.length<=4000||
+          Array.isArray(m.content)&&m.content.length===1&&
+          m.content[0]?.type==='input_text'&&
+          typeof m.content[0].text==='string'&&m.content[0].text.trim()&&
+          m.content[0].text.length<=4000)))
       throw Error('Unsupported new-session automation target');
+    if(value.environment===undefined)
+      throw Error('New-session automation requires a restricted hosted environment');
     const result={type:'new_session',agent_id:identifier(value.agent_id),
-      input:value.input.map(m=>({role:'user',content:m.content}))};
-    if(value.environment!==undefined)result.environment=checkedEnvironment(value.environment);
+      environment:checkedEnvironment(value.environment),
+      input:value.input.map(m=>({role:'user',content:typeof m.content==='string'
+        ?[{type:'input_text',text:m.content}]
+        :[{type:'input_text',text:m.content[0].text}]}))};
     return result;
   }
   throw Error('Unknown automation target');

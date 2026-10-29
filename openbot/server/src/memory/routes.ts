@@ -12,7 +12,7 @@ import {
 
 export function createMemoryRoutes(
   store: MemoryStore,
-  ingestion: MemoryIngestion,
+  ingestion: MemoryIngestion | null,
   requireUser: MiddlewareHandler<{ Variables: AppVariables }>,
 ) {
   const routes = new Hono<{ Variables: AppVariables }>();
@@ -58,18 +58,16 @@ export function createMemoryRoutes(
   );
   routes.get("/sources/available/:botId", async (context) =>
     context.json({
-      tools: await ingestion.availableSources(
-        context.var.actor.id,
-        context.req.param("botId"),
-      ),
+      tools: ingestion
+        ? await ingestion.availableSources(context.var.actor.id,context.req.param("botId"))
+        : [],
     }),
   );
   routes.post("/sources", async (context) =>
     context.json(
-      await ingestion.createSource(
-        context.var.actor.id,
-        await body(context.req.raw),
-      ),
+      await (ingestion
+        ? ingestion.createSource(context.var.actor.id,await body(context.req.raw))
+        : Promise.reject(new MemoryUnavailableError("Memory source connections are not configured."))),
       201,
     ),
   );
@@ -92,7 +90,9 @@ export function createMemoryRoutes(
   });
   routes.post("/sources/:id/sync", async (context) =>
     context.json(
-      await ingestion.sync(context.var.actor.id, context.req.param("id")),
+      await (ingestion
+        ? ingestion.sync(context.var.actor.id, context.req.param("id"))
+        : Promise.reject(new MemoryUnavailableError("Memory source connections are not configured."))),
     ),
   );
   routes.delete("/sources/:id", async (context) => {

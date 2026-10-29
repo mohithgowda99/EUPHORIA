@@ -369,6 +369,7 @@
             CODE_SIGN_STYLE = Automatic;
             GENERATE_INFOPLIST_FILE = NO;
             INFOPLIST_FILE = EuphoriaApp/Info-Debug.plist;
+            CODE_SIGN_ENTITLEMENTS = EuphoriaApp/EuphoriaDebug.entitlements;
             INFOPLIST_KEY_UILaunchScreen_Generation = YES;
             INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
             IPHONEOS_DEPLOYMENT_TARGET = 27.0;
@@ -384,6 +385,7 @@
             CODE_SIGN_STYLE = Automatic;
             GENERATE_INFOPLIST_FILE = NO;
             INFOPLIST_FILE = EuphoriaApp/Info-Release.plist;
+            CODE_SIGN_ENTITLEMENTS = EuphoriaApp/EuphoriaRelease.entitlements;
             INFOPLIST_KEY_UILaunchScreen_Generation = YES;
             INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
             IPHONEOS_DEPLOYMENT_TARGET = 27.0;

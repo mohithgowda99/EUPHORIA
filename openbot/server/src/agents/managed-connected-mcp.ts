@@ -126,7 +126,7 @@ export function mcpWritePreview(
 ): string {
   const value = JSON.stringify(args, null, 2);
   if (value.length > 3500) throw Error("MCP write cannot be previewed safely");
-  return "Connector: " + ref + "\nEffect: write\nExact arguments:\n" + value;
+  return `Connector: ${ref}\nEffect: write\nExact arguments:\n${value}`;
 }
 
 /** A compact tool-discovery hint derived only from the original Bot's
@@ -149,7 +149,8 @@ export async function managedMCPInventory(
     .filter((t) => advertised.has(t.ref) && !excludedRefs.includes(t.ref))
     .slice(0, 16)
     .map((t) => {
-      const entry = advertised.get(t.ref)!;
+      const entry = advertised.get(t.ref);
+      if (!entry) throw Error("Advertised tool disappeared during an owner-scoped grant read");
       return {
         ref: t.ref,
         effect: entry.effect,

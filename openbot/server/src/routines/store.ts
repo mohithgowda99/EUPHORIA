@@ -724,7 +724,7 @@ export function createRoutineStore(database: Database): RoutineStore {
           .limit(1);
         if (open)
           throw new RoutineRefusedError(
-            "This routine has an unresolved run. Confirm its outcome before running again.",
+            "This routine is already running or its outcome is unresolved. Confirm its outcome before running again.",
           );
         const runId = `routine_run_${crypto.randomUUID()}`;
         await transaction

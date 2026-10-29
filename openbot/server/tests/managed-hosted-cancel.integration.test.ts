@@ -29,7 +29,7 @@ test.skipIf(!dbUrl)("hosted cancellation binds exactly one source root and never
   async listArtifacts(){return{data:[],has_more:false};},
   async cancelTurn(id:string,key:string){
    expect(id).toBe(sessionID);
-   expect(key).toStartWith("source_cancel_");
+   expect(key.startsWith("source_cancel_")).toBe(true);
    cancelCalls++;return null; // 202 accepted, no completed-root claim
   }
  };

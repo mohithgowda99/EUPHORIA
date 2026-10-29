@@ -120,7 +120,7 @@ export async function submitManagedSourceInput(input: {
       sessionID: string,
       message: string,
       key: string,
-      onRoot: (event: any) => Promise<void>,
+      onRoot: (event: unknown) => Promise<void>,
     ): Promise<void>;
     sendMessage(
       sessionID: string,
@@ -142,7 +142,7 @@ export async function submitManagedSourceInput(input: {
     agentId: input.scope.botId,
     threadId: input.scope.threadId,
   };
-  const creationKey = "source_create_" + input.runId;
+  const creationKey = `source_create_${input.runId}`;
   // Same original inbox on a second worker must not turn an initial create
   // into a second provider follow-up. Return ONLY provider-accepted, never done.
   const previous = await input.turns.read(input.runId);
@@ -289,7 +289,7 @@ export async function submitManagedSourceInput(input: {
       await input.provider.sendMessageAndObserve(
         link.providerSessionId,
         input.message,
-        "source_input_" + input.runId,
+        `source_input_${input.runId}`,
         async (event) => {
           await input.turns.bindRootCreatedEvent({
             inboxId: input.runId,
@@ -303,7 +303,7 @@ export async function submitManagedSourceInput(input: {
       await input.provider.sendMessage(
         link.providerSessionId,
         input.message,
-        "source_input_" + input.runId,
+        `source_input_${input.runId}`,
       );
     }
   }

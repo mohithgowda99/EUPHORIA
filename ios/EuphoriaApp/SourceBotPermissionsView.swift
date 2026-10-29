@@ -48,11 +48,18 @@ struct SourceBotPermissionsView: View {
                     set: { value in Task { await updateHosted(webSearch: value) } }
                 ))
                 .disabled(busy || hosted == nil || hosted?.locked == true)
+                Toggle("Read-only public browser", isOn: Binding(
+                    get: { hosted?.capabilities.browser ?? false },
+                    set: { value in Task { await updateHosted(browser: value) } }
+                ))
+                .disabled(busy || hosted == nil || hosted?.locked == true || hosted?.capabilities.sandbox == true)
+                Text("Only operator-approved documentation sites. Each origin requires your approval. No sign-in or external writes.")
+                    .font(.caption2).foregroundStyle(.secondary)
                 Toggle("Hosted sandbox", isOn: Binding(
                     get: { hosted?.capabilities.sandbox ?? false },
                     set: { value in Task { await updateHosted(sandbox: value) } }
                 ))
-                .disabled(busy || hosted == nil || hosted?.locked == true)
+                .disabled(busy || hosted == nil || hosted?.locked == true || hosted?.capabilities.browser == true)
                 Toggle("Subagent delegation", isOn: Binding(
                     get: { hosted?.capabilities.delegation ?? false },
                     set: { value in Task { await updateHosted(delegation: value) } }
@@ -130,7 +137,7 @@ struct SourceBotPermissionsView: View {
             availableTools = []
         }
     }
-    private func updateHosted(sandbox: Bool? = nil, webSearch: Bool? = nil, delegation: Bool? = nil,
+    private func updateHosted(sandbox: Bool? = nil, webSearch: Bool? = nil, browser: Bool? = nil, delegation: Bool? = nil,
                               maxSubagents: Int? = nil) async {
         guard !busy, let previous = hosted, !previous.locked else { return }
         busy = true
@@ -139,6 +146,7 @@ struct SourceBotPermissionsView: View {
         let wanted = SourceHostedCapabilities(
             sandbox: sandbox ?? previous.capabilities.sandbox,
             webSearch: webSearch ?? previous.capabilities.webSearch,
+            browser: browser ?? previous.capabilities.browser,
             delegation: delegate,
             maxConcurrentSubagents: delegate ? (maxSubagents ?? previous.capabilities.maxConcurrentSubagents) : 1)
         do {

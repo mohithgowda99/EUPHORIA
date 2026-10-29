@@ -202,6 +202,44 @@ export class AgentsClient {
     return artifact;
   }
 
+
+  /** Bounded binary read, never an untrusted redirect or a provider URL shared
+   * with iOS. CALLER MUST FIRST AUTHORIZE THE SOURCE OWNER AND EXACT ROOT.
+   * The provider's artifact-content endpoint is isolated here so a provider
+   * 404/unsupported shape fails closed instead of reporting a phantom file.
+   */
+  async retrieveArtifactContent(sessionID,artifactID,{signal,maxBytes=8*1024*1024}={}) {
+    identifier(sessionID);identifier(artifactID);
+    if(!Number.isInteger(maxBytes)||maxBytes<1||maxBytes>8*1024*1024)
+      throw Error('Invalid hosted artifact limit');
+    let response;
+    try {
+      response=await this.#fetch('https://api.openai.com/v1/agents/sessions/'+sessionID+
+        '/artifacts/'+artifactID+'/content',{
+        method:'GET',redirect:'error',
+        headers:{Authorization:'Bearer '+this.#apiKey,'OpenAI-Beta':'agents=v1',Accept:'application/octet-stream'},
+        signal:AbortSignal.any([AbortSignal.timeout(30_000),...(signal?[signal]:[])])
+      });
+      if(!response.ok||!response.body)throw Error('Hosted artifact content unavailable');
+      const length=Number(response.headers.get('content-length'));
+      if(response.headers.has('content-length')&&(!Number.isSafeInteger(length)||length<0||length>maxBytes))
+        throw Error('Hosted artifact exceeds size limit');
+      const reader=response.body.getReader();
+      const chunks=[];let size=0;
+      while(true){
+        const {done,value}=await reader.read();
+        if(done)break;
+        size+=value.byteLength;
+        if(size>maxBytes){await reader.cancel().catch(()=>{});throw Error('Hosted artifact exceeds size limit');}
+        chunks.push(Buffer.from(value));
+      }
+      return{bytes:Buffer.concat(chunks,size),contentType:'application/octet-stream'};
+    }catch{
+      try{await response?.body?.cancel();}catch{}
+      throw Error('Hosted artifact content unavailable or exceeded limit');
+    }
+  }
+
   async openEventStream(sessionID,{signal}={}) {
     identifier(sessionID);
     const controller=new AbortController();

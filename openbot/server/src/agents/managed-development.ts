@@ -276,6 +276,106 @@ export async function createManagedDevelopment(input:{database:Database;provider
   return{scope,sessionID:link.providerSessionId,inbox:latest.inbox,
    root:latest.receipt.rootTurnId};
  }
+
+ // OpenAI owns the browser runtime. EUPHORIA only presents native, exact
+ // current provider origin requests with ORIGINAL owner/Bot/root authority.
+ // Browser origins cannot authorize writes, login, extra domains or credentials.
+ async function currentBrowser(owner:string,channelID:string,botID:string){
+  const active=await activeHostedRoot(owner,channelID,botID);
+  if(!active)return null;
+  const caps=await hosted.read(owner,botID);
+  if(!caps.browser)return null;
+  const session=await provider.retrieveSession(active.sessionID);
+  if(session.id!==active.sessionID||
+     session.environment?.desktop?.enabled!==true||
+     session.environment?.network?.access!=='restricted')
+   return null;
+  const hosts=input.browserHosts??[];
+  const actual=session.environment.network.allowed_domains as unknown;
+  if(!Array.isArray(actual)||actual.length!==hosts.length||
+     actual.some(x=>typeof x!=='string'||!hosts.includes(x)))return null;
+  const [root,turns]=await Promise.all([
+   provider.retrieveTurn(active.sessionID,active.root),
+   provider.listTurns(active.sessionID,{limit:100,order:'desc'})
+  ]);
+  try{assertCurrentRootForCancellation(active.root,active.sessionID,root,turns,active.inbox.state);}
+  catch{return null;}
+  if(!await authorised(active.scope))return null;
+  return{...active,session};
+ }
+ app.get('/api/delivery/conversations/:id/browser-approvals',requireUser,async c=>{
+  const current=await currentBrowser(c.var.actor.id,c.req.param('id'),c.req.query('agentId')??'');
+  if(!current)return c.json({requests:[]});
+  const pending=pendingPublicOrigin(current.session.required_actions??[],input.browserHosts??[]);
+  const pendingAuth=(current.session.required_actions??[] as unknown[]).filter(a=>
+   a&&typeof a==='object'&&(a as any).type==='computer_use_approval_request'&&
+   (a as any).request?.type==='browser_authentication'&&
+   typeof (a as any).request_id==='string'&&
+   /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test((a as any).request_id));
+  const records=await database.select({key:workItems.key,finished:workItems.finishedAt,
+   lastError:workItems.lastError}).from(workItems)
+   .where(eq(workItems.kind,'managed.browser-decision')).limit(100);
+  const recorded=new Map(records.map(x=>[x.key,x]));
+  return c.json({requests:[
+   ...pending.map(p=>({id:p.request_id,kind:'origin',origin:p.request.origin,
+    reason:p.request.reason??null,canApprove:p.allowed,
+    submitted:recorded.has(p.request_id),
+    uncertain:!!recorded.get(p.request_id)?.lastError})),
+   ...pendingAuth.map(a=>({id:(a as any).request_id,kind:'authentication',
+    origin:null,reason:'Browser sign-in is not allowed for a public read-only Bot',
+    canApprove:false,submitted:recorded.has((a as any).request_id),
+    uncertain:!!recorded.get((a as any).request_id)?.lastError}))
+   ]});
+ });
+ app.post('/api/delivery/conversations/:id/browser-approvals/:requestId',requireUser,async c=>{
+  const owner=c.var.actor.id,channelID=c.req.param('id'),botID=c.req.query('agentId')??'';
+  const id=c.req.param('requestId');
+  if(!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(id))return c.json({error:'Invalid provider request'},400);
+  let raw:unknown;
+  try{raw=await c.req.json();}catch{return c.json({error:'Invalid browser decision'},400);}
+  if(!raw||typeof raw!=='object'||Array.isArray(raw)||
+     Object.keys(raw).length!==1||!['approve','deny','cancel'].includes(
+     String((raw as {decision?:unknown}).decision)))
+   return c.json({error:'Invalid browser decision'},400);
+  const choice=(raw as {decision:'approve'|'deny'|'cancel'}).decision;
+  const current=await currentBrowser(owner,channelID,botID);
+  if(!current)return c.json({error:'Browser source root or grant unavailable'},409);
+  const pending=pendingPublicOrigin(current.session.required_actions??[],input.browserHosts??[]);
+  const origin=pending.find(p=>p.request_id===id);
+  const auth=(current.session.required_actions??[] as unknown[]).some(a=>
+   a&&typeof a==='object'&&(a as any).type==='computer_use_approval_request'&&
+   (a as any).request_id===id&&(a as any).request?.type==='browser_authentication');
+  if(!origin&&!auth)return c.json({error:'Browser request no longer pending'},409);
+  if((auth&&choice!=='cancel')||(origin&&choice==='approve'&&!origin.allowed))
+    return c.json({error:'Browser origin or sign-in is outside the public read-only policy'},403);
+  const [prior]=await database.select({id:workItems.key}).from(workItems).where(and(
+    eq(workItems.kind,'managed.browser-decision'),eq(workItems.key,id))).limit(1);
+  if(prior)return c.json({error:'Browser decision already submitted or uncertain'},409);
+  if(!await authorised(current.scope))return c.json({error:'Bot access revoked'},403);
+  const receipt={ownerUserId:owner,channelID,botID,threadID:current.scope.threadId,
+   sessionID:current.sessionID,inboxID:current.inbox.id,rootTurnID:current.root,
+   requestID:id,kind:auth?'authentication':'origin',
+   origin:origin?.request.origin??null,decision:choice};
+  const [winner]=await database.insert(workItems).values({
+   kind:'managed.browser-decision',key:id,payload:receipt
+  }).onConflictDoNothing().returning();
+  if(!winner)return c.json({error:'Browser decision was already reserved'},409);
+  try{
+   if(auth)await provider.cancelBrowserAuthentication(current.sessionID,id,
+      'source_browser_'+id);
+   else await provider.respondBrowserApproval(current.sessionID,id,choice,
+      'source_browser_'+id);
+   await database.update(workItems).set({finishedAt:new Date()}).where(and(
+    eq(workItems.kind,'managed.browser-decision'),eq(workItems.key,id)));
+   return c.json({accepted:true,phase:'submitted'},202);
+  }catch{
+   await database.update(workItems).set({attempts:100,
+    lastError:'Browser request decision outcome uncertain; inspect provider before resubmission'})
+    .where(and(eq(workItems.kind,'managed.browser-decision'),eq(workItems.key,id)));
+   return c.json({error:'Browser approval acknowledgement uncertain; no automatic replay'},503);
+  }
+ });
+
  app.get('/api/delivery/conversations/:id/hosted-activity',requireUser,async c=>{
   const active=await activeHostedRoot(c.var.actor.id,c.req.param('id'),
    c.req.query('agentId')??'');

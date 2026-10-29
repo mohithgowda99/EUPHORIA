@@ -12,6 +12,7 @@
         A2F000000000000000000007 /* EuphoriaNativeA2UIEngineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F000000000000000000006 /* EuphoriaNativeA2UIEngineView.swift */; };
         A2F000000000000000000009 /* A2UIProjectionBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F000000000000000000008 /* A2UIProjectionBridge.swift */; }
         0000000000000000000000FB /* SourceConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000FA /* SourceConnectionsView.swift */; };
+        0000000000000000000000FD /* SourceProactiveSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000FC /* SourceProactiveSettingsView.swift */; };
         0000000000000000000000F9 /* SourceBotPermissionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000F8 /* SourceBotPermissionsView.swift */; };
         0000000000000000000000F3 /* SourceRoutinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000F2 /* SourceRoutinesView.swift */; };
         0000000000000000000000F5 /* SourceGalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000F4 /* SourceGalleryView.swift */; };
@@ -74,6 +75,7 @@
         A2F000000000000000000006 /* EuphoriaNativeA2UIEngineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EuphoriaNativeA2UIEngineView.swift; sourceTree = "<group>"; };
         A2F000000000000000000008 /* A2UIProjectionBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Spikes/A2UIRendererComparison/Sources/A2UIProjectionBridge.swift"; sourceTree = "<group>"; };
         0000000000000000000000FA /* SourceConnectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceConnectionsView.swift; sourceTree = "<group>"; };
+        0000000000000000000000FC /* SourceProactiveSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceProactiveSettingsView.swift; sourceTree = "<group>"; };
         0000000000000000000000F8 /* SourceBotPermissionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceBotPermissionsView.swift; sourceTree = "<group>"; };
         0000000000000000000000F2 /* SourceRoutinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceRoutinesView.swift; sourceTree = "<group>"; };
         0000000000000000000000F4 /* SourceGalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceGalleryView.swift; sourceTree = "<group>"; };
@@ -161,6 +163,7 @@
                 0000000000000000000000F6 /* SourceMoreView.swift */,
                 0000000000000000000000F8 /* SourceBotPermissionsView.swift */,
                 0000000000000000000000FA /* SourceConnectionsView.swift */,
+                0000000000000000000000FC /* SourceProactiveSettingsView.swift */,
                 000000000000000000000010 /* OpenBotEndpoint.swift */,
                 000000000000000000000024 /* VisualContract.swift */,
                 000000000000000000000025 /* VisualState.swift */,
@@ -303,6 +306,7 @@
                 0000000000000000000000F7 /* SourceMoreView.swift in Sources */,
                 0000000000000000000000F9 /* SourceBotPermissionsView.swift in Sources */,
                 0000000000000000000000FB /* SourceConnectionsView.swift in Sources */,
+                0000000000000000000000FD /* SourceProactiveSettingsView.swift in Sources */,
                 000000000000000000000016 /* OpenBotEndpoint.swift in Sources */,
                 000000000000000000000030 /* VisualContract.swift in Sources */,
                 000000000000000000000031 /* VisualState.swift in Sources */,

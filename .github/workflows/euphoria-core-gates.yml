@@ -12,7 +12,23 @@ concurrency:
 jobs:
   offline:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: euphoria_test
+          POSTGRES_USER: euphoria_test
+          POSTGRES_PASSWORD: test_only_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U euphoria_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      TEST_DATABASE_URL: postgres://euphoria_test:test_only_password@127.0.0.1:5432/euphoria_test
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,13 +45,17 @@ jobs:
       - name: Typecheck server
         working-directory: openbot
         run: bun run --filter server typecheck
+      - name: Migrate disposable Postgres
+        working-directory: openbot
+        run: DATABASE_URL="$TEST_DATABASE_URL" bun server/scripts/migrate.ts
       - name: Test original source managed adapters
         working-directory: openbot
         run: |
           bun test server/tests/managed-memory-context.test.ts \
             server/tests/managed-connected-mcp.test.ts \
             server/tests/managed-person-questions.integration.test.ts \
-            server/tests/managed-source-tasks.integration.test.ts
+            server/tests/managed-source-tasks.integration.test.ts \
+            server/tests/managed-completed-jsonb.integration.test.ts
       - name: Check gateway regressions
         working-directory: gateway
         run: |

@@ -20,8 +20,10 @@ struct EuphoriaNativeA2UIEngineView: View {
                 Label(error, systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.red)
             } else {
-                A2UISurfaceView(viewModel: model) { _ in
-                    error = "This interface attempted an action without an EUPHORIA authorization binding."
+                A2UISurfaceView(viewModel: model, scrolls: false) { _ in
+                    Task { @MainActor in
+                        error = "This interface attempted an action without an EUPHORIA authorization binding."
+                    }
                 }
             }
         }
@@ -30,7 +32,8 @@ struct EuphoriaNativeA2UIEngineView: View {
         .task(id: revision) {
             do {
                 let messages = try A2UIProjectionBridge.messages(from: document)
-                try model.processMessages(messages)
+                let errors = model.processMessages(messages)
+                if !errors.isEmpty { throw errors[0] }
                 error = nil
             } catch {
                 error = "The A2UI surface could not be validated. No action was submitted."

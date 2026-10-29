@@ -17,6 +17,7 @@ struct SourceHostedCapabilities: Codable, Sendable {
 struct SourceHostedCapabilitiesResponse: Decodable, Sendable {
     let capabilities: SourceHostedCapabilities
     let locked: Bool
+    let browserAvailable: Bool?
 }
 private struct SourceHostedFileInput: Encodable {
     let uploadId: String

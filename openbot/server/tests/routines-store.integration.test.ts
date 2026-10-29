@@ -1327,3 +1327,32 @@ describe("counting the failures at the tail", () => {
     );
   });
 });
+
+describe("explicit cloud scheduler ownership",()=>{
+ test("managed schedules are invisible to original sweeper even if still enabled and overdue",async()=>{
+  const {owner,routine}=await makeRoutine();
+  const due=new Date("2001-03-04T09:00:00Z");
+  await database.update(routines).set({
+   executionBackend:"managed",providerAutomationId:"auto_fixture_"+randomUUID(),
+   nextRunAt:due
+  }).where(eq(routines.id,routine.id));
+  const dueNow=await store.dueRoutines(100);
+  expect(dueNow.some(x=>x.id===routine.id)).toBe(false);
+  expect(await store.routineForFiring(routine.id)).toEqual({id:routine.id,enabled:false});
+  expect(await store.advanceNextRun(routine.id,due)).toBe(false);
+  await expect(store.startManualRun(owner.id,routine.id)).rejects.toThrow(/managed routines/i);
+  await expect(store.setEnabled(owner.id,routine.id,false)).rejects.toThrow(/managed routine/i);
+  const [summary]=await store.listFor(owner.id);
+  expect(summary?.executionBackend).toBe("managed");
+ });
+ test("provisioning and uncertain migrations also cannot fire in source worker",async()=>{
+  for(const backend of ["provisioning","sync_unknown"] as const){
+   const {routine}=await makeRoutine();
+   await database.update(routines).set({
+    executionBackend:backend,nextRunAt:new Date("2001-03-04T09:00:00Z")
+   }).where(eq(routines.id,routine.id));
+   expect((await store.dueRoutines(100)).some(x=>x.id===routine.id)).toBe(false);
+   expect((await store.routineForFiring(routine.id))?.enabled).toBe(false);
+  }
+ });
+});

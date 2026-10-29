@@ -215,6 +215,7 @@ type RoutineDto = {
   /** Which Bot carries it out, so a Bot's own screen can show only its routines. */
   agentId: string;
   schedule: string;
+  cron: string;
   timezone: string;
   instruction: string;
   channel: { id: string; name: string | null; gone: boolean };
@@ -245,6 +246,7 @@ function routineDto(routine: RoutineSummary): RoutineDto {
     id: routine.id,
     agentId: routine.agentId,
     schedule: routine.schedule,
+    cron: routine.cron,
     timezone: routine.timezone,
     instruction: routine.instruction,
     channel: {

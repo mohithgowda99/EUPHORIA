@@ -119,6 +119,33 @@ export function createRoutineRoutes(
         );
       return body;
     };
+    routes.post("/managed/once", requireUser, async (c) => {
+      try {
+        const body = await nonce(c);
+        if (
+          typeof body.channelId !== "string" ||
+          typeof body.agentId !== "string" ||
+          typeof body.instruction !== "string" ||
+          typeof body.runAt !== "number" ||
+          Object.keys(body).some(
+            (key) => !["channelId", "agentId", "instruction", "runAt", "requestId"].includes(key),
+          )
+        )
+          return c.json({ error: "Invalid owner-approved one-time schedule" }, 400);
+        return c.json(
+          await managed.createOnce(c.var.actor.id, {
+            channelId: body.channelId,
+            agentId: body.agentId,
+            instruction: body.instruction,
+            runAt: body.runAt,
+            requestId: body.requestId as string,
+          }),
+          202,
+        );
+      } catch (error) {
+        return mapStoreError(c, error);
+      }
+    });
     routes.post("/:id/managed/migrate", requireUser, async (c) => {
       try {
         const body = await nonce(c);

@@ -7,6 +7,7 @@ on:
       - feature/phase1-hosted-tools-files-delegation-20261029
       - feature/phase1-section1-lifecycle-20261029
       - feature/phase1-section1-openai-completion-20261029
+      - feature/phase1-section2-autonomous-bots
   workflow_dispatch:
 permissions:
   contents: read
@@ -52,6 +53,9 @@ jobs:
       # Each integration suite gets a fresh migrated database. The managed
       # development actor is singular; DB reuse would make one test's Inbox
       # visible to the next test's deterministic provider fixture.
+      - name: Section 2 strict provider evidence and APNs offline regressions
+        working-directory: openbot
+        run: bun test server/tests/managed-automation-identity.test.ts
       - name: Run isolated source integration suites
         working-directory: openbot
         run: |

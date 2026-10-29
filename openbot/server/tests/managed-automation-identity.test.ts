@@ -3,6 +3,7 @@ import { generateKeyPairSync } from "node:crypto";
 import {
   inspectAutomationDelivery,
   advanceInvocationCursor,
+  mergeDeliveryStatus,
 } from "../src/routines/managed-automation-identity";
 import { createApnsPushTransport } from "../src/delivery/apns";
 
@@ -117,4 +118,14 @@ test("APNs validates signer and deliberately exposes no delivery-receipt API", (
       environment: "sandbox",
     }),
   ).toThrow();
+});
+
+test("terminal delivery is immutable across stale concurrent scans", () => {
+  expect(mergeDeliveryStatus("failed", "queued")).toBe("failed");
+  expect(mergeDeliveryStatus("failed", "completed")).toBe("failed");
+  expect(mergeDeliveryStatus("skipped", "queued")).toBe("skipped");
+  expect(mergeDeliveryStatus("completed", "queued")).toBe("completed");
+  expect(mergeDeliveryStatus("queued", "completed")).toBe("completed");
+  expect(mergeDeliveryStatus("queued", "failed")).toBe("failed");
+  expect(() => mergeDeliveryStatus("failed", "skipped")).toThrow();
 });

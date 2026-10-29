@@ -71,8 +71,11 @@ export class AgentsClient {
         }
         throw Error('Invalid session stream');
       }
-    }catch{
+    }catch(cause){
       controller.abort();try{await response?.body?.cancel();}catch{}
+      if(cause?.code==='PROVIDER_SPEND_CONTROL_UNSUPPORTED'){
+        cause.outcomeUnknown=false;cause.failureStage='spend_control';throw cause;
+      }
       const error=Error('Agents session submission outcome unknown; reconcile original source before retry');
       error.outcomeUnknown=!response||response.status>=500||response.status===408||response.ok;error.failureStage='submission';
       if(response&&!response.ok){

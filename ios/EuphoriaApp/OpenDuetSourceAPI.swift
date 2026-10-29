@@ -372,6 +372,7 @@ struct SourceApproval: Decodable, Identifiable, Sendable {
 }
 struct SourcePersonQuestion: Decodable, Identifiable, Sendable {
     let id: String
+    let approvalKind: String?
     let question: String
     let why: String?
     let botId: String

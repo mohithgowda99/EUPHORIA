@@ -15,31 +15,32 @@ struct VisualNodesView: View {
             if let summary = node.summary { Text(summary).font(.subheadline).foregroundStyle(.secondary) }
             switch node.kind {
             case .sourceComposition:
-                if let document = try? state.compositionDocument(nodeID:node.id) {
-                    // Prefer the full pinned A2UI native renderer for display
-                    // compositions. Action-bearing controls keep their proven
-                    // persisted/authorized source continuation bridge until the
-                    // engine's two-way values have a verified gateway mapping.
-                    if document.components.allSatisfy({
-                        !["Button","TextField","CheckBox","ChoicePicker","Slider","DateTimeInput"].contains($0.component)
-                    }) {
-                        EuphoriaNativeA2UIEngineView(document: document)
-                    } else {
-                    A2UICompositionView(document: Binding(
-                        get: { (try? state.compositionDocument(nodeID:node.id)) ?? document },
-                        set: { edited in
-                            guard let change=edited.localEdits.first(where:{document.localEdits[$0.key] != $0.value}),
-                                  let component=document.components.first(where:{["TextField","CheckBox","ChoicePicker"].contains($0.component) && $0.properties["value"]?.object?["path"]?.text == change.key}) else {return}
-                            do { enact(node,kind:.setField,values:["component":.text(component.id),"value":try change.value.nativeScalar()]) }
-                            catch { errorMessage="This composition edit is unsupported." }
+                if let document = try? state.compositionDocument(nodeID: node.id) {
+                    EuphoriaNativeA2UIEngineView(document: document, onEdit: { componentID, value in
+                        do {
+                            var verified = try state.compositionDocument(nodeID: node.id)
+                            let current = try verified.value(id: componentID, property: "value")
+                            if current == value { return }
+                            _ = try verified.edit(componentID: componentID, value: value)
+                            enact(node, kind: .setField, values: [
+                                "component": .text(componentID),
+                                "value": try value.nativeScalar()
+                            ])
+                        } catch {
+                            errorMessage = "This native edit does not satisfy the source form contract."
                         }
-                    )) { event in
-                        do { enact(node,kind:.submitForm,values:try state.compositionSubmissionValues(nodeID:node.id,buttonID:event.sourceComponentId)) }
-                        catch {errorMessage="This composition action is unsupported."}
-                    }
-                    .disabled(isWaiting(node,kind:.submitForm))
-                    }
-                } else { Text("Composition unavailable").foregroundStyle(.secondary) }
+                    }, onSubmit: { buttonID in
+                        do {
+                            enact(node, kind: .submitForm,
+                                  values: try state.compositionSubmissionValues(nodeID: node.id, buttonID: buttonID))
+                        } catch {
+                            errorMessage = "This native A2UI event cannot be authorized."
+                        }
+                    })
+                    .disabled(isWaiting(node, kind: .submitForm))
+                } else {
+                    Text("Composition unavailable").foregroundStyle(.secondary)
+                }
             case .askChoice:
                 if let selectedID = state.values[node.id]?.string,
                    let selected = node.options?.first(where: { $0.id == selectedID }),

@@ -287,138 +287,90 @@ export function createManagedRoutineBridge(input: {
     });
     return { automationId: response.id, state: "managed" };
   }
-  /** Explicit owner-requested ONE-TIME schedule in ORIGINAL RoutineStore.
-   * The provider is the only scheduler. Source never fires the reserved row.
-   * Unknown POST outcome is frozen and repaired by exact provider identity.
-   * This is NOT Bot self-authorisation: human auth is required at the route. */
-  async function createOnce(
-    owner: string,
-    params: {
-      channelId: string;
-      agentId: string;
-      instruction: string;
-      runAt: number;
-      requestId: string;
-    },
-  ) {
-    const { channelId, agentId, instruction, runAt, requestId } = params;
-    if (
-      !validID(channelId) ||
-      !validID(agentId) ||
-      !validID(requestId) ||
-      requestId.length > 48 ||
-      !bounded(instruction, 2000) ||
-      !Number.isSafeInteger(runAt) ||
-      runAt < Math.floor(Date.now() / 1000) + 900 ||
-      runAt > Math.floor(Date.now() / 1000) + 366 * 86400
-    )
-      throw new RoutineRefusedError(
-        "A valid owner-approved future one-time schedule is required.",
-      );
-    const [link] = await db
-      .select()
-      .from(managedAgentSessionLinks)
-      .where(
-        and(
-          eq(managedAgentSessionLinks.ownerUserId, owner),
-          eq(managedAgentSessionLinks.channelId, channelId),
-          eq(managedAgentSessionLinks.botId, agentId),
-        ),
-      )
-      .limit(1);
-    const scope = {
-      ownerUserId: owner,
-      channelId,
-      agentId,
-      threadId: link?.sourceThreadId ?? "",
-    };
-    if (!link?.providerSessionId || !(await input.authorise(scope)))
-      throw new RoutineRefusedError(
-        "Start an authorized managed Bot conversation first.",
-      );
+  /** An original-owner approval authorizes ONE provider CREATE operation.
+   * Cron and run_at both stay provider-owned; no source worker is ever able
+   * to fire this original record. Network ambiguity never triggers replay.
+   */
+  async function createApprovedSchedule(owner: string, params: {
+    channelId: string;
+    agentId: string;
+    instruction: string;
+    requestId: string;
+    runAt?: number;
+    cron?: string;
+    timezone?: string;
+  }) {
+    const {channelId, agentId, instruction, requestId, runAt, cron, timezone}=params;
+    if(!validID(channelId)||!validID(agentId)||!validID(requestId)||
+       requestId.length>48||!bounded(instruction,2000))
+      throw new RoutineRefusedError("Invalid original-owner schedule request");
+    const once=runAt!==undefined;
+    if(once&&(cron!==undefined||timezone!==undefined||
+       !Number.isSafeInteger(runAt)||runAt!<Math.floor(Date.now()/1000)+900||
+       runAt!>Math.floor(Date.now()/1000)+366*86400))
+      throw new RoutineRefusedError("Invalid future one-time schedule");
+    if(!once && (!cron||!timezone||!bounded(cron,80)||!bounded(timezone,64)))
+      throw new RoutineRefusedError("Recurring schedule requires cron and IANA zone");
+    // The same original schedule validation (including the minimum 15 minute
+    // recurring interval) is used before any provider write.
+    const next=once?new Date(runAt!*1000):nextOccurrence(cron!,timezone!,new Date());
+    const [link]=await db.select().from(managedAgentSessionLinks).where(and(
+      eq(managedAgentSessionLinks.ownerUserId,owner),
+      eq(managedAgentSessionLinks.channelId,channelId),
+      eq(managedAgentSessionLinks.botId,agentId)
+    )).limit(1);
+    const scope={ownerUserId:owner,channelId,agentId,threadId:link?.sourceThreadId??""};
+    if(!link?.providerSessionId||!await input.authorise(scope))
+      throw new RoutineRefusedError("Start an authorized managed Bot conversation first.");
     await input.assertSpendingBoundary();
-    // A retry uses the SAME original ID. Even after a lost provider reply,
-    // it cannot create a second row or submit a second paid automation.
-    const digest = createHash("sha256")
-      .update(owner + "\0" + requestId)
-      .digest("hex");
-    const id = "routine_once_" + digest.slice(0, 32);
-    const key = keyFor(id, "create", requestId);
-    const reserved = await db.transaction(async (tx) => {
-      await tx.execute(
-        sql`SELECT pg_advisory_xact_lock(hashtext(${"routine-cap-" + owner}))`,
-      );
-      const [previous] = await tx
-        .select()
-        .from(routines)
-        .where(eq(routines.id, id))
-        .limit(1);
-      if (previous) {
-        if (
-          previous.ownerUserId !== owner ||
-          previous.channelId !== channelId ||
-          previous.agentId !== agentId ||
-          previous.instruction !== instruction.trim() ||
-          previous.nextRunAt.getTime() !== runAt * 1000
-        )
-          throw new RoutineRefusedError(
-            "One-time request ID is already reserved for another schedule.",
-          );
+    // The request's permanent source ID also deduplicates simultaneous
+    // human approval responses and unknown provider POST outcomes.
+    const digest=createHash("sha256").update(owner+"\0"+requestId).digest("hex");
+    const id=(once?"routine_once_":"routine_approved_")+digest.slice(0,32);
+    const key=keyFor(id,"create",requestId);
+    const reserved=await db.transaction(async tx=>{
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${"routine-cap-"+owner}))`);
+      const [previous]=await tx.select().from(routines).where(eq(routines.id,id)).limit(1);
+      if(previous){
+        if(previous.ownerUserId!==owner||previous.channelId!==channelId||
+           previous.agentId!==agentId||previous.instruction!==instruction.trim()||
+           previous.cron!==(once?"@once":cron)||
+           previous.timezone!==(once?"UTC":timezone)||
+           (once&&previous.nextRunAt.getTime()!==next.getTime()))
+          throw new RoutineRefusedError("Schedule request ID was already reserved for different instructions");
         return false;
       }
-      const [count] = await tx
-        .select({ total: sql<number>`count(*)::int` })
-        .from(routines)
-        .where(
-          and(eq(routines.ownerUserId, owner), eq(routines.enabled, true)),
-        );
-      if ((count?.total ?? 0) >= 20)
-        throw new RoutineRefusedError(
-          "Too many enabled routines; pause one before creating another.",
-        );
+      const [count]=await tx.select({total:sql<number>`count(*)::int`}).from(routines)
+        .where(and(eq(routines.ownerUserId,owner),eq(routines.enabled,true)));
+      if((count?.total??0)>=20)
+        throw new RoutineRefusedError("Too many enabled routines; pause one before creating another");
       await tx.insert(routines).values({
-        id,
-        ownerUserId: owner,
-        agentId,
-        channelId,
-        instruction: instruction.trim(),
-        cron: "@once",
-        timezone: "UTC",
-        nextRunAt: new Date(runAt * 1000),
-        executionBackend: "provisioning",
-        enabled: true,
-        providerSyncOperation: "create",
-        providerSyncKey: key,
-        providerSyncAt: new Date(),
-        providerSessionId: link.providerSessionId,
+        id,ownerUserId:owner,agentId,channelId,
+        instruction:instruction.trim(),cron:once?"@once":cron!,
+        timezone:once?"UTC":timezone!,nextRunAt:next,
+        executionBackend:"provisioning",enabled:true,
+        providerSyncOperation:"create",providerSyncKey:key,providerSyncAt:new Date(),
+        providerSessionId:link.providerSessionId
       });
       return true;
     });
-    if (!reserved)
-      return {
-        routineId: id,
-        state: "unverified",
-        reason:
-          "Existing one-time request must be reconciled; no duplicate provider POST",
-      };
-    const response = await provider.createAutomation(
-      {
-        name: "EUPHORIA:" + id,
-        sessionID: link.providerSessionId,
-        instructions: instruction.trim(),
-        runAt,
-      },
-      key,
-    );
-    if (!response?.id || !validID(response.id))
-      throw new Error(
-        "One-time creation outcome unknown; reconcile, do not resubmit.",
-      );
-    await settle(owner, id, key, {
-      providerAutomationId: response.id,
-      providerSessionId: link.providerSessionId,
-    });
-    return { routineId: id, state: "managed", automationId: response.id };
+    if(!reserved)return {routineId:id,state:"unverified" as const,
+      reason:"Existing approved request must be reconciled, never submitted twice"};
+    const response=await provider.createAutomation({
+      name:"EUPHORIA:"+id,sessionID:link.providerSessionId,
+      instructions:instruction.trim(),
+      ...(once?{runAt:runAt!}:{expression:cron!,timezone:timezone!})
+    },key);
+    if(!response?.id||!validID(response.id))
+      throw Error("Provider create response uncertain; source schedule remains frozen");
+    await settle(owner,id,key,{providerAutomationId:response.id,
+      providerSessionId:link.providerSessionId});
+    return {routineId:id,state:"managed" as const,automationId:response.id};
+  }
+  async function createOnce(owner:string,params:{
+    channelId:string;agentId:string;instruction:string;runAt:number;requestId:string;
+  }) {
+    return createApprovedSchedule(owner,params);
   }
   async function change(
     owner: string,
@@ -910,6 +862,7 @@ export function createManagedRoutineBridge(input: {
   return {
     migrate,
     createOnce,
+    createApprovedSchedule,
     change,
     edit,
     manual,

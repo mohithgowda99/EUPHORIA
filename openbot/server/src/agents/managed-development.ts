@@ -731,7 +731,10 @@ export async function createManagedDevelopment(input:{database:Database;provider
   if(!current||!['accepted','running'].includes(current.inbox.state)||!current.receipt?.rootTurnId||current.receipt.providerSessionId!==link.providerSessionId)return{surface:null};
   const session=await provider.retrieveSession(link.providerSessionId);
   if(session.id!==link.providerSessionId)throw Error('Provider identity mismatch');
-  const calls=(session.required_actions??[]).filter((call:any)=>call.turn_id===current.receipt!.rootTurnId);
+  // OpenAI computer-origin and sign-in approvals have their own native
+  // source-authorized route. They must not be mistaken for renderer tool calls.
+  const calls=(session.required_actions??[]).filter((call:any)=>
+    call.turn_id===current.receipt!.rootTurnId&&call.type!=='computer_use_approval_request');
   if(!calls.length)return{surface:null};
   if(calls.length!==1||calls[0].type!=='function_call')throw Error('Unsupported managed tool');
   const call=calls[0];const args=typeof call.arguments==='string'?JSON.parse(call.arguments):call.arguments;

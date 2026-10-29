@@ -16,6 +16,7 @@ import { createTaskStore, createTaskRoutes } from "../openduet/task-store";
 import { createTaskThreads } from "../openduet/task-threads";
 import { createTaskIntake } from "../openduet/wiring";
 import { createProactiveStore } from "../proactive/store";
+import {proactiveSettingInputSchema,proactiveSettingPatchSchema} from "../proactive/types";
 
 /**
  * Managed execution adapter for ORIGINAL OpenDuet Tasks. TaskStore owns task
@@ -326,5 +327,52 @@ export function createManagedTaskAdapter(deps: {
       202,
     );
   });
-  return { routes, extras, suggestions, tasks };
+  // Original ProactiveStore is available to the managed-source product for
+  // configuration and consent. Until provider read-only autonomous execution
+  // is authoritatively correlated and spending-bounded, all managed drafts
+  // MUST remain disabled. No parallel proactive runner is installed.
+  const proactiveSettingsRoutes = new Hono<{Variables:AppVariables}>();
+  proactiveSettingsRoutes.use("*",requireUser);
+  proactiveSettingsRoutes.get("/",async c=>c.json({
+    settings:await proactive.list(c.var.actor.id),
+    autonomousExecution:"blocked_until_verified_execution_and_budget"
+  }));
+  proactiveSettingsRoutes.post("/",async c=>{
+    const owner=c.var.actor.id;
+    const parsed=proactiveSettingInputSchema.safeParse(await c.req.json().catch(()=>null));
+    if(!parsed.success||parsed.data.enabled)
+      return c.json({error:"A managed proactive research draft must be disabled until recurring inference is safe"},409);
+    await deps.authorizeBot(owner,parsed.data.agentId);
+    const scope=await deps.scopeFor(owner,parsed.data.channelId,parsed.data.agentId);
+    if(!scope||scope.ownerUserId!==owner||
+       scope.channelId!==parsed.data.channelId||scope.agentId!==parsed.data.agentId)
+      return c.json({error:"Original Bot/channel permission unavailable"},403);
+    try{
+      return c.json({setting:await proactive.create(owner,parsed.data,scope.threadId)},201);
+    }catch{
+      return c.json({error:"Existing proactive setting or source consent unavailable"},409);
+    }
+  });
+  proactiveSettingsRoutes.patch("/:id",async c=>{
+    const owner=c.var.actor.id;
+    const setting=await proactive.get(owner,c.req.param("id")).catch(()=>null);
+    if(!setting)return c.json({error:"Setting not found"},404);
+    await deps.authorizeBot(owner,setting.agentId);
+    const scope=await deps.scopeFor(owner,setting.channelId,setting.agentId);
+    if(!scope||scope.threadId!==setting.threadId)
+      return c.json({error:"Original Bot/channel permission revoked"},403);
+    const parsed=proactiveSettingPatchSchema.safeParse(await c.req.json().catch(()=>null));
+    if(!parsed.success||parsed.data.enabled===true)
+      return c.json({error:"Autonomous managed research cannot be enabled without verified execution and spending bounds"},409);
+    return c.json({setting:await proactive.update(owner,setting.id,parsed.data)});
+  });
+  proactiveSettingsRoutes.delete("/:id",async c=>{
+    const owner=c.var.actor.id;
+    const setting=await proactive.get(owner,c.req.param("id")).catch(()=>null);
+    if(!setting)return c.json({error:"Setting not found"},404);
+    await deps.authorizeBot(owner,setting.agentId);
+    await proactive.remove(owner,setting.id);
+    return c.body(null,204);
+  });
+  return { routes, extras, suggestions, tasks, proactiveSettingsRoutes };
 }

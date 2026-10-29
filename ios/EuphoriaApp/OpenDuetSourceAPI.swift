@@ -9,6 +9,7 @@ import FoundationNetworking
 /// Bot identity, permission checks, credentials and lifecycle stay in OpenBot.
 struct SourceHostedCapabilities: Codable, Sendable {
     let sandbox: Bool
+    let webSearch: Bool
     let delegation: Bool
     let maxConcurrentSubagents: Int
 }

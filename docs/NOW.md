@@ -6,7 +6,7 @@ The continuation adds strictly unverified AutomationInvocation-to-root identity 
 
 **Blocking provider/API issue:** The documented AutomationInvocation has delivery `status` and `session_id` but **no authoritative root turn ID**. Therefore no scheduled run is claimed to have finished, and no scheduled-run approval, source briefing or source-owned push result can be safely attributed yet. A session idle event, latest turn, or webhook are not proof. **Blocking spending issue:** provider rejected `spend_control`; no verified per-invocation hard budget. Production multi-tenant Better Auth and public remote host remain absent from loopback managed assembly.
 
-GitHub CI discovered parse, format and Drizzle migration snapshot defects; corrected syntax, pinned gate actions, and committed the Biome-formatted source/schema snapshot. A draft PR runs the offline gates. **Only final-head CI results can prove current changes pass.** The full factual implementation, commands and remaining limitations are in `docs/agents/EUPHORIA_SECTION2_HANDOFF.md`.
+GitHub Section 2 core branch gates **PASSED on implementation commit `95c0e244`**: 294 offline tests, 0 failures, TypeScript server typecheck, repeatable disposable PostgreSQL migrations, and 199 gateway regressions; security/zizmor passed. The repository-wide lint job still reports existing managed-agent source code lint findings, so all CI is NOT green. The final documentation commit(s) are not equivalent to a new validated source build. The full factual implementation, test run IDs and remaining limitations are in `docs/agents/EUPHORIA_SECTION2_HANDOFF.md`.
 
 ---
 

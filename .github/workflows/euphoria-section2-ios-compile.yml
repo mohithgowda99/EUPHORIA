@@ -1,0 +1,41 @@
+name: EUPHORIA Section 2 unsigned iOS simulator compile (temporary)
+on:
+  push:
+    branches: [feature/phase1-section2-autonomous-bots]
+    paths: [.github/workflows/euphoria-section2-ios-compile.yml]
+permissions:
+  contents: read
+jobs:
+  native-compile:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Show actual Xcode and iOS Simulator SDK
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
+      - name: Check project and target
+        run: xcodebuild -list -project ios/Euphoria.xcodeproj
+      - name: Build unsigned native Debug app
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/Euphoria.xcodeproj \
+            -scheme Euphoria \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath /tmp/euphoria-section2-ios-debug \
+            CODE_SIGNING_ALLOWED=NO build
+      - name: Build unsigned native Release app
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/Euphoria.xcodeproj \
+            -scheme Euphoria \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath /tmp/euphoria-section2-ios-release \
+            CODE_SIGNING_ALLOWED=NO build

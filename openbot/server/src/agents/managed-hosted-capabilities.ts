@@ -1,6 +1,6 @@
-import {and,eq} from "drizzle-orm";
+import {and,eq,sql} from "drizzle-orm";
 import type {Database} from "../db/client";
-import {managedBotHostedCapabilities} from "../db/schema/managed-agents";
+import {managedBotHostedCapabilities,managedAgentSessionLinks} from "../db/schema/managed-agents";
 
 /** Source-owned Bot permissions. Default is DENY, including for public/team Bots.
  * Not a separate agent runner or provider-side capability journal.
@@ -40,13 +40,24 @@ export function createManagedHostedCapabilities(database:Database){
   },
   async write(ownerUserId:string,botId:string,caps:HostedCapabilities):Promise<HostedCapabilities>{
    const value=parseHostedCapabilities(caps);
-   await database.insert(managedBotHostedCapabilities).values({
-    ownerUserId,botId,...value,updatedAt:new Date()
-   }).onConflictDoUpdate({
-    target:[managedBotHostedCapabilities.ownerUserId,managedBotHostedCapabilities.botId],
-    set:{...value,updatedAt:new Date()}
+   // Same transaction-scoped advisory key as managed session reservation.
+   // This closes the race between enabling a tool and the first paid session
+   // adopting a different immutable manifest on another process.
+   return database.transaction(async tx=>{
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${ownerUserId+":"+botId}, 0))`);
+    const [reserved]=await tx.select({ownerUserId:managedAgentSessionLinks.ownerUserId})
+      .from(managedAgentSessionLinks)
+      .where(and(eq(managedAgentSessionLinks.ownerUserId,ownerUserId),
+        eq(managedAgentSessionLinks.botId,botId))).limit(1);
+    if(reserved)throw Object.assign(Error("Hosted capability manifest is locked after the first session reservation"),{status:409});
+    await tx.insert(managedBotHostedCapabilities).values({
+      ownerUserId,botId,...value,updatedAt:new Date()
+    }).onConflictDoUpdate({
+      target:[managedBotHostedCapabilities.ownerUserId,managedBotHostedCapabilities.botId],
+      set:{...value,updatedAt:new Date()}
+    });
+    return value;
    });
-   return value;
   }
  };
 }

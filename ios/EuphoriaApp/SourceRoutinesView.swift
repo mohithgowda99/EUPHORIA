@@ -74,6 +74,10 @@ struct SourceRoutinesView: View {
                         } else if routine.executionBackend == "provisioning" ||
                                     routine.executionBackend == "sync_unknown" {
                             Text("Provider sync is uncertain. Source firing is held for safety. Do not repeat the operation.")
+                            Button("Inspect and repair provider mapping") {
+                                Task { await repair(routine.id) }
+                            }
+                            .disabled(busy)
                                 .font(.caption).foregroundStyle(.orange)
                         }
                         HStack {
@@ -219,6 +223,20 @@ struct SourceRoutinesView: View {
             remote[id] = try await client.managedRoutineState(id: id)
             error = nil
         } catch { error = "Provider receipt history is unavailable." }
+    }
+    private func repair(_ id: String) async {
+        guard !busy, let client else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            let outcome = try await client.repairManagedRoutine(id: id)
+            let page = try await client.sourceRoutines()
+            routines = page.routines
+            sweep = page.sweep
+            error = outcome.reconciled ? nil : (outcome.reason ?? "Provider state is still uncertain.")
+        } catch {
+            error = "Provider repair could not be verified. Source scheduling remains held."
+        }
     }
     private func reconcile(_ id: String) async {
         guard !busy, let client else { return }

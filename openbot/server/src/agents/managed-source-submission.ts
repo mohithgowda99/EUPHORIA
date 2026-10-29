@@ -24,7 +24,9 @@ export async function submitManagedSourceInput(input: {
   scope: ManagedSourceScope;
   runId: string;
   message: string;
-  definition: { model: string; instructions: string; tools: unknown[]; reasoningEffort?: string; verbosity?: string };
+  definition: { model: string; instructions: string; tools: unknown[]; reasoningEffort?: string; verbosity?: string;
+    environment?:{type:"openai_hosted";container_size:"small";network:{access:"disabled"}};
+    multiAgent?:{enabled:true;max_concurrent_subagents:number} };
   links: {
     reserve(scope: ManagedSourceScope, key: string): Promise<
       { create: true; providerSessionId: null } |
@@ -51,10 +53,12 @@ export async function submitManagedSourceInput(input: {
     /** Managed session SSE returns actual session.created and root turn.created
      * identities; no turn is inferred from the session's latest history.
      */
-    createSessionStream?(initial: {model:string;instructions:string;tools:unknown[];input:string},
+    createSessionStream?(initial: {model:string;instructions:string;tools:unknown[];input:string;
+      environment?:unknown;multiAgent?:unknown},
       key:string):Promise<{close():void;events:AsyncIterable<unknown>}>;
     createSession(
-      initial: { model: string; instructions: string; tools: unknown[]; input: string },
+      initial: { model: string; instructions: string; tools: unknown[]; input: string;
+        environment?:unknown;multiAgent?:unknown },
       key: string,
     ): Promise<{ id?: string }>;
     sendMessageAndObserve?(sessionID:string,message:string,key:string,onRoot:(event:any)=>Promise<void>):Promise<void>;

@@ -4,6 +4,7 @@ import {
   type DeliveryBinding,
   type DeliveryInbox,
   type DeliveryOutbox,
+  type PushDevice,
   DeliveryProviderError,
 } from "../src/delivery/types";
 
@@ -26,8 +27,14 @@ function fixture(
   override: Partial<DeliveryBinding> = {},
   turnHook?: (router: ReturnType<typeof createDeliveryRouter>) => Promise<void>,
 ) {
-  const ownedBinding = { ...binding, ...override };
-  const inbox: DeliveryInbox = {
+  const ownedBinding = {
+    ...binding, ...override,
+    mentionId: override.mentionId ?? null,
+    optedOutAt: override.optedOutAt ?? null,
+    createdAt: new Date(0),
+  };
+  const inbox: DeliveryInbox & {realm: string; createdAt: Date} = {
+    realm: "T", createdAt: new Date(0),
     ...scope,
     id: "in",
     bindingId: "binding",
@@ -37,7 +44,8 @@ function fixture(
     state: "queued",
     error: null,
   };
-  const outbound: DeliveryOutbox = {
+  const outbound: DeliveryOutbox & {dedupeKey: string; createdAt: Date} = {
+    dedupeKey: "fixture-out", createdAt: new Date(0),
     ...scope,
     id: "out",
     bindingId: "binding",
@@ -68,7 +76,7 @@ function fixture(
         : null,
     binding: async () => ownedBinding,
     bindingsFor: async () => [ownedBinding],
-    devices: async () => [],
+    devices: async (): Promise<PushDevice[]> => [],
     offerInbox: async (input: unknown) => {
       offered.push(input);
       return { queued: true, id: "in" };
@@ -82,7 +90,7 @@ function fixture(
       return outbound;
     },
     outbox: async () => outbound,
-    startOutbox: async () => outbound,
+    startOutbox: async (): Promise<typeof outbound | null> => outbound,
     setOutbox: async (
       _id: string,
       state: string,

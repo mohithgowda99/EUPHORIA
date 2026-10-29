@@ -15,8 +15,8 @@ const url=process.env.TEST_DATABASE_URL;
 for(const effect of ["read","write"] as const)test.skipIf(!url)(
   "source MCP "+effect+" requires exact grant/owner and one provider-correlated continuation",async()=>{
  const database=createDatabase(url!),actor={id:DEV_ACTOR.id,role:DEV_ACTOR.role};
- const sess="sess_"+crypto.randomUUID().replaceAll("-"),root="turn_"+crypto.randomUUID().replaceAll("-");
- const callID="call_"+crypto.randomUUID().replaceAll("-");
+ const sess="sess_"+crypto.randomUUID().replaceAll("-", ""),root="turn_"+crypto.randomUUID().replaceAll("-", "");
+ const callID="call_"+crypto.randomUUID().replaceAll("-", "");
  const call={type:"function_call",name:"euphoria_connected_mcp",turn_id:root,call_id:callID,
   arguments:{ref:"fixture/doc",args:{text:"approved fixture only"}}};
  let pending=true,executions=0,submissions=0,revoked=false;

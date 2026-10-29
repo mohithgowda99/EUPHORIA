@@ -41,7 +41,7 @@ export function createDeliveryStore(database: Database) {
         .from(deliveryBindings)
         .where(eq(deliveryBindings.ownerUserId, owner));
     },
-    async binding(id: string) {
+    async binding(id: string): Promise<DeliveryBinding | null> {
       return (
         (
           await database
@@ -56,7 +56,7 @@ export function createDeliveryStore(database: Database) {
       realm: string,
       identity: string,
       address?: string,
-    ) {
+    ): Promise<DeliveryBinding | null> {
       return (
         (
           await database
@@ -231,7 +231,7 @@ export function createDeliveryStore(database: Database) {
         );
       return device;
     },
-    async devices(owner: string) {
+    async devices(owner: string): Promise<PushDevice[]> {
       return database
         .select()
         .from(pushDevices)
@@ -242,7 +242,7 @@ export function createDeliveryStore(database: Database) {
           ),
         );
     },
-    async device(id: string) {
+    async device(id: string): Promise<typeof pushDevices.$inferSelect | null> {
       return (
         (
           await database
@@ -271,7 +271,7 @@ export function createDeliveryStore(database: Database) {
         externalId: string;
         text: string;
       },
-    ) {
+    ): Promise<typeof deliveryInbox.$inferSelect | null> {
       const [row] = await database
         .insert(deliveryInbox)
         .values({ ...input, id: randomUUID(), state: "running" })
@@ -404,7 +404,7 @@ export function createDeliveryStore(database: Database) {
         return row ?? null;
       });
     },
-    async startOutbox(id: string) {
+    async startOutbox(id: string): Promise<typeof deliveryOutbox.$inferSelect | null> {
       return (
         (
           await database

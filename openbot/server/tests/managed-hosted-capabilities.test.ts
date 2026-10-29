@@ -1,7 +1,9 @@
 import {test,expect} from "bun:test";
 import {DENIED_HOSTED_CAPABILITIES,parseHostedCapabilities,hostedDefinition} from "../src/agents/managed-hosted-capabilities";
 test("hosted sandbox and subagents are denied by default",()=>{
- expect(hostedDefinition(DENIED_HOSTED_CAPABILITIES)).toEqual({environment:undefined,multiAgent:undefined});
+ const denied=hostedDefinition(DENIED_HOSTED_CAPABILITIES);
+ expect(denied.environment).toBeUndefined();
+ expect(denied.multiAgent).toBeUndefined();
 });
 test("sandbox is network-disabled and delegation cannot exceed three",()=>{
  expect(hostedDefinition(parseHostedCapabilities({sandbox:true,webSearch:true,browser:false,delegation:true,maxConcurrentSubagents:2})))

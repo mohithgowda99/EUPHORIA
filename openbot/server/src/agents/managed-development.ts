@@ -26,6 +26,9 @@ import {repeatAfterEach} from '../work/loop';
 import {createApprovalQuestions} from '../approvals/questions';
 import {MANAGED_ASK_PERSON_TOOL,parseManagedQuestionCall,parseManagedQuestion,parseManagedCorrelation,pendingManagedQuestion} from './managed-person-questions';
 import {createManagedTaskAdapter} from './managed-task-adapter';
+import {createManagedHostedCapabilities,parseHostedCapabilities,hostedDefinition,DENIED_HOSTED_CAPABILITIES} from './managed-hosted-capabilities';
+import {projectHostedArtifact,attachmentName} from './managed-hosted-artifacts';
+import {canManageAgent} from './profile-policy';
 import {createMemoryStore} from '../memory/store';
 import {createMemoryRoutes} from '../memory/routes';
 import {managedMemoryContext} from './managed-memory-context';
@@ -64,6 +67,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
  const links=createManagedSessionLinkStore(database),turns=createManagedInboxTurnStore(database,links);
  const registered=createRuntimeAgentLoader(database);
  const memory=createMemoryStore(database);
+ const hosted=createManagedHostedCapabilities(database);
  const actor={id:DEV_ACTOR.id,role:DEV_ACTOR.role};
  const scopeFor=async(owner:string,channelId:string,agentId:string)=>{
   if(owner!==actor.id)return null;
@@ -81,12 +85,20 @@ export async function createManagedDevelopment(input:{database:Database;provider
    if(!await authorised(scope))throw Error('Source access revoked');
    const resolved=await resolveManagedSourceBot({actor,botId:scope.agentId,profiles,registered,model:input.model,roleMessage:standingRoleMessage});
    const approvedMemory=managedMemoryContext(await memory.list(scope.ownerUserId),scope.agentId);
+   // Source ownership is stricter than merely having a team-visible Bot.
+   // Missing grant DENIES sandbox/delegation. Existing sessions keep their
+   // creation manifest, so changing these grants is forbidden after binding.
+   const activeProfile=await profiles.get(actor,scope.agentId);
+   const managedHosted=activeProfile?.ownerUserId===scope.ownerUserId&&
+     !activeProfile.systemOwned?hostedDefinition(await hosted.read(scope.ownerUserId,scope.agentId)):
+     hostedDefinition(DENIED_HOSTED_CAPABILITIES);
    const nativeMCP=input.plugins?await selectNativeReadOnlyMCP(input.plugins,scope.agentId,input.nativeReadOnlyMCPOrigins??[]):{tools:[],nativeRefs:[]};
    const connectedInventory=input.plugins?await managedMCPInventory(input.plugins,scope.agentId,nativeMCP.nativeRefs):'';
    await channels.recordActivity(actor,scope.channelId,{text:scope.text,agentId:null,at:new Date()},{id:'delivery-input:'+scope.runId});
    await submitManagedSourceInput({scope:{ownerUserId:scope.ownerUserId,channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId},
     runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory+connectedInventory,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[]),
-       ...(input.allowWebSearch?[{type:'web_search',mode:'live',context_size:'low'}]:[]),...nativeMCP.tools]},links,turns,provider});
+       ...(input.allowWebSearch?[{type:'web_search',mode:'live',context_size:'low'}]:[]),...nativeMCP.tools],
+       ...managedHosted},links,turns,provider});
    return {replyText:'',pending:true};
   }});
  const app=new Hono<{Variables:AppVariables}>();
@@ -192,6 +204,93 @@ export async function createManagedDevelopment(input:{database:Database;provider
  app.route('/api/openduet/tasks',managedTasks.routes);
  app.route('/api/openduet/tasks',managedTasks.extras);
  app.route('/api/proactive/suggestions',managedTasks.suggestions);
+ // Hosted code execution and managed delegation are OPT-IN on an original
+ // source-owned Bot, never inferred from a chat prompt or A2UI action.
+ const hostedOwner=async(userID:string,botID:string)=>{
+  const profile=await profiles.get(actor,botID);
+  return userID===actor.id&&profile?.id===botID&&
+    profile.ownerUserId===userID&&canManageAgent(actor,profile);
+ };
+ const hostedLocked=async(owner:string,botID:string)=>{
+  const [row]=await database.select({session:managedAgentSessionLinks.providerSessionId})
+    .from(managedAgentSessionLinks)
+    .where(and(eq(managedAgentSessionLinks.ownerUserId,owner),eq(managedAgentSessionLinks.botId,botID))).limit(1);
+  // Even a null session is a pending create and cannot safely be reconfigured.
+  return !!row;
+ };
+ app.get('/api/agents/:id/hosted-capabilities',requireUser,async c=>{
+  const botID=c.req.param('id');
+  if(!await hostedOwner(c.var.actor.id,botID))return c.json({error:'Bot cannot be managed'},403);
+  return c.json({capabilities:await hosted.read(c.var.actor.id,botID),
+    locked:await hostedLocked(c.var.actor.id,botID)});
+ });
+ app.put('/api/agents/:id/hosted-capabilities',requireUser,async c=>{
+  const botID=c.req.param('id'),owner=c.var.actor.id;
+  if(!await hostedOwner(owner,botID))return c.json({error:'Bot cannot be managed'},403);
+  let config;
+  try{config=parseHostedCapabilities(await c.req.json());}
+  catch{return c.json({error:'Invalid hosted tool configuration'},400);}
+  if(await hostedLocked(owner,botID))return c.json({error:
+   'Existing hosted session is immutable. Configure a new Bot before enabling or revoking hosted capabilities.'},409);
+  return c.json({capabilities:await hosted.write(owner,botID,config),locked:false});
+ });
+
+ // Artifacts are read from provider, but source identity and root turn are
+ // verified against original Inbox first. No provider URL or credential leaves
+ // this endpoint; unsupported provider artifact shapes are not exposed.
+ async function sourceArtifacts(owner:string,channelID:string,botID:string){
+  const scope=await scopeFor(owner,channelID,botID);
+  if(!scope)throw Error('Original source Bot or channel access revoked');
+  const link=await links.read({ownerUserId:owner,channelId:channelID,botId:botID,threadId:scope.threadId});
+  if(!link?.providerSessionId)return{items:[],sessionID:null};
+  const roots=await database.select({root:managedAgentInboxTurns.rootTurnId})
+    .from(managedAgentInboxTurns).innerJoin(deliveryInbox,eq(deliveryInbox.id,managedAgentInboxTurns.inboxId))
+    .where(and(eq(deliveryInbox.ownerUserId,owner),eq(deliveryInbox.channelId,channelID),
+      eq(deliveryInbox.agentId,botID),eq(deliveryInbox.threadId,scope.threadId),
+      eq(managedAgentInboxTurns.providerSessionId,link.providerSessionId),eq(deliveryInbox.state,'sent')))
+    .limit(1000);
+  const allowedRoots=new Set(roots.flatMap(x=>x.root?[x.root]:[]));
+  if(!allowedRoots.size)return{items:[],sessionID:link.providerSessionId};
+  const items:ReturnType<typeof projectHostedArtifact>[]=[];
+  let after:string|undefined;
+  for(let pageNo=0;pageNo<10;pageNo++){
+   const page=await provider.listArtifacts(link.providerSessionId,{limit:100,order:'desc',after});
+   if(!Array.isArray(page?.data)||page.data.length>100)throw Error('Invalid hosted artifact listing');
+   for(const raw of page.data){const artifact=projectHostedArtifact(raw,allowedRoots);
+    if(artifact)items.push(artifact);}
+   if(!page.has_more){
+    if(!await authorised(scope))throw Error('Original Bot permission revoked');
+    return{items:items.slice(0,200),sessionID:link.providerSessionId};
+   }
+   if(typeof page.last_id!=='string'||page.last_id===after)throw Error('Invalid hosted artifact cursor');
+   after=page.last_id;
+  }
+  throw Error('Artifact listing incomplete; refusing truncated authorization');
+ }
+ app.get('/api/delivery/conversations/:id/artifacts',requireUser,async c=>{
+  const channelID=c.req.param('id'),botID=c.req.query('agentId')??'';
+  const found=await sourceArtifacts(c.var.actor.id,channelID,botID);
+  return c.json({artifacts:found.items});
+ });
+ app.get('/api/delivery/conversations/:id/artifacts/:artifactId/content',requireUser,async c=>{
+  const channelID=c.req.param('id'),botID=c.req.query('agentId')??'',artifactID=c.req.param('artifactId');
+  const found=await sourceArtifacts(c.var.actor.id,channelID,botID);
+  const owned=found.items.find(x=>x?.id===artifactID);
+  if(!owned||!found.sessionID)return c.json({error:'Artifact not available in this original conversation'},404);
+  const remote=await provider.retrieveArtifact(found.sessionID,artifactID);
+  if(remote?.turn_id!==owned.turnId||remote?.id!==owned.id)
+   return c.json({error:'Artifact provider identity changed'},409);
+  const scope=await scopeFor(c.var.actor.id,channelID,botID);
+  if(!scope)return c.json({error:'Original access revoked'},403);
+  const content=await provider.retrieveArtifactContent(found.sessionID,artifactID,{maxBytes:owned.sizeBytes||8*1024*1024});
+  if(!await authorised(scope))return c.json({error:'Access revoked during provider read'},403);
+  return new Response(content.bytes,{
+   status:200,headers:{'Content-Type':'application/octet-stream',
+    'Content-Disposition':'attachment; filename="'+attachmentName(owned.filename)+'"',
+    'X-Content-Type-Options':'nosniff','Cache-Control':'private, no-store',
+    'Content-Security-Policy':"default-src 'none'; sandbox"}
+  });
+ });
  app.route('/api/agents',createAgentRoutes(profiles,requireUser,false,undefined,undefined,undefined,true));
  app.route('/api/channels',createChannelRoutes(channels,requireUser));
  app.route('/api/delivery',createDeliveryRoutes({store,router,requireUser,scopeFor,

@@ -58,7 +58,7 @@ jobs:
       # visible to the next test's deterministic provider fixture.
       - name: Section 2 strict provider evidence and APNs offline regressions
         working-directory: openbot
-        run: bun test server/tests/managed-automation-identity.test.ts server/tests/managed-routine-webhook.test.ts
+        run: bun test server/tests/managed-automation-identity.test.ts server/tests/managed-routine-webhook.test.ts server/tests/managed-schedule-proposal.test.ts
       - name: Run isolated source integration suites
         working-directory: openbot
         run: |

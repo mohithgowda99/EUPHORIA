@@ -383,6 +383,8 @@ export async function createManagedDevelopment(input:{database:Database;provider
   if(!scope)return c.json({error:'Original access revoked'},403);
   const content=await provider.retrieveArtifactContent(found.sessionID,artifactID,{maxBytes:owned.sizeBytes||8*1024*1024});
   if(!await authorised(scope))return c.json({error:'Access revoked during provider read'},403);
+  if(content.bytes.length!==owned.sizeBytes)
+   return c.json({error:'Hosted artifact bytes differ from immutable provider metadata'},502);
   return new Response(content.bytes,{
    status:200,headers:{'Content-Type':'application/octet-stream',
     'Content-Disposition':'attachment; filename="'+attachmentName(owned.filename)+'"',

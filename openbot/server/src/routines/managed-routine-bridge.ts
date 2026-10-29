@@ -254,5 +254,21 @@ export function createManagedRoutineBridge(input:{
   }
   return {inspected,unverified};
  }
- return {migrate,change,edit,manual,sync,owned};
+ async function state(owner:string,id:string) {
+  const {row}=await owned(owner,id);
+  const invocations=await db.select().from(managedRoutineInvocations)
+    .where(eq(managedRoutineInvocations.routineId,id))
+    .orderBy(sql`${managedRoutineInvocations.createdAt} desc`).limit(50);
+  return {backend:row.executionBackend,automationId:row.providerAutomationId,
+    syncOperation:row.providerSyncOperation,
+    invocations:invocations.map(x=>({
+      id:x.receiptKey,invocationId:x.providerInvocationId,
+      sessionId:x.providerSessionId,rootTurnId:x.rootTurnId,
+      deliveryStatus:x.deliveryStatus,executionStatus:x.executionStatus,
+      originalRunId:x.originalRunId,source:x.source,createdAt:x.createdAt.toISOString()
+    }))};
+ }
+ return {migrate,change,edit,manual,sync,owned,state};
 }
+
+export type ManagedRoutineBridge=ReturnType<typeof createManagedRoutineBridge>;

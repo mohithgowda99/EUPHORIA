@@ -6,27 +6,46 @@ import SwiftUI
 /// its existing Better Auth sign-in. Their provider execution still needs the
 /// CopilotKit-to-Agents API adapter and actual iOS acceptance validation.
 struct ContentView: View {
+    @State private var selectedTab = "chat"
+    @State private var openPushApprovals = false
+
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             NavigationStack {
                 SourceConversationsHomeView()
             }
             .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
+            .tag("chat")
 
             NavigationStack {
                 SourceTasksView()
             }
             .tabItem { Label("Tasks", systemImage: "checklist") }
+            .tag("tasks")
 
             NavigationStack {
                 SourceBotsView()
             }
             .tabItem { Label("Bots", systemImage: "person.2.crop.square.stack") }
+            .tag("bots")
 
             NavigationStack {
                 SourceMoreView()
             }
             .tabItem { Label("More", systemImage: "ellipsis.circle") }
+            .tag("more")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .euphoriaPushOpened)) { notification in
+            let kind = notification.userInfo?["kind"] as? String
+            if kind == "approval" || kind == "question" {
+                selectedTab = "more"
+                openPushApprovals = true
+            } else {
+                selectedTab = "chat"
+            }
+        }
+        .sheet(isPresented: $openPushApprovals) {
+            NavigationStack { SourceApprovalsView() }
         }
     }
 }

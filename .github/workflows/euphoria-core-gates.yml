@@ -51,12 +51,11 @@ jobs:
       - name: Test original source managed adapters
         working-directory: openbot
         run: |
-          bun test server/tests/managed-memory-context.test.ts \
-            server/tests/managed-connected-mcp.test.ts \
-            server/tests/managed-person-questions.integration.test.ts \
-            server/tests/managed-source-tasks.integration.test.ts \
-            server/tests/managed-source-mcp.integration.test.ts \
-            server/tests/managed-completed-jsonb.integration.test.ts
+          bun test server/tests/managed-memory-context.test.ts server/tests/managed-connected-mcp.test.ts
+          bun test server/tests/managed-person-questions.integration.test.ts
+          bun test server/tests/managed-source-tasks.integration.test.ts
+          bun test server/tests/managed-source-mcp.integration.test.ts
+          bun test server/tests/managed-completed-jsonb.integration.test.ts
       - name: Check gateway regressions
         working-directory: gateway
         run: |

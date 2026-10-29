@@ -1,0 +1,258 @@
+import {and,eq,isNull,sql} from "drizzle-orm";
+import type {Database} from "../db/client";
+import {managedAgentSessionLinks,managedRoutineInvocations,routineRuns,routines} from "../db/schema";
+import {nextOccurrence} from "./schedule";
+import {RoutineNotFoundError,RoutineRefusedError} from "./store";
+import {managedTurnOutcome} from "../agents/managed-source-outcome";
+
+/** Explicit bridge, not a new scheduler. Existing source RoutineStore and
+ * routine_runs remain authoritative. The cloud creates invocations. */
+export type ManagedAutomationProvider={
+  createAutomation(input:{name:string;sessionID:string;instructions:string;expression:string;timezone:string},
+    key:string):Promise<{id?:string}>;
+  retrieveAutomation(id:string):Promise<{id?:string;status?:string;target?:{session_id?:string}}>;
+  listAutomations(options?:{sessionID?:string;after?:string;limit?:number}):Promise<{data:unknown[];has_more?:boolean;last_id?:string}>;
+  updateAutomation(id:string,patch:Record<string,unknown>,key:string):Promise<unknown>;
+  pauseAutomation(id:string,key:string):Promise<unknown>;
+  resumeAutomation(id:string,key:string):Promise<unknown>;
+  deleteAutomation(id:string):Promise<unknown>;
+  invokeAutomation(id:string,key:string):Promise<{id?:string;session_id?:string;status?:string}>;
+  listAutomationInvocations(id:string,options?:{after?:string;limit?:number}):Promise<{data:unknown[];has_more?:boolean;last_id?:string}>;
+  retrieveSession(id:string):Promise<{id?:string;status?:unknown;required_actions?:unknown[]}>;
+  retrieveTurn(id:string,turnID:string):Promise<{id?:string;session_id?:string;status?:string;subagent_id?:string|null}>;
+  listTurnItems(id:string,turnID:string,options:{order:"asc";limit:100;after?:string}):
+    Promise<{data?:{type?:string;role?:string;status?:string;turn_id?:string;content?:unknown}[];has_more?:boolean;last_id?:string|null}>;
+};
+const validID=(value:string)=>/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value);
+const bounded=(value:string,n:number)=>typeof value==="string"&&value.trim().length>0&&value.length<=n;
+
+/** A source routine can become provider-owned only with a saved exact Bot
+ * session, current channel permission and a separately VERIFIED hard budget.
+ * The latter is deliberately an injected DENY gate by default. */
+export function createManagedRoutineBridge(input:{
+  database:Database;provider:ManagedAutomationProvider;
+  authorise(scope:{ownerUserId:string;channelId:string;agentId:string;threadId:string}):Promise<boolean>;
+  assertSpendingBoundary():Promise<void>;
+  publishResult?(scope:{ownerUserId:string;channelId:string;agentId:string;threadId:string},
+    text:string,receiptId:string):Promise<void>;
+}) {
+ const {database:db,provider}=input;
+ async function owned(owner:string,id:string) {
+  if(!validID(id)||!owner)throw new RoutineNotFoundError();
+  const [row]=await db.select().from(routines)
+    .where(and(eq(routines.id,id),eq(routines.ownerUserId,owner))).limit(1);
+  if(!row)throw new RoutineNotFoundError();
+  const [link]=await db.select().from(managedAgentSessionLinks).where(and(
+    eq(managedAgentSessionLinks.ownerUserId,owner),
+    eq(managedAgentSessionLinks.channelId,row.channelId),
+    eq(managedAgentSessionLinks.botId,row.agentId))).limit(1);
+  const scope={ownerUserId:owner,channelId:row.channelId,agentId:row.agentId,
+    threadId:link?.sourceThreadId??""};
+  if(!link?.providerSessionId||!await input.authorise(scope))
+    throw new RoutineRefusedError("Start an authorized managed Bot conversation before migrating this routine.");
+  if(row.providerSessionId&&row.providerSessionId!==link.providerSessionId)
+    throw new RoutineRefusedError("The original Bot session changed; managed schedule is frozen.");
+  return {row,scope,sessionID:link.providerSessionId};
+ }
+ async function claim(owner:string,id:string,backend:"source"|"managed",
+    operation:string,key:string) {
+  return db.transaction(async tx=>{
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"managed-routine:"+id},0))`);
+    const [row]=await tx.select().from(routines)
+      .where(and(eq(routines.id,id),eq(routines.ownerUserId,owner))).limit(1);
+    if(!row)throw new RoutineNotFoundError();
+    if(row.executionBackend!==backend)
+      throw new RoutineRefusedError("Routine is already moving between execution backends. Reconcile it first.");
+    if(backend==="source"){
+      const [active]=await tx.select({id:routineRuns.id}).from(routineRuns).where(and(
+        eq(routineRuns.routineId,id),isNull(routineRuns.status),
+        sql`${routineRuns.startedAt} > now() - interval '10 minutes'`)).limit(1);
+      if(active)throw new RoutineRefusedError("Wait for the original source run to finish before migrating.");
+    }
+    const [changed]=await tx.update(routines).set({
+      executionBackend:backend==="source"?"provisioning":"sync_unknown",
+      providerSyncOperation:operation,providerSyncKey:key,providerSyncAt:new Date()
+    }).where(and(eq(routines.id,id),eq(routines.ownerUserId,owner),
+      eq(routines.executionBackend,backend))).returning({id:routines.id});
+    if(!changed)throw new RoutineRefusedError("Concurrent schedule transition; reconcile first.");
+    return row;
+  });
+ }
+ function keyFor(id:string,operation:string,nonce:string) {
+  if(!validID(nonce))throw new RoutineRefusedError("Invalid request idempotency key");
+  return "source_"+operation+"_"+id+"_"+nonce;
+ }
+ async function settle(owner:string,id:string,key:string,patch:Record<string,unknown>) {
+  const [changed]=await db.update(routines).set({
+    ...patch,executionBackend:"managed",providerSyncKey:null,
+    providerSyncOperation:null,providerSyncAt:null,updatedAt:new Date()
+  }).where(and(eq(routines.ownerUserId,owner),eq(routines.id,id),
+    eq(routines.providerSyncKey,key))).returning({id:routines.id});
+  if(!changed)throw new Error("Provider accepted request but source mapping is uncertain; reconcile, never retry");
+ }
+ async function migrate(owner:string,id:string,nonce:string) {
+  const {row,sessionID}=await owned(owner,id);
+  if(row.executionBackend!=="source")throw new RoutineRefusedError("This routine has already been migrated or reserved.");
+  if(!row.enabled)throw new RoutineRefusedError("Enable the original routine before migrating, or leave it paused.");
+  await input.assertSpendingBoundary();
+  const key=keyFor(id,"create",nonce);
+  await claim(owner,id,"source","create",key); // Disable source sweep before provider create.
+  // Stable provider name supports recovery if its POST response disappears.
+  const response=await provider.createAutomation({name:"EUPHORIA:"+id,sessionID,
+    instructions:row.instruction,expression:row.cron,timezone:row.timezone},key);
+  if(!response?.id||!validID(response.id))
+    throw new Error("Automation creation outcome unverified; source scheduler remains stopped");
+  await settle(owner,id,key,{providerAutomationId:response.id,providerSessionId:sessionID});
+  return {automationId:response.id,state:"managed"};
+ }
+ async function change(owner:string,id:string,operation:"pause"|"resume"|"delete",
+    nonce:string) {
+  const {row}=await owned(owner,id);
+  if(row.executionBackend!=="managed"||!row.providerAutomationId)
+    throw new RoutineRefusedError("Provider mapping is not ready; reconcile before modifying.");
+  if(operation==="resume")await input.assertSpendingBoundary();
+  const key=keyFor(id,operation,nonce);
+  await claim(owner,id,"managed",operation,key);
+  if(operation==="pause")await provider.pauseAutomation(row.providerAutomationId,key);
+  if(operation==="resume")await provider.resumeAutomation(row.providerAutomationId,key);
+  if(operation==="delete"){
+    await provider.deleteAutomation(row.providerAutomationId);
+    // Original deletion semantics cascade original run history. Do not
+    // delete until provider confirms future invocations are stopped.
+    const deleted=await db.delete(routines).where(and(eq(routines.id,id),
+      eq(routines.ownerUserId,owner),eq(routines.providerSyncKey,key))).returning({id:routines.id});
+    if(!deleted.length)throw new Error("Provider deleted, original schedule deletion requires reconciliation");
+    return {deleted:true};
+  }
+  await settle(owner,id,key,{enabled:operation==="resume"});
+  return {enabled:operation==="resume"};
+ }
+ async function edit(owner:string,id:string,patch:{
+   instruction?:string;cron?:string;timezone?:string},nonce:string) {
+  const {row,sessionID}=await owned(owner,id);
+  if(row.executionBackend!=="managed"||!row.providerAutomationId)
+    throw new RoutineRefusedError("Managed mapping is not ready; reconcile before editing.");
+  if(!patch||Object.keys(patch).some(k=>!["instruction","cron","timezone"].includes(k)))
+    throw new RoutineRefusedError("Unsupported routine edit");
+  const instruction=patch.instruction??row.instruction;
+  const cron=patch.cron??row.cron,timezone=patch.timezone??row.timezone;
+  if(!bounded(instruction,2000)||!bounded(cron,80)||!bounded(timezone,64))
+    throw new RoutineRefusedError("Invalid routine edit");
+  // Reuse original five-field cron and 15-minute cadence validation.
+  const next=nextOccurrence(cron,timezone,new Date());
+  await input.assertSpendingBoundary(); // A changed schedule can incur future charges.
+  const key=keyFor(id,"edit",nonce);
+  await claim(owner,id,"managed","edit",key);
+  await provider.updateAutomation(row.providerAutomationId,{
+    expression:cron,timezone,
+    target:{type:"existing_session",session_id:sessionID,instructions:instruction}
+  },key);
+  await settle(owner,id,key,{instruction,cron,timezone,nextRunAt:next});
+  return {updated:true};
+ }
+ async function manual(owner:string,id:string,nonce:string) {
+  const {row}=await owned(owner,id);
+  if(row.executionBackend!=="managed"||!row.providerAutomationId||!row.enabled)
+    throw new RoutineRefusedError("Manual run requires an enabled, reconciled managed routine.");
+  await input.assertSpendingBoundary();
+  const key=keyFor(id,"manual",nonce);
+  const runID="routine_run_"+crypto.randomUUID();
+  const reserved=await db.transaction(async tx=>{
+    const [fresh]=await tx.select({executionBackend:routines.executionBackend,
+      enabled:routines.enabled}).from(routines).where(and(eq(routines.id,id),
+      eq(routines.ownerUserId,owner))).limit(1);
+    if(fresh?.executionBackend!=="managed"||!fresh.enabled)
+      throw new RoutineRefusedError("Schedule changed; refresh before running.");
+    const [inserted]=await tx.insert(managedRoutineInvocations).values({
+      receiptKey:key,routineId:id,source:"run_now",originalRunId:runID,
+      deliveryStatus:"unknown",executionStatus:"unverified"
+    }).onConflictDoNothing().returning({receiptKey:managedRoutineInvocations.receiptKey});
+    if(!inserted)return false;
+    await tx.insert(routineRuns).values({id:runID,routineId:id,source:"run_now"});
+    return true;
+  });
+  if(!reserved)return {accepted:false,receiptKey:key,uncertain:true}; // never replay.
+  const response=await provider.invokeAutomation(row.providerAutomationId,key);
+  if(!response.id||!validID(response.id))throw new Error("Manual invocation outcome unknown; inspect provider");
+  await db.update(managedRoutineInvocations).set({providerInvocationId:response.id,
+    providerSessionId:response.session_id??null,deliveryStatus:response.status??"unknown",
+    updatedAt:new Date()}).where(eq(managedRoutineInvocations.receiptKey,key));
+  return {accepted:true,receiptKey:key,invocationId:response.id};
+ }
+ async function sync(owner:string,id:string) {
+  const {row,scope}=await owned(owner,id);
+  if(!row.providerAutomationId||!["managed","sync_unknown"].includes(row.executionBackend))
+    return {inspected:0,unverified:0};
+  const page=await provider.listAutomationInvocations(row.providerAutomationId,{limit:30});
+  let inspected=0,unverified=0;
+  for(const raw of page.data.slice(0,30)) {
+    if(!raw||typeof raw!=="object")continue;
+    const item=raw as {id?:string;status?:string;session_id?:string|null;turn_id?:string|null;
+      source?:{type?:string}};
+    if(!item.id||!validID(item.id))continue;
+    const key="provider_"+item.id;
+    const runID="routine_run_"+item.id;
+    const source=item.source?.type==="manual"?"run_now":"schedule";
+    // Unique receipt & source run are inserted together; across restarts a
+    // provider invocation can never produce two original runs.
+    await db.transaction(async tx=>{
+      const [created]=await tx.insert(managedRoutineInvocations).values({
+        receiptKey:key,routineId:id,providerInvocationId:item.id,
+        providerSessionId:item.session_id??null,deliveryStatus:item.status??"unknown",
+        source,originalRunId:runID
+      }).onConflictDoNothing().returning({receiptKey:managedRoutineInvocations.receiptKey});
+      if(created)await tx.insert(routineRuns).values({id:runID,routineId:id,source});
+    });
+    const [receipt]=await db.select().from(managedRoutineInvocations).where(
+      eq(managedRoutineInvocations.providerInvocationId,item.id)).limit(1);
+    if(!receipt||receipt.routineId!==id)throw new Error("Invocation ownership collision");
+    inspected++;
+    const delivered=item.status==="completed"&&item.session_id&&validID(item.session_id);
+    // No session-only inference: completed invocation is *delivery*, not a
+    // completed turn. Missing root identity remains clearly unverified.
+    if(!delivered||!item.turn_id||!validID(item.turn_id)){
+      unverified++;
+      continue;
+    }
+    const session=await provider.retrieveSession(item.session_id!);
+    const turn=await provider.retrieveTurn(item.session_id!,item.turn_id);
+    if(session.id!==item.session_id||turn.id!==item.turn_id||
+       turn.session_id!==item.session_id||turn.subagent_id)
+      throw new Error("Provider invocation/root identity mismatch");
+    const messages:NonNullable<Awaited<ReturnType<typeof provider.listTurnItems>>["data"]>=[];
+    let after:string|undefined,complete=false;
+    for(let pageIndex=0;pageIndex<10;pageIndex++){
+      const items=await provider.listTurnItems(item.session_id!,item.turn_id,{order:"asc",limit:100,...(after?{after}:{})});
+      if(!Array.isArray(items.data)||items.data.length>100)throw new Error("Invalid provider turn items");
+      messages.push(...items.data);
+      if(!items.has_more){complete=true;break;}
+      if(!items.last_id||!validID(items.last_id)||items.last_id===after)break;
+      after=items.last_id;
+    }
+    if(!complete){unverified++;continue;}
+    const outcome=managedTurnOutcome({sessionStatus:session.status,turnID:item.turn_id,
+      turns:{data:[turn]},items:{data:messages},requiredActions:session.required_actions});
+    if(outcome.kind==="pending"||outcome.kind==="waiting_for_human"){unverified++;continue;}
+    if(!await input.authorise(scope))throw new Error("Source authorization revoked during completion");
+    if(outcome.kind==="completed"&&outcome.replyText.trim()&&!input.publishResult){
+      unverified++;continue;
+    }
+    if(outcome.kind==="completed"&&!outcome.replyText.trim()){unverified++;continue;}
+    if(outcome.kind==="completed"){
+      await input.publishResult!(scope,outcome.replyText,"managed-routine:"+item.id);
+    }
+    await db.transaction(async tx=>{
+      if(receipt.originalRunId)await tx.update(routineRuns).set({
+        status:outcome.kind==="failed"?"failed":"succeeded",finishedAt:new Date(),
+        ...(outcome.kind==="failed"?{error:"Provider turn "+outcome.reason}:{}),
+      }).where(and(eq(routineRuns.id,receipt.originalRunId),isNull(routineRuns.status)));
+      await tx.update(managedRoutineInvocations).set({
+        rootTurnId:item.turn_id,executionStatus:outcome.kind,
+        deliveryStatus:"completed",updatedAt:new Date()
+      }).where(eq(managedRoutineInvocations.receiptKey,receipt.receiptKey));
+    });
+  }
+  return {inspected,unverified};
+ }
+ return {migrate,change,edit,manual,sync,owned};
+}

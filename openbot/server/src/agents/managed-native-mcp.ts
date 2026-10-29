@@ -101,7 +101,7 @@ export async function selectNativeReadOnlyMCP(
       .filter(
         (t) =>
           t.serverId === server.id &&
-          t.ref === server.id + "/" + t.name &&
+          t.ref === `${server.id}/${t.name}` &&
           granted.has(t.ref) &&
           t.effect === "read" &&
           !t.destructive &&

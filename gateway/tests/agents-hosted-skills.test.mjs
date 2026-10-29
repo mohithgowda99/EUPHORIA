@@ -14,9 +14,8 @@ test("pinned provider skill manifests, but no arbitrary zip/vault/unknown fields
  const approved={type:"openai_hosted",container_size:"small",
   network:{access:"disabled"},
   skills:[{type:"skill_reference",skill_id:"skill_ABCDEF0123",version:"3"}]};
- const stream=await client.createSessionStream({...base,environment:approved},"approved_skill_1");
- stream.close();
- assert.deepEqual(called[0].body.environment,approved);
+ await assert.rejects(client.createSessionStream({...base,environment:approved},"approved_skill_1"), /capability directories/);
+ assert.equal(called.length,0);
  let issued=called.length;
  for(const skills of [
   [{type:"skill_reference",skill_id:"skill_ABCDEF0123",version:"latest"}],

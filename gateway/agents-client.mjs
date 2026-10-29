@@ -216,7 +216,7 @@ export class AgentsClient {
   async listEnvironmentFiles(environmentID,{page,limit=100,path='/workspace'}={}){
     identifier(environmentID);
     if(!Number.isInteger(limit)||limit<1||limit>100||
-       typeof path!=='string'||!/^\\/workspace(?:\\/[A-Za-z0-9._-]+)*$/.test(path)||
+       typeof path!=='string'||!/^\/workspace(?:\/[A-Za-z0-9._-]+)*$/.test(path)||
        page!==undefined&&(typeof page!=='string'||page.length>512||!page))
       throw Error('Invalid environment file listing');
     const query=new URLSearchParams({limit:String(limit),order:'desc',path});
@@ -583,22 +583,11 @@ function checkedEnvironment(value) {
   }
   if(Object.keys(policy).length!==1||policy.access!=='disabled')
     throw Error('Hosted code sandbox network access must be disabled');
-  const skills=value.skills===undefined?[]:value.skills;
-  if(!Array.isArray(skills)||skills.length>4)throw Error('Unsupported hosted skill count');
-  const seen=new Set();
-  const pinned=skills.map(entry=>{
-    if(!entry||typeof entry!=='object'||Array.isArray(entry)||
-       Object.keys(entry).sort().join(',')!=='skill_id,type,version'||
-       entry.type!=='skill_reference'||
-       typeof entry.skill_id!=='string'||!/^skill_[A-Za-z0-9_-]{4,56}$/.test(entry.skill_id)||
-       typeof entry.version!=='string'||!/^[1-9][0-9]{0,8}$/.test(entry.version)||
-       seen.has(entry.skill_id))
-      throw Error('Unsupported hosted skill reference');
-    seen.add(entry.skill_id);
-    return{type:'skill_reference',skill_id:entry.skill_id,version:entry.version};
-  });
-  return {type:'openai_hosted',container_size:'small',network:{access:'disabled'},
-    ...(pinned.length?{skills:pinned}:{})};
+  // Agents API discovers sandbox capability directories. Responses shell skill
+  // attachments are a different contract; never issue an invalid paid request.
+  if (value.skills !== undefined)
+    throw Error('Agents API skills require sandbox capability directories; hosted skill references are unsupported');
+  return {type:'openai_hosted',container_size:'small',network:{access:'disabled'}};
 }
 function checkedDelegation(value) {
   if (value === undefined || value === null || value === false) return undefined;

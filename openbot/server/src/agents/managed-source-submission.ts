@@ -25,8 +25,10 @@ export async function submitManagedSourceInput(input: {
   runId: string;
   message: string;
   definition: { model: string; instructions: string; tools: unknown[]; reasoningEffort?: string; verbosity?: string;
-    environment?:{type:"openai_hosted";container_size:"small";network:{access:"disabled"};
-      skills?:{type:"skill_reference";skill_id:string;version:string}[]};
+    environment?:{type:"openai_hosted";container_size:"small";
+      network:{access:"disabled"}|{access:"restricted";allowed_domains:string[]};
+      skills?:{type:"skill_reference";skill_id:string;version:string}[];
+      desktop?:{enabled:true}};
     multiAgent?:{enabled:true;max_concurrent_subagents:number} };
   links: {
     reserve(scope: ManagedSourceScope, key: string): Promise<

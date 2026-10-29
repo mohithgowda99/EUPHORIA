@@ -1,3 +1,28 @@
+# EUPHORIA | Section 1 OpenAI-first implementation checkpoint | 2026-10-29
+
+**Current branch:** `feature/phase1-section1-openai-completion-20261029`
+
+The four Section 1 engineering workstreams are implemented in source code for the
+**constrained** release, reusing OpenAI managed sessions, sandbox, read-only public
+browser, provider-managed delegation, native tool approvals, skill references,
+provider artifacts and environment file inventory. Original OpenDuet handles
+only the product's identity, consent, connector grants, source Inbox and
+durable no-replay receipts. No second agent runner or vault has been built.
+
+The public browser is restricted to operator-approved documentation origins
+and each origin requires a native per-request user decision. Computer-based
+writes/account sign-in remain disabled; consequential writes use the original
+source-authorized MCP bridge instead. Direct subagent artifacts lacking a
+provable original root are not exposed; root publishes final delegated files.
+
+**No device build, live provider acceptance or paid inference was performed here.**
+Production Better Auth cutover still excluded; no merge to main.
+Previous `spend_control` incompatibility remains an explicit live-budget blocker.
+Read `docs/agents/EUPHORIA_SECTION1_OPENAI_COMPLETION_HANDOFF.md`
+before laptop verification. Section 2 is not implemented in this branch.
+
+---
+
 # EUPHORIA | Section 1 implementation continuation | 2026-10-29
 
 **New branch:** `feature/phase1-section1-lifecycle-20261029`, based on

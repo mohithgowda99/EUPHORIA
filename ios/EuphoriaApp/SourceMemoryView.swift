@@ -15,7 +15,7 @@ struct SourceMemoryView: View {
     var body: some View {
         List {
             Section {
-                Text("These are the memories in your original OpenDuet account. You can review, edit, disable or delete them.")
+                Text("These are the memories in your EUPHORIA account. You can review, edit, disable or delete them.")
                     .font(.caption).foregroundStyle(.secondary)
                 if client == nil {
                     Text("Sign in from Bots to connect your memory.")
@@ -79,7 +79,7 @@ struct SourceMemoryView: View {
         .navigationTitle("Memory")
         .refreshable { await reload() }
         .task { await reload() }
-        .confirmationDialog("Delete this memory from OpenDuet?", isPresented: Binding(
+        .confirmationDialog("Delete this memory from EUPHORIA?", isPresented: Binding(
             get: { pendingDeleteID != nil },
             set: { if !$0 { pendingDeleteID = nil } }
         ), titleVisibility: .visible) {
@@ -89,7 +89,7 @@ struct SourceMemoryView: View {
             }
             Button("Cancel", role: .cancel) { pendingDeleteID = nil }
         } message: {
-            Text("The original OpenDuet service controls deletion and any connected Intelligence mirror.")
+            Text("The EUPHORIA service controls deletion and any connected Intelligence mirror.")
         }
     }
 

@@ -53,7 +53,7 @@ export function parseManagedScheduleProposal(raw:unknown,now=Math.floor(Date.now
 export function parseManagedScheduleCall(raw:unknown):ManagedScheduleCall{
  if(!obj(raw)||raw.type!=="function_call"||raw.name!==MANAGED_PROPOSE_SCHEDULE_TOOL.name||
   !id(raw.call_id)||!id(raw.turn_id))throw Error("Uncorrelated Bot schedule proposal");
- return {type:"function_call",name:MANAGED_PROPOSE_SCHEDULE_TOOL.name,
+ return {type:"function_call",name:"euphoria_propose_schedule",
   call_id:raw.call_id,turn_id:raw.turn_id,
   arguments:parseManagedScheduleProposal(raw.arguments)};
 }

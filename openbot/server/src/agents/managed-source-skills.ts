@@ -28,7 +28,6 @@ export async function managedSourceSkillContext(
       continue;
     // A skill with declared tools must not be represented as fully installed
     // until every declared action is actually in the original current grant.
-    const refs = new Set(grants.tools.map((x) => x.ref));
     const required = Array.isArray(raw.tools) ? raw.tools : [];
     if (required.length > 0) continue; // Tool-dependent skills require a separate source tool binding.
     selected.push({

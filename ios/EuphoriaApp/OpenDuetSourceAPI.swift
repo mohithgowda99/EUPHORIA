@@ -1024,7 +1024,7 @@ private struct AnyEncodableSource: Encodable {
 }
 
 struct SourceCompletedVisual: Decodable, Sendable { let afterMessageID: String; let surface: VisualSurface; let selectedLabel: String? }
-struct SourceVisualResponse: Decodable, Sendable { let completedSurfaces: [SourceCompletedVisual]?; let surface: VisualSurface?; let completed: Bool?; let submissionUncertain: Bool?; let deliveryState: String?; let deliveryError: String? }
+struct SourceVisualResponse: Decodable, Sendable { let completedSurfaces: [SourceCompletedVisual]?; let surface: VisualSurface?; let completed: Bool?; let submissionUncertain: Bool?; let deliveryState: String?; let deliveryError: String?; let decisionRecoveryRequired: String? }
 extension OpenDuetSourceAPI {
     func sourceVisual(channelID: String, agentID: String) async throws -> SourceVisualResponse {
         let result: SourceVisualResponse = try await request(

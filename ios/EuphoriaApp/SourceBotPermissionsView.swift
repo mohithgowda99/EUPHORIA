@@ -52,7 +52,7 @@ struct SourceBotPermissionsView: View {
                     get: { hosted?.capabilities.browser ?? false },
                     set: { value in Task { await updateHosted(browser: value) } }
                 ))
-                .disabled(busy || hosted == nil || hosted?.locked == true || hosted?.capabilities.sandbox == true || hosted?.browserAvailable != true)
+                .disabled(busy || hosted == nil || hosted?.locked == true || (hosted?.capabilities.sandbox == true || hosted?.capabilities.delegation == true || hosted?.browserAvailable != true))
                 if hosted?.browserAvailable == false {
                     Text("Public browser is unavailable until the server operator enables vetted documentation origins.")
                         .font(.caption2).foregroundStyle(.secondary)

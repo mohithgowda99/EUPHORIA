@@ -44,6 +44,13 @@ import {
 } from "./managed-person-questions";
 import { createManagedTaskAdapter } from "./managed-task-adapter";
 import {
+  MANAGED_PROPOSE_SCHEDULE_TOOL,
+  parseManagedScheduleCall,
+  parseManagedScheduleProposal,
+  scheduleProposalPreview,
+  scheduleProposalNonce
+} from "./managed-schedule-proposal";
+import {
   createManagedHostedCapabilities,
   parseHostedCapabilities,
   hostedDefinition,
@@ -338,6 +345,7 @@ export async function createManagedDevelopment(input: {
               parameters: renderInputSchema,
             },
             MANAGED_ASK_PERSON_TOOL,
+            MANAGED_PROPOSE_SCHEDULE_TOOL,
             ...(input.plugins ? [MANAGED_CONNECTED_MCP_TOOL] : []),
             ...(input.allowWebSearch && caps.webSearch
               ? [{ type: "web_search", mode: "live", context_size: "low" }]
@@ -478,7 +486,8 @@ export async function createManagedDevelopment(input: {
       savedQuestion?.payload &&
       typeof savedQuestion.payload === "object" &&
       (savedQuestion.payload as { managed?: { kind?: string } }).managed
-        ?.kind === "connector_write"
+        ?.kind === "connector_write" ||
+      (savedQuestion?.payload as { managed?: { kind?: string } })?.managed?.kind === "automation_schedule"
     ) {
       try {
         approvedWriteDecision((body as { response: string }).response);
@@ -2163,6 +2172,42 @@ export async function createManagedDevelopment(input: {
         text: ask.question,
       });
       return { surface: null };
+    }
+    if (call.name === "euphoria_propose_schedule") {
+      // A bot function_call is NOT an approval. Only the captured exact
+      // original Inbox root can offer a source-owned question to the human.
+      const savedCall = parseManagedScheduleCall(call);
+      if (savedCall.turn_id !== current.receipt.rootTurnId)
+        throw Error("Schedule proposal root correlation mismatch");
+      const preview = scheduleProposalPreview(savedCall.arguments);
+      const payload = {
+        actorId: owner, botId, threadId: scope.threadId,
+        channelId, runId: current.inbox.id,
+        mode: "completed_question" as const,
+        question: "Authorize creating this exact Bot schedule once?",
+        why: preview,
+        managed: {
+          kind: "automation_schedule", sessionID: session.id,
+          scope, call: savedCall
+        }
+      };
+      await queue.offer({
+        kind: "person.question",
+        key: savedCall.call_id,
+        payload
+      });
+      const [saved] = await database.select({payload:workItems.payload})
+        .from(workItems).where(and(
+          eq(workItems.kind,"person.question"),
+          eq(workItems.key,savedCall.call_id)
+        )).limit(1);
+      if(!saved || stable(saved.payload)!==stable(payload))
+        throw Error("Schedule proposal approval identity collision");
+      await router.notify(scope,{
+        id:savedCall.call_id,kind:"approval",requestId:savedCall.call_id,
+        text:"Bot requests explicit schedule creation approval: "+preview
+      });
+      return {surface:null};
     }
     if (call.name !== "euphoria_render_surface")
       throw Error("Unsupported managed tool");

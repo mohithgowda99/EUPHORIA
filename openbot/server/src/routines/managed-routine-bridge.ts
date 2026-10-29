@@ -397,6 +397,7 @@ export function createManagedRoutineBridge(input: {
       instruction?: string;
       cron?: string;
       timezone?: string;
+      runAt?: number;
     },
     nonce: string,
   ) {
@@ -408,7 +409,7 @@ export function createManagedRoutineBridge(input: {
     if (
       !patch ||
       Object.keys(patch).some(
-        (k) => !["instruction", "cron", "timezone"].includes(k),
+        (k) => !["instruction", "cron", "timezone", "runAt"].includes(k),
       )
     )
       throw new RoutineRefusedError("Unsupported routine edit");
@@ -421,16 +422,28 @@ export function createManagedRoutineBridge(input: {
       !bounded(timezone, 64)
     )
       throw new RoutineRefusedError("Invalid routine edit");
-    // Reuse original five-field cron and 15-minute cadence validation.
-    const next = nextOccurrence(cron, timezone, new Date());
+    // A cloud one-time job is a source-owned @once row. Never feed its
+    // marker into the original cron parser or a second scheduler.
+    const isOnce=row.cron==="@once";
+    if(isOnce && (patch.cron!==undefined||patch.timezone!==undefined))
+      throw new RoutineRefusedError("One-time automations cannot become recurring routines.");
+    if(!isOnce && patch.runAt!==undefined)
+      throw new RoutineRefusedError("Recurring automations cannot become one-time.");
+    if(patch.runAt!==undefined && (!Number.isSafeInteger(patch.runAt) ||
+       patch.runAt<=Math.floor(Date.now()/1000)+900||
+       patch.runAt>Math.floor(Date.now()/1000)+366*86400))
+      throw new RoutineRefusedError("Invalid future one-time date");
+    const next=isOnce ? (patch.runAt===undefined?row.nextRunAt:
+      new Date(patch.runAt*1000)) : nextOccurrence(cron,timezone,new Date());
     await input.assertSpendingBoundary(); // A changed schedule can incur future charges.
     const key = keyFor(id, "edit", nonce);
     await claim(owner, id, "managed", "edit", key);
     await provider.updateAutomation(
       row.providerAutomationId,
       {
-        expression: cron,
-        timezone,
+        ...(isOnce ? (patch.runAt!==undefined?{run_at:patch.runAt}:{}) : {
+          expression:cron,timezone
+        }),
         target: {
           type: "existing_session",
           session_id: sessionID,

@@ -111,6 +111,28 @@ export async function createManagedDevelopment(input:{database:Database;provider
    const nativeMCP=input.plugins?await selectNativeReadOnlyMCP(input.plugins,scope.agentId,input.nativeReadOnlyMCPOrigins??[]):{tools:[],nativeRefs:[]};
    const connectedInventory=input.plugins?await managedMCPInventory(input.plugins,scope.agentId,nativeMCP.nativeRefs):'';
    const grantedSkills=input.plugins?await managedSourceSkillContext(input.plugins,scope.agentId):'';
+
+   // A provider session retains immutable hosted skill bundles. Revoking the
+   // ORIGINAL source skill grant must NEVER silently allow a later user turn
+   // to reuse that provider session with a now-unapproved skill still mounted.
+   // No new provider session, runner or skill store is created here.
+   if(caps.sandbox){
+    const currentLink=await links.read({ownerUserId:scope.ownerUserId,
+      channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId});
+    if(currentLink?.providerSessionId){
+     const old=await provider.retrieveSession(currentLink.providerSessionId);
+     if(old.id!==currentLink.providerSessionId)throw Error('Managed skill session identity changed');
+     const installed=(old.environment?.skills??[]) as unknown;
+     if(!Array.isArray(installed))throw Error('Managed environment skill inventory unavailable');
+     const want=hostedSkillRefs.map(x=>x.skill_id+':'+x.version).sort();
+     const have=installed.filter(x=>x&&typeof x==='object'&&
+       (x as any).type==='skill_reference').map(x=>
+        String((x as any).skill_id)+':'+String((x as any).version)).sort();
+     if(JSON.stringify(want)!==JSON.stringify(have))
+      throw Error('Hosted skill grants changed. Reusing the original session could expose revoked skills; use a new Bot');
+    }
+   }
+
    await channels.recordActivity(actor,scope.channelId,{text:scope.text,agentId:null,at:new Date()},{id:'delivery-input:'+scope.runId});
    await submitManagedSourceInput({scope:{ownerUserId:scope.ownerUserId,channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId},
     runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory+connectedInventory+grantedSkills+hostedGuidance+browserGuidance+delegationGuidance,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[]),

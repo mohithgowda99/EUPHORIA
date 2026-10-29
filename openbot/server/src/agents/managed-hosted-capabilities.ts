@@ -16,7 +16,8 @@ export function parseHostedCapabilities(value:unknown):HostedCapabilities {
    typeof raw.sandbox!=="boolean"||typeof raw.delegation!=="boolean"||typeof raw.webSearch!=="boolean"||typeof raw.browser!=="boolean"||
    !Number.isInteger(raw.maxConcurrentSubagents as number)||
    (raw.maxConcurrentSubagents as number)<1||(raw.maxConcurrentSubagents as number)>3||
-   (!raw.delegation&&raw.maxConcurrentSubagents!==1))throw Error("Invalid hosted capabilities");
+   (!raw.delegation&&raw.maxConcurrentSubagents!==1)||
+   (raw.browser&&raw.sandbox))throw Error("Invalid hosted capabilities");
  return{sandbox:raw.sandbox,delegation:raw.delegation,maxConcurrentSubagents:raw.maxConcurrentSubagents as number,webSearch:raw.webSearch,browser:raw.browser};
 }
 export function hostedDefinition(capabilities:HostedCapabilities):{

@@ -18,7 +18,11 @@ export function parsePublicBrowserHosts(raw:string|undefined):string[]{
   throw Error("Browser mode only allows explicitly vetted public documentation hosts");
  return [...new Set(hosts)];
 }
-export type OriginRequest={request_id:string;request:{type:"browser_origin_access";origin:string;reason?:string}};
+export type OriginRequest={
+ request_id:string;
+ request:{type:"browser_origin_access";origin:string;reason?:string};
+ allowed:boolean
+};
 export function pendingPublicOrigin(actions:unknown[],hosts:readonly string[]):OriginRequest[]{
  if(!Array.isArray(actions))throw Error("Invalid provider action list");
  const output:OriginRequest[]=[];
@@ -27,16 +31,19 @@ export function pendingPublicOrigin(actions:unknown[],hosts:readonly string[]):O
   const item=raw as Record<string,unknown>;
   if(item.type!=="computer_use_approval_request")continue;
   const request=item.request as Record<string,unknown>|undefined;
-  if(!request||request.type!=="browser_origin_access")continue; // authentication handled separately
+  if(!request||request.type!=="browser_origin_access")continue;
   if(typeof item.request_id!=="string"||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(item.request_id)||
      typeof request.origin!=="string")throw Error("Malformed browser-origin request");
-  const parsed=new URL(request.origin);
-  if(parsed.protocol!=="https:"||parsed.username||parsed.password||parsed.search||parsed.hash||
-     parsed.pathname!=="/"||parsed.port||!hosts.includes(parsed.hostname)||
-     parsed.origin!==request.origin.replace(/\/$/,""))
-    continue; // Unsupported origin is never implicitly authorized.
+  let allowed=false;
+  try{
+   const parsed=new URL(request.origin);
+   allowed=parsed.protocol==="https:"&&!parsed.username&&!parsed.password&&
+     !parsed.search&&!parsed.hash&&parsed.pathname==="/"&&!parsed.port&&
+     hosts.includes(parsed.hostname)&&parsed.origin===request.origin.replace(/\/$/,"");
+  }catch{}
   output.push({request_id:item.request_id,request:{type:"browser_origin_access",
-    origin:parsed.origin,reason:typeof request.reason==="string"?request.reason.slice(0,500):undefined}});
+    origin:request.origin.slice(0,512),
+    reason:typeof request.reason==="string"?request.reason.slice(0,500):undefined},allowed});
  }
  return output;
 }

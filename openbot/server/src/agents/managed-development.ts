@@ -8,7 +8,7 @@ import {timingSafeEqual,createHash} from 'node:crypto';
 import {and,eq,desc,isNull,isNotNull,sql} from 'drizzle-orm';
 import {createDatabase,type Database} from '../db/client';
 import {loadTenantPackage,synchronizeTenantPackage} from '../tenant-package';
-import {deliveryInbox,managedAgentInboxTurns,managedAgentSessionLinks,workItems} from '../db/schema';
+import {deliveryInbox,managedAgentInboxTurns,managedAgentSessionLinks,managedRoutineWebhookReceipts,routines,workItems} from '../db/schema';
 import {DEV_ACTOR,initializeDevActorUser} from '../auth/dev-actor';
 import type {AppVariables} from '../auth/guards';
 import {createAgentProfileStore} from './profile-store';
@@ -48,6 +48,7 @@ import {createManagedSessionLinkStore} from './managed-session-links';
 import {createRoutineStore,RoutineRefusedError} from '../routines/store';
 import {createRoutineRoutes} from '../routines/routes';
 import {createManagedRoutineBridge} from '../routines/managed-routine-bridge';
+import {verifyManagedSessionWebhook} from '../routines/managed-automation-webhook';
 import {createManagedInboxTurnStore} from './managed-inbox-turns';
 import {submitManagedSourceInput} from './managed-source-submission';
 import {reconcileManagedSourceInbox} from './managed-source-reconciliation';
@@ -64,7 +65,7 @@ import {argumentFingerprint} from '../../../../gateway/provider-arguments.mjs';
 // @ts-expect-error stable shared native prompt prefix
 import {RENDER_INSTRUCTIONS} from '../../../../gateway/render-prompt.mjs';
 
-export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string;plugins?:PluginStore;nativeReadOnlyMCPOrigins?:readonly string[];allowWebSearch?:boolean;hostedSkillMappings?:HostedSkillMapping;browserHosts?:readonly string[];verifiedAutomationSpendingBoundary?:()=>Promise<void>}) {
+export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string;plugins?:PluginStore;nativeReadOnlyMCPOrigins?:readonly string[];allowWebSearch?:boolean;hostedSkillMappings?:HostedSkillMapping;browserHosts?:readonly string[];verifiedAutomationSpendingBoundary?:()=>Promise<void>;webhookSecret?:string}) {
  if(input.token.length<32)throw Error('Development token must contain at least32 characters');
  const {database,provider}=input;
  await initializeDevActorUser(database,true);
@@ -152,6 +153,24 @@ export async function createManagedDevelopment(input:{database:Database;provider
  };
  app.use('*',bodyLimit({maxSize:2*1024*1024})); // Hosted 1MiB file upload, still bounded per route.
  app.onError((error,c)=>{if('status' in error && [409,422,502].includes(Number(error.status)))return c.json({error:error.message},Number(error.status) as 409|422|502);console.error(JSON.stringify({type:'managed-development-error',name:error.name}));return c.json({error:'Managed source operation unavailable'},503);});
+ // Signed webhooks do not carry the dev cookie. Record the exact signed
+ // event ID once; never treat a session state event as a turn outcome.
+ if(input.webhookSecret)app.post('/api/managed/session-webhook',async c=>{
+  const raw=new Uint8Array(await c.req.raw.arrayBuffer());
+  let event;
+  try{event=verifyManagedSessionWebhook({
+    body:raw,headers:c.req.raw.headers,secret:input.webhookSecret!
+  });}catch{return c.json({error:'Invalid signed webhook'},401);}
+  const [owned]=await database.select({owner:managedAgentSessionLinks.ownerUserId})
+    .from(managedAgentSessionLinks).where(and(
+      eq(managedAgentSessionLinks.providerSessionId,event.sessionId),
+      eq(managedAgentSessionLinks.ownerUserId,actor.id))).limit(1);
+  if(!owned)return c.json({accepted:false},202);
+  await database.insert(managedRoutineWebhookReceipts).values({
+    webhookId:event.webhookId,sessionId:event.sessionId,eventType:event.eventType
+  }).onConflictDoNothing();
+  return c.json({accepted:true},202);
+ });
  app.get('/api/auth/get-session',requireUser,c=>c.json({user:{...DEV_ACTOR,name:'Development'}}));
  // Original OpenDuet questions, accepted through its transactional one-winner
  // person.response store. The native Approvals tab already uses these paths.
@@ -883,8 +902,20 @@ export async function createManagedDevelopment(input:{database:Database;provider
 
  // Recovery scans ORIGINAL accepted inbox receipts. Only provider reads and original
  // deduplicated replies happen here; a lost submission is never re-executed.
+ let lastRoutineReconcile=0;
  async function tick(){
   await router.sweep('delivery.inbound');
+  // Bounded read-only recovery. No original/model input is replayed on restart.
+  if(Date.now()-lastRoutineReconcile>60_000){
+   lastRoutineReconcile=Date.now();
+   const active=await database.select({id:routines.id,owner:routines.ownerUserId})
+     .from(routines).where(and(eq(routines.executionBackend,'managed'),
+       eq(routines.ownerUserId,actor.id))).limit(10);
+   for(const row of active){
+    try{await managedRoutines.sync(row.owner,row.id);}
+    catch{console.error('Managed routine awaits provider/source reconciliation');}
+   }
+  }
   // The phone may be terminated. Inspect ORIGINAL accepted source receipts
   // for newly required person questions in the server worker, not just when
   // a SwiftUI screen happens to GET /visual. Read-only provider inspection
@@ -1117,7 +1148,8 @@ if(import.meta.main){
    nativeReadOnlyMCPOrigins:(process.env.EUPHORIA_NATIVE_READ_MCP_ORIGINS??'').split(',').map(s=>s.trim()).filter(Boolean),
    allowWebSearch:process.env.EUPHORIA_MANAGED_WEB_SEARCH==='1',
    hostedSkillMappings:skillMappings,
-   browserHosts:parsePublicBrowserHosts(process.env.EUPHORIA_PUBLIC_BROWSER_HOSTS)
+   browserHosts:parsePublicBrowserHosts(process.env.EUPHORIA_PUBLIC_BROWSER_HOSTS),
+   webhookSecret:process.env.OPENAI_WEBHOOK_SECRET
  });
  const server=Bun.serve({hostname:'127.0.0.1',port:8788,fetch:source.app.fetch});
  const worker=repeatAfterEach(async()=>{try{await source.tick();}catch{console.error('Managed source work awaits recovery');}},1000);

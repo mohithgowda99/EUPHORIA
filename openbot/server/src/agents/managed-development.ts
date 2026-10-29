@@ -45,6 +45,9 @@ import {selectNativeReadOnlyMCP} from './managed-native-mcp';
 import {MANAGED_CONNECTED_MCP_TOOL,managedMCPCall,authorizeManagedMCP,approvedWriteDecision,mcpWritePreview,managedMCPInventory,type OriginalPluginBridge} from './managed-connected-mcp';
 import {resolveManagedSourceBot} from './managed-source-definition';
 import {createManagedSessionLinkStore} from './managed-session-links';
+import {createRoutineStore,RoutineRefusedError} from '../routines/store';
+import {createRoutineRoutes} from '../routines/routes';
+import {createManagedRoutineBridge} from '../routines/managed-routine-bridge';
 import {createManagedInboxTurnStore} from './managed-inbox-turns';
 import {submitManagedSourceInput} from './managed-source-submission';
 import {reconcileManagedSourceInbox} from './managed-source-reconciliation';
@@ -61,7 +64,7 @@ import {argumentFingerprint} from '../../../../gateway/provider-arguments.mjs';
 // @ts-expect-error stable shared native prompt prefix
 import {RENDER_INSTRUCTIONS} from '../../../../gateway/render-prompt.mjs';
 
-export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string;plugins?:PluginStore;nativeReadOnlyMCPOrigins?:readonly string[];allowWebSearch?:boolean;hostedSkillMappings?:HostedSkillMapping;browserHosts?:readonly string[]}) {
+export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string;plugins?:PluginStore;nativeReadOnlyMCPOrigins?:readonly string[];allowWebSearch?:boolean;hostedSkillMappings?:HostedSkillMapping;browserHosts?:readonly string[];verifiedAutomationSpendingBoundary?:()=>Promise<void>}) {
  if(input.token.length<32)throw Error('Development token must contain at least32 characters');
  const {database,provider}=input;
  await initializeDevActorUser(database,true);
@@ -243,6 +246,21 @@ export async function createManagedDevelopment(input:{database:Database;provider
  app.route('/api/openduet/tasks',managedTasks.routes);
  app.route('/api/openduet/tasks',managedTasks.extras);
  app.route('/api/proactive/suggestions',managedTasks.suggestions);
+ // Expose original RoutineStore and its source-scoped routes. No additional
+ // scheduler is installed. Paid scheduled execution stays default DENY.
+ const originalRoutineStore=createRoutineStore(database);
+ const managedRoutines=createManagedRoutineBridge({
+  database,provider,authorise:authorised,
+  assertSpendingBoundary:input.verifiedAutomationSpendingBoundary??async()=>{
+   throw new RoutineRefusedError('Managed Automations require a verified provider-side spending cap');
+  },
+  publishResult:async(scope,text,receiptId)=>{
+   if(!await authorised(scope))throw Error('Routine source ownership revoked');
+   await channels.recordActivity(actor,scope.channelId,
+     {text,agentId:scope.agentId,at:new Date()},{id:receiptId});
+  }
+ });
+ app.route('/api/routines',createRoutineRoutes(originalRoutineStore,requireUser,{managed:managedRoutines}));
  // Hosted code execution and managed delegation are OPT-IN on an original
  // source-owned Bot, never inferred from a chat prompt or A2UI action.
  const hostedOwner=async(userID:string,botID:string)=>{
@@ -1052,7 +1070,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
     }});}catch{console.error('Managed source receipt awaiting reconciliation');}
   }
  }
- return{app,tick,profiles,channels,store,links,turns};
+ return{app,tick,profiles,channels,store,links,turns,managedRoutines};
 }
 
 if(import.meta.main){

@@ -26,6 +26,15 @@ struct SourceHostedFileReceipt: Decodable, Sendable {
     let bytes: Int
     let status: String
 }
+struct SourceHostedSubagent: Decodable, Identifiable, Sendable {
+    let id: String
+    let name: String?
+    let status: String
+    let openedAt: Double?
+}
+struct SourceHostedSubagentEnvelope: Decodable, Sendable {
+    let subagents: [SourceHostedSubagent]
+}
 struct SourceHostedArtifact: Decodable, Identifiable, Sendable {
     let id: String
     let turnId: String
@@ -765,6 +774,16 @@ struct OpenDuetSourceAPI: Sendable {
             throw SourceAPIError.invalidResponse
         }
         return value
+    }
+
+    func sourceHostedSubagents(channelID: String, botID: String) async throws -> [SourceHostedSubagent] {
+        let response: SourceHostedSubagentEnvelope = try await request(
+            "api/delivery/conversations/" + checkedID(channelID) + "/subagents",
+            method: "GET", queryItems: [URLQueryItem(name: "agentId", value: checkedID(botID))])
+        guard response.subagents.count <= 100,
+              response.subagents.allSatisfy({ ["active", "closed"].contains($0.status) })
+        else { throw SourceAPIError.invalidResponse }
+        return response.subagents
     }
 
     /// Read only artifacts whose exact provider root is tied to this original

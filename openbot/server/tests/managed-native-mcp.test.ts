@@ -3,7 +3,8 @@ import {selectNativeReadOnlyMCP} from "../src/agents/managed-native-mcp";
 import type {ManagedNativeMCPStore} from "../src/agents/managed-native-mcp";
 
 function fixture(url="https://docs.example.com/mcp",credential=false){
- const server={id:"docs",title:"Docs",url,hasCredential:credential,lastError:null,
+ const server={id:"docs",title:"Docs",url,hasCredential:credential,
+  authScheme:null,accountMode:null,sharedVendorConnected:false,lastError:null,
   toolsRefreshedAt:"2026-10-29T00:00:00Z",tools:[
    {serverId:"docs",name:"search",ref:"docs/search",effect:"read",destructive:false,inputSchema:{}},
    {serverId:"docs",name:"send",ref:"docs/send",effect:"write",destructive:false,inputSchema:{}},
@@ -32,6 +33,11 @@ test("native MCP refuses credentialed private or unapproved endpoints",async()=>
  }
  expect((await selectNativeReadOnlyMCP(fixture(undefined,true),"bot1",["https://docs.example.com"])).nativeRefs).toEqual([]);
  expect((await selectNativeReadOnlyMCP(fixture(),"bot1",[])).nativeRefs).toEqual([]);
+ expect((await selectNativeReadOnlyMCP(fixture(),"bot1",["https://docs.example.com/mcp"])).nativeRefs).toEqual([]);
+ const brokered=fixture();
+ const original=brokered.listServers.bind(brokered);
+ brokered.listServers=async()=>{const rows=await original();return rows.map(s=>({...s,authScheme:"OAUTH2"}));};
+ expect((await selectNativeReadOnlyMCP(brokered,"bot1",["https://docs.example.com"])).nativeRefs).toEqual([]);
 });
 test("revocation applies to newly created agent tool manifests",async()=>{
  const store=fixture();expect((await selectNativeReadOnlyMCP(store,"bot1",["https://docs.example.com"])).nativeRefs.length).toBe(1);

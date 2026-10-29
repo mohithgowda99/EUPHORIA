@@ -15,9 +15,10 @@ export function parseHostedSkillMappings(raw:unknown):HostedSkillMapping{
  const data=typeof raw==="string"?JSON.parse(raw):raw;
  if(!data||typeof data!=="object"||Array.isArray(data)||Object.keys(data).length>20)
   throw Error("Invalid hosted skill mapping allowlist");
- const result:HostedSkillMapping={};
+ const result:HostedSkillMapping=Object.create(null) as HostedSkillMapping;
  for(const [name,value] of Object.entries(data)){
-  if(!slug(name)||!value||typeof value!=="object"||Array.isArray(value))
+  if(["__proto__","constructor","prototype"].includes(name)||
+     !slug(name)||!value||typeof value!=="object"||Array.isArray(value))
    throw Error("Invalid mapped skill");
   const config=value as Record<string,unknown>;
   if(Object.keys(config).sort().join(",")!=="skillId,version"||

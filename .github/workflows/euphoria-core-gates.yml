@@ -54,7 +54,7 @@ jobs:
       - name: Run isolated source integration suites
         working-directory: openbot
         run: |
-          bun test server/tests/managed-memory-context.test.ts server/tests/managed-connected-mcp.test.ts server/tests/managed-native-mcp.test.ts server/tests/managed-hosted-capabilities.test.ts server/tests/managed-hosted-artifacts.test.ts server/tests/managed-hosted-cancel.test.ts server/tests/managed-source-skills.test.ts
+          bun test server/tests/managed-memory-context.test.ts server/tests/managed-connected-mcp.test.ts server/tests/managed-native-mcp.test.ts server/tests/managed-hosted-capabilities.test.ts server/tests/managed-hosted-artifacts.test.ts server/tests/managed-hosted-cancel.test.ts server/tests/managed-source-skills.test.ts server/tests/managed-hosted-skills.test.ts
           for suite in questions tasks mcp jsonb hosted; do
             export TEST_DB_NAME="euphoria_${suite}"
             (cd server && bun -e 'import postgres from "postgres"; const db=postgres(process.env.TEST_DATABASE_URL); await db.unsafe("CREATE DATABASE "+process.env.TEST_DB_NAME); await db.end();')

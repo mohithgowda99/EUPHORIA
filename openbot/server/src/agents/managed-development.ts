@@ -2,12 +2,41 @@
  * No CopilotKit Intelligence credential, duplicate task database or local model runner.
  * Deliberately excludes unported tool grants and production identity.
  */
+
+import { createHash, timingSafeEqual } from "node:crypto";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { timingSafeEqual, createHash } from "node:crypto";
-import { and, eq, desc, isNull, isNotNull, sql } from "drizzle-orm";
+import {
+  normalizeRenderInput,
+  renderInputSchema,
+  // @ts-expect-error existing canonical renderer JS boundary
+} from "../../../../gateway/a2ui-form.mjs";
+// Existing tested provider transport; Bun loads this ESM without a second SDK stack.
+// @ts-expect-error audited JavaScript boundary
+import { AgentsClient } from "../../../../gateway/agents-client.mjs";
+// @ts-expect-error existing bounded provider argument validation
+import { argumentFingerprint } from "../../../../gateway/provider-arguments.mjs";
+// @ts-expect-error stable shared native prompt prefix
+import { RENDER_INSTRUCTIONS } from "../../../../gateway/render-prompt.mjs";
+import {
+  decisionResult,
+  stable,
+  // @ts-expect-error existing canonical visual-contract JS boundary
+} from "../../../../gateway/visual-contract.mjs";
+import { createApprovalQuestions } from "../approvals/questions";
+import { createAuditStore } from "../audit";
+import { DEV_ACTOR, initializeDevActorUser } from "../auth/dev-actor";
+import type { AppVariables } from "../auth/guards";
+import { createChannelRoutes, createChannelStore } from "../channels/routes";
+import { createThreadIdentity } from "../channels/thread-identity";
+import {
+  createPolicyStore,
+  DEFAULT_ACTION_POLICY,
+} from "../computer/policy-store";
+import { standingRoleMessage } from "../copilot";
+import { createCredentialStore } from "../credentials";
 import { createDatabase, type Database } from "../db/client";
-import { loadTenantPackage, synchronizeTenantPackage } from "../tenant-package";
 import {
   deliveryInbox,
   managedAgentInboxTurns,
@@ -16,111 +45,81 @@ import {
   routines,
   workItems,
 } from "../db/schema";
-import { DEV_ACTOR, initializeDevActorUser } from "../auth/dev-actor";
-import type { AppVariables } from "../auth/guards";
-import { createAgentProfileStore } from "./profile-store";
-import { createRuntimeAgentLoader } from "./runtime-agents";
-import { standingRoleMessage } from "../copilot";
-import { createChannelStore, createChannelRoutes } from "../channels/routes";
-import { createThreadIdentity } from "../channels/thread-identity";
-import { createAgentRoutes } from "./routes";
-import { createDeliveryStore } from "../delivery/store";
+import {
+  type ApnsConfiguration,
+  createApnsPushTransport,
+} from "../delivery/apns";
 import { createDeliveryRouter } from "../delivery/router";
 import { createDeliveryRoutes } from "../delivery/routes";
-import {
-  createApnsPushTransport,
-  type ApnsConfiguration,
-} from "../delivery/apns";
+import { createDeliveryStore } from "../delivery/store";
 import type { DeliveryScope } from "../delivery/types";
-import { createWorkQueue } from "../work/queue";
+import { createMemoryRoutes } from "../memory/routes";
+import { createMemoryStore } from "../memory/store";
+import { createPluginRoutes } from "../plugins/routes";
+import { createPluginStore, type PluginStore } from "../plugins/store";
+import { verifyManagedSessionWebhook } from "../routines/managed-automation-webhook";
+import { createManagedRoutineBridge } from "../routines/managed-routine-bridge";
+import { createRoutineRoutes } from "../routines/routes";
+import { createRoutineStore, RoutineRefusedError } from "../routines/store";
+import { loadTenantPackage, synchronizeTenantPackage } from "../tenant-package";
 import { repeatAfterEach } from "../work/loop";
-import { createApprovalQuestions } from "../approvals/questions";
+import { createWorkQueue } from "../work/queue";
 import {
-  MANAGED_ASK_PERSON_TOOL,
-  parseManagedQuestionCall,
-  parseManagedQuestion,
-  parseManagedCorrelation,
-  pendingManagedQuestion,
-} from "./managed-person-questions";
-import { createManagedTaskAdapter } from "./managed-task-adapter";
+  approvedWriteDecision,
+  authorizeManagedMCP,
+  MANAGED_CONNECTED_MCP_TOOL,
+  managedMCPCall,
+  managedMCPInventory,
+  mcpWritePreview,
+  type OriginalPluginBridge,
+} from "./managed-connected-mcp";
 import {
-  MANAGED_PROPOSE_SCHEDULE_TOOL,
-  parseManagedScheduleCall,
-  parseManagedScheduleProposal,
-  scheduleProposalPreview,
-  scheduleProposalNonce,
-} from "./managed-schedule-proposal";
-import {
-  createManagedHostedCapabilities,
-  parseHostedCapabilities,
-  hostedDefinition,
-  DENIED_HOSTED_CAPABILITIES,
-} from "./managed-hosted-capabilities";
-import {
-  projectHostedArtifact,
   attachmentName,
+  projectHostedArtifact,
 } from "./managed-hosted-artifacts";
-import { assertCurrentRootForCancellation } from "./managed-hosted-cancel";
 import {
   browserEnvironment,
   parsePublicBrowserHosts,
   pendingPublicOrigin,
 } from "./managed-hosted-browser";
-import { managedSourceSkillContext } from "./managed-source-skills";
+import { assertCurrentRootForCancellation } from "./managed-hosted-cancel";
+import {
+  createManagedHostedCapabilities,
+  DENIED_HOSTED_CAPABILITIES,
+  hostedDefinition,
+  parseHostedCapabilities,
+} from "./managed-hosted-capabilities";
 import {
   grantedHostedSkillReferences,
-  parseHostedSkillMappings,
   type HostedSkillMapping,
+  parseHostedSkillMappings,
 } from "./managed-hosted-skills";
-import { canManageAgent } from "./profile-policy";
-import { createMemoryStore } from "../memory/store";
-import { createMemoryRoutes } from "../memory/routes";
+import { createManagedInboxTurnStore } from "./managed-inbox-turns";
 import { managedMemoryContext } from "./managed-memory-context";
-import { createPluginStore, type PluginStore } from "../plugins/store";
-import { createPluginRoutes } from "../plugins/routes";
-import { createCredentialStore } from "../credentials";
-import { createAuditStore } from "../audit";
-import {
-  createPolicyStore,
-  DEFAULT_ACTION_POLICY,
-} from "../computer/policy-store";
 import { selectNativeReadOnlyMCP } from "./managed-native-mcp";
 import {
-  MANAGED_CONNECTED_MCP_TOOL,
-  managedMCPCall,
-  authorizeManagedMCP,
-  approvedWriteDecision,
-  mcpWritePreview,
-  managedMCPInventory,
-  type OriginalPluginBridge,
-} from "./managed-connected-mcp";
-import { resolveManagedSourceBot } from "./managed-source-definition";
+  MANAGED_ASK_PERSON_TOOL,
+  parseManagedCorrelation,
+  parseManagedQuestion,
+  parseManagedQuestionCall,
+  pendingManagedQuestion,
+} from "./managed-person-questions";
+import {
+  MANAGED_PROPOSE_SCHEDULE_TOOL,
+  parseManagedScheduleCall,
+  scheduleProposalNonce,
+  scheduleProposalPreview,
+} from "./managed-schedule-proposal";
 import { createManagedSessionLinkStore } from "./managed-session-links";
-import { createRoutineStore, RoutineRefusedError } from "../routines/store";
-import { createRoutineRoutes } from "../routines/routes";
-import { createManagedRoutineBridge } from "../routines/managed-routine-bridge";
-import { verifyManagedSessionWebhook } from "../routines/managed-automation-webhook";
-import { createManagedInboxTurnStore } from "./managed-inbox-turns";
-import { submitManagedSourceInput } from "./managed-source-submission";
+import { resolveManagedSourceBot } from "./managed-source-definition";
 import { reconcileManagedSourceInbox } from "./managed-source-reconciliation";
-// Existing tested provider transport; Bun loads this ESM without a second SDK stack.
-// @ts-expect-error audited JavaScript boundary
-import { AgentsClient } from "../../../../gateway/agents-client.mjs";
-
-import {
-  normalizeRenderInput,
-  renderInputSchema,
-  // @ts-expect-error existing canonical renderer JS boundary
-} from "../../../../gateway/a2ui-form.mjs";
-import {
-  decisionResult,
-  stable,
-  // @ts-expect-error existing canonical visual-contract JS boundary
-} from "../../../../gateway/visual-contract.mjs";
-// @ts-expect-error existing bounded provider argument validation
-import { argumentFingerprint } from "../../../../gateway/provider-arguments.mjs";
-// @ts-expect-error stable shared native prompt prefix
-import { RENDER_INSTRUCTIONS } from "../../../../gateway/render-prompt.mjs";
+import { managedSourceSkillContext } from "./managed-source-skills";
+import { submitManagedSourceInput } from "./managed-source-submission";
+import { createManagedTaskAdapter } from "./managed-task-adapter";
+import { canManageAgent } from "./profile-policy";
+import { createAgentProfileStore } from "./profile-store";
+import { createAgentRoutes } from "./routes";
+import { createRuntimeAgentLoader } from "./runtime-agents";
 
 export async function createManagedDevelopment(input: {
   database: Database;
@@ -394,7 +393,7 @@ export async function createManagedDevelopment(input: {
   if (input.webhookSecret)
     app.post("/api/managed/session-webhook", async (c) => {
       const raw = new Uint8Array(await c.req.raw.arrayBuffer());
-      let event;
+      let event: ReturnType<typeof verifyManagedSessionWebhook>;
       try {
         event = verifyManagedSessionWebhook({
           body: raw,
@@ -560,7 +559,7 @@ export async function createManagedDevelopment(input: {
       q.managed === undefined
     )
       return c.json({ error: "Saved question identity unavailable" }, 409);
-    let correlation;
+    let correlation: ReturnType<typeof parseManagedCorrelation>;
     try {
       correlation = parseManagedCorrelation(q.managed);
     } catch {
@@ -729,7 +728,7 @@ export async function createManagedDevelopment(input: {
       owner = c.var.actor.id;
     if (!(await hostedOwner(owner, botID)))
       return c.json({ error: "Bot cannot be managed" }, 403);
-    let config;
+    let config: ReturnType<typeof parseHostedCapabilities>;
     try {
       config = parseHostedCapabilities(await c.req.json());
     } catch {
@@ -2178,7 +2177,21 @@ export async function createManagedDevelopment(input: {
     if (call.name === "euphoria_propose_schedule") {
       // A bot function_call is NOT an approval. Only the captured exact
       // original Inbox root can offer a source-owned question to the human.
-      const savedCall = parseManagedScheduleCall(call);
+      const savedCall = parseManagedScheduleCall(call, "restored");
+      const [existingOffer] = await database
+        .select({ payload: workItems.payload })
+        .from(workItems)
+        .where(
+          and(
+            eq(workItems.kind, "person.question"),
+            eq(workItems.key, savedCall.call_id),
+          ),
+        )
+        .limit(1);
+      // Restoring an existing exact offer is independent of wall-clock time.
+      // A new offer still requires a bounded future schedule; the exact source
+      // payload comparison below protects owner/root/session and instructions.
+      if (!existingOffer) parseManagedScheduleCall(call);
       if (savedCall.turn_id !== current.receipt.rootTurnId)
         throw Error("Schedule proposal root correlation mismatch");
       const preview = scheduleProposalPreview(savedCall.arguments);
@@ -2225,7 +2238,7 @@ export async function createManagedDevelopment(input: {
     }
     if (call.name !== "euphoria_render_surface")
       throw Error("Unsupported managed tool");
-    let surface;
+    let surface: ReturnType<typeof normalizeRenderInput>;
     try {
       surface = {
         ...normalizeRenderInput(args),
@@ -2841,7 +2854,7 @@ export async function createManagedDevelopment(input: {
             scope: DeliveryScope;
             call: unknown;
           };
-          const savedCall = parseManagedScheduleCall(proposal.call);
+          const savedCall = parseManagedScheduleCall(proposal.call, "restored");
           const fresh = await provider.retrieveSession(proposal.sessionID);
           const pendingCall = (fresh.required_actions ?? []).find(
             (v: unknown) =>
@@ -2853,7 +2866,8 @@ export async function createManagedDevelopment(input: {
           if (
             fresh.id !== proposal.sessionID ||
             !pendingCall ||
-            stable(parseManagedScheduleCall(pendingCall)) !== stable(savedCall)
+            stable(parseManagedScheduleCall(pendingCall, "restored")) !==
+              stable(savedCall)
           )
             throw Error("Provider schedule proposal expired or changed");
           const decision = approvedWriteDecision(received.response);
@@ -2863,7 +2877,7 @@ export async function createManagedDevelopment(input: {
               text: "Human refused schedule creation; no provider schedule was submitted.",
             };
           if (decision === "allow") {
-            const details = parseManagedScheduleProposal(savedCall.arguments);
+            const details = savedCall.arguments;
             const created = await managedRoutines.createApprovedSchedule(
               scope.ownerUserId,
               {

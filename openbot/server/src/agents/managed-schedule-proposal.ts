@@ -54,6 +54,12 @@ export function parseManagedScheduleProposal(
   raw: unknown,
   now = Math.floor(Date.now() / 1000),
 ): ManagedScheduleProposal {
+  return decodeScheduleProposal(raw, now);
+}
+function decodeScheduleProposal(
+  raw: unknown,
+  now: number | null,
+): ManagedScheduleProposal {
   const data = typeof raw === "string" ? JSON.parse(raw) : raw;
   if (
     !obj(data) ||
@@ -75,8 +81,11 @@ export function parseManagedScheduleProposal(
   if (data.schedule_type === "once") {
     if (
       !Number.isSafeInteger(data.run_at) ||
-      Number(data.run_at) < now + 900 ||
-      Number(data.run_at) > now + 366 * 86400 ||
+      Number(data.run_at) <= 0 ||
+      !Number.isFinite(new Date(Number(data.run_at) * 1000).getTime()) ||
+      (now !== null &&
+        (Number(data.run_at) < now + 900 ||
+          Number(data.run_at) > now + 366 * 86400)) ||
       data.cron !== undefined ||
       data.timezone !== undefined
     )
@@ -109,7 +118,12 @@ export function parseManagedScheduleProposal(
   }
   throw Error("Unknown schedule type");
 }
-export function parseManagedScheduleCall(raw: unknown): ManagedScheduleCall {
+export function parseManagedScheduleCall(
+  raw: unknown,
+  purpose: "new" | "restored" = "new",
+): ManagedScheduleCall {
+  if (purpose !== "new" && purpose !== "restored")
+    throw Error("Invalid schedule parsing purpose");
   if (
     !obj(raw) ||
     raw.type !== "function_call" ||
@@ -123,7 +137,10 @@ export function parseManagedScheduleCall(raw: unknown): ManagedScheduleCall {
     name: "euphoria_propose_schedule",
     call_id: raw.call_id,
     turn_id: raw.turn_id,
-    arguments: parseManagedScheduleProposal(raw.arguments),
+    arguments: decodeScheduleProposal(
+      raw.arguments,
+      purpose === "restored" ? null : Math.floor(Date.now() / 1000),
+    ),
   };
 }
 export function scheduleProposalPreview(p: ManagedScheduleProposal) {

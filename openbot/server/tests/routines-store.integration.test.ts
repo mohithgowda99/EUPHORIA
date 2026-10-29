@@ -1654,6 +1654,36 @@ describe("approved managed schedule offline reservation and recovery", () => {
     expect(recovered.rootTurnId).toBeNull();
     expect(recovered.deliveryStatus).toBe("queued");
   });
+  test("settled one-time recovery after run time never repeats creation or applies new-write time rules", async () => {
+    const f = await managedFixture(async () => ({
+      id: "auto_" + randomUUID().replaceAll("-", ""),
+    }));
+    const now = Date.now(),
+      params = {
+        channelId: f.channel.id,
+        agentId: f.agentId,
+        instruction: "Approved one-time digest",
+        requestId: "elapsed_" + randomUUID().replaceAll("-", "").slice(0, 20),
+        runAt: Math.floor(now / 1000) + 7200,
+      };
+    const first = await f.bridge.createApprovedSchedule(f.owner.id, params);
+    const realNow = Date.now;
+    try {
+      Date.now = () => now + 3 * 60 * 60_000;
+      expect(await f.bridge.createApprovedSchedule(f.owner.id, params)).toEqual(
+        first,
+      );
+      await expect(
+        f.bridge.createApprovedSchedule(f.owner.id, {
+          ...params,
+          requestId: "new_" + randomUUID().replaceAll("-", "").slice(0, 20),
+        }),
+      ).rejects.toBeInstanceOf(RoutineRefusedError);
+      expect(f.calls).toBe(1);
+    } finally {
+      Date.now = realNow;
+    }
+  });
   test("settled approved creation recovers its exact source mapping without a second provider write", async () => {
     const autoID = "auto_" + randomUUID().replaceAll("-", "");
     const f = await managedFixture(async () => ({ id: autoID }));

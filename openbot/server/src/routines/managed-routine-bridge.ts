@@ -321,8 +321,8 @@ export function createManagedRoutineBridge(input: {
       (cron !== undefined ||
         timezone !== undefined ||
         !Number.isSafeInteger(runAt) ||
-        runAt! < Math.floor(Date.now() / 1000) + 900 ||
-        runAt! > Math.floor(Date.now() / 1000) + 366 * 86400)
+        runAt! <= 0 ||
+        !Number.isFinite(new Date(runAt! * 1000).getTime()))
     )
       throw new RoutineRefusedError("Invalid future one-time schedule");
     if (
@@ -400,6 +400,14 @@ export function createManagedRoutineBridge(input: {
           settledAutomationID = previous.providerAutomationId;
         return false;
       }
+      // Only a NEW external write needs a future execution time. Recovery above
+      // returns the exact persisted request even after its original time elapsed.
+      if (
+        once &&
+        (runAt! < Math.floor(Date.now() / 1000) + 900 ||
+          runAt! > Math.floor(Date.now() / 1000) + 366 * 86400)
+      )
+        throw new RoutineRefusedError("Invalid future one-time schedule");
       await input.assertSpendingBoundary();
       const [count] = await tx
         .select({ total: sql<number>`count(*)::int` })

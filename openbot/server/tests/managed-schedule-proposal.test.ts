@@ -1,11 +1,12 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
   MANAGED_PROPOSE_SCHEDULE_TOOL,
-  parseManagedScheduleProposal,
   parseManagedScheduleCall,
+  parseManagedScheduleProposal,
   scheduleProposalNonce,
   scheduleProposalPreview,
 } from "../src/agents/managed-schedule-proposal";
+
 const future = 2_000_000_000,
   now = future - 3600;
 const once = {
@@ -104,4 +105,31 @@ describe("Bot schedule requests are proposals, never provider authorizations", (
     expect(scheduleProposalNonce("call_123")).toHaveLength(32);
     expect(() => scheduleProposalNonce("!!!")).toThrow();
   });
+});
+
+test("restoring an exact saved call preserves elapsed time without admitting a new past proposal", () => {
+  const call = {
+    type: "function_call",
+    name: "euphoria_propose_schedule",
+    call_id: "call_elapsed",
+    turn_id: "turn_elapsed",
+    arguments: { ...once, run_at: 1_600_000_000 },
+  };
+  expect(() => parseManagedScheduleCall(call)).toThrow();
+  expect(parseManagedScheduleCall(call, "restored").arguments.run_at).toBe(
+    1_600_000_000,
+  );
+  for (const run_at of [0, -1, Infinity, 9_000_000_000_000, 1.5, "1600000000"])
+    expect(() =>
+      parseManagedScheduleCall(
+        { ...call, arguments: { ...call.arguments, run_at } },
+        "restored",
+      ),
+    ).toThrow();
+  expect(() =>
+    parseManagedScheduleCall(
+      { ...call, arguments: { ...call.arguments, ownerUserId: "imposter" } },
+      "restored",
+    ),
+  ).toThrow();
 });

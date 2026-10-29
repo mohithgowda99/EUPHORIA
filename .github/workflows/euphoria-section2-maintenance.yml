@@ -8,6 +8,9 @@ on:
       - feature/phase1-section2-autonomous-bots
     paths:
       - .github/workflows/euphoria-section2-maintenance.yml
+  pull_request:
+    branches:
+      - feature/phase1-section1-openai-completion-20261029
 permissions:
   contents: write
 jobs:

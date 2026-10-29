@@ -1,0 +1,40 @@
+name: EUPHORIA core branch gates
+on:
+  push:
+    branches:
+      - feature/phase1-core-e2e-convergence-20261029
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: euphoria-core-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - name: Install original source
+        working-directory: openbot
+        run: bun install --frozen-lockfile
+      - name: Typecheck server
+        working-directory: openbot
+        run: bun run --filter server typecheck
+      - name: Test original source managed adapters
+        working-directory: openbot
+        run: |
+          bun test server/tests/managed-memory-context.test.ts \
+            server/tests/managed-connected-mcp.test.ts \
+            server/tests/managed-person-questions.integration.test.ts \
+            server/tests/managed-source-tasks.integration.test.ts
+      - name: Check gateway regressions
+        working-directory: gateway
+        run: |
+          npm ci
+          npm test

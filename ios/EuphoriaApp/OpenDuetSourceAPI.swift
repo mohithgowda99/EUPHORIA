@@ -381,6 +381,7 @@ struct SourcePersonQuestion: Decodable, Identifiable, Sendable {
 struct SourceQuestionRecovery: Decodable, Identifiable, Sendable {
     let id: String
     let error: String?
+    let canContinue: Bool?
 }
 struct SourceApprovalInbox: Decodable, Sendable {
     let requests: [SourceApproval]
@@ -388,6 +389,7 @@ struct SourceApprovalInbox: Decodable, Sendable {
     let recoveries: [SourceQuestionRecovery]?
 }
 private struct SourceQuestionResponse: Encodable { let response: String }
+private struct SourceRecoveryReceipt: Decodable { let accepted: Bool; let queued: Bool }
 private struct SourceApprovalDecisionInput: Encodable { let decision: String }
 struct SourceApprovalDecisionResult: Decodable, Sendable {
     let id: String
@@ -855,6 +857,11 @@ struct OpenDuetSourceAPI: Sendable {
             body: SourceApprovalDecisionInput(decision: "deny"))
         guard response.id == id else { throw SourceAPIError.invalidResponse }
         return response
+    }
+    func continueExpiredQuestion(id: String) async throws {
+        let response: SourceRecoveryReceipt = try await request(
+            "api/approvals/recovery/" + checkedID(id) + "/continue", method: "POST")
+        guard response.accepted else { throw SourceAPIError.invalidResponse }
     }
     func answerQuestion(id: String, response: String) async throws {
         let safe = response.trimmingCharacters(in: .whitespacesAndNewlines)

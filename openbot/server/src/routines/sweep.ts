@@ -292,24 +292,17 @@ export async function dispatchClaimedRoutines(
     skipped: [],
   };
 
-  /*
-   * THE REAPER, before any firing is considered. It closes the run rows nothing in the system will
-   * ever come back for: a server that died mid-turn (the queue item was finished on the 202, so no
-   * retry returns for that row), and the rows opened by dispatch attempts that threw (the loop below
-   * deliberately does not close those itself — see the comment at the dispatch). Without it those
-   * rows read "running now" on the routines page for ever. Age-scoped rather than identity-scoped,
-   * because age is the one signal that distinguishes an abandoned row from a turn some server is
-   * still running; the cutoff sits above the turn timeout so a live turn always finishes its own row
-   * first. Best-effort with its own catch, because a reaper that cannot run must not stop this pass
-   * from firing what is due.
-   */
+  // Annotate stale source runs without inventing a terminal outcome. An old run
+  // may still execute externally; its open record continues to block cutover.
   try {
     const reaped = await options.routineStore.reapAbandonedRuns(
       ABANDONED_RUN_MS,
-      "the server never finished this run; it may have restarted mid-turn, or the run may never have been dispatched",
+      "Execution outcome is unconfirmed; the server may have restarted mid-turn or dispatch may be unresolved.",
     );
     if (reaped > 0) {
-      console.warn(JSON.stringify({ type: "routine-runs-reaped", reaped }));
+      console.warn(
+        JSON.stringify({ type: "routine-runs-uncertain", annotated: reaped }),
+      );
     }
   } catch (error) {
     console.warn(

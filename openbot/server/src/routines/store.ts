@@ -20,6 +20,8 @@
  * `locked_until` — is exactly the duplicated firing mechanism #235 exists to prevent: two half-right
  * implementations of the same hard thing, one of which nobody tests.
  */
+
+import type { HeadlessWaiting } from "@openbot/toolkit/headless-tools";
 import {
   and,
   asc,
@@ -42,7 +44,6 @@ import {
   routineSweeps,
   routines,
 } from "../db/schema";
-import type { HeadlessWaiting } from "@openbot/toolkit/headless-tools";
 import { describeCron, nextOccurrence, ScheduleRefusedError } from "./schedule";
 
 const SWEEP_ID = "routines";
@@ -249,16 +250,9 @@ export type RoutineStore = {
     waiting?: HeadlessWaiting,
   ): Promise<void>;
   /**
-   * Close every run row that has sat open (`status is null`) longer than `olderThanMs` as
-   * "skipped", with the same reason on all of them. Returns how many rows it closed.
-   *
-   * The sweep's reaper, and deliberately NOT scoped to one routine or one firing: it exists for the
-   * rows nothing else can reach — a server that died mid-turn after the queue item was already
-   * finished on the 202, or a dispatch-failure close that itself failed. The age bound is what keeps
-   * it away from live work: a run younger than the cutoff may be a turn some server is still
-   * running, and closing that row would make the real `finishRun` a silent no-op. "skipped" rather
-   * than "failed" so an infrastructure death is not counted by the fatigue rule as the routine's own
-   * failure.
+   * Annotate old unresolved source runs with an uncertainty reason. Age alone is
+   * not a terminal outcome; retain null status so late worker completion can
+   * settle the run and managed cutover remains blocked. Returns rows annotated.
    */
   reapAbandonedRuns(olderThanMs: number, error: string): Promise<number>;
   recordSweep(owner: string): Promise<void>;
@@ -726,18 +720,11 @@ export function createRoutineStore(database: Database): RoutineStore {
         const [open] = await transaction
           .select({ id: routineRuns.id })
           .from(routineRuns)
-          .where(
-            and(
-              eq(routineRuns.routineId, id),
-              isNull(routineRuns.status),
-              // Younger than the reaper's cutoff: an older open row is abandoned, not running.
-              sql`${routineRuns.startedAt} > now() - interval '10 minutes'`,
-            ),
-          )
+          .where(and(eq(routineRuns.routineId, id), isNull(routineRuns.status)))
           .limit(1);
         if (open)
           throw new RoutineRefusedError(
-            "This routine is already running. Wait for that run to finish.",
+            "This routine has an unresolved run. Confirm its outcome before running again.",
           );
         const runId = `routine_run_${crypto.randomUUID()}`;
         await transaction
@@ -925,16 +912,12 @@ export function createRoutineStore(database: Database): RoutineStore {
           ...(waiting ? { waiting } : {}),
           // The database's clock closes the row, the same as it opened it.
           finishedAt: sql`now()`,
-          // Left alone rather than nulled when there was no error, so finishing a run twice cannot
-          // erase what the first finish recorded — and the `status is null` guard below is what
-          // makes that true.
-          ...(error === undefined
-            ? {}
-            : {
-                // Measured in code points, like `validInstruction`, so an emoji-bearing error
-                // cannot be cut mid-surrogate-pair.
-                error: Array.from(error).slice(0, MAX_RUN_ERROR).join(""),
-              }),
+          // The first authoritative outcome replaces any stale-run annotation.
+          // The status-is-null guard below still makes terminal outcomes immutable.
+          error:
+            error === undefined
+              ? null
+              : Array.from(error).slice(0, MAX_RUN_ERROR).join(""),
         })
         // A run finishes once. The second call — succeeded, then a downstream throw whose catch
         // calls finishRun("failed") — matches no row here and is a silent no-op, rather than
@@ -962,24 +945,18 @@ export function createRoutineStore(database: Database): RoutineStore {
     },
 
     async reapAbandonedRuns(olderThanMs, error) {
-      /*
-       * One UPDATE, not a select-then-loop: every row this WHERE matches is abandoned, and there is
-       * nothing to decide per row that the age bound does not already decide. Both sides of the age
-       * comparison are the database's clock — `started_at` was written by its `now()`, so measuring
-       * it against a replica's `Date.now()` would let ninety seconds of skew reap a run some server
-       * is still running, which is this file's standing clock discipline.
-       */
-      const closed = await database
+      // Use the database clock to detect stale work, but never infer cancellation
+      // from time elapsed. Keep the original open record as the exclusion boundary.
+      const annotated = await database
         .update(routineRuns)
         .set({
-          status: "skipped",
-          finishedAt: sql`now()`,
           // Same code-point cap as `finishRun`, so a reap reason cannot be cut mid-surrogate-pair.
           error: Array.from(error).slice(0, MAX_RUN_ERROR).join(""),
         })
         .where(
           and(
             isNull(routineRuns.status),
+            sql`${routineRuns.error} is distinct from ${Array.from(error).slice(0, MAX_RUN_ERROR).join("")}`,
             inArray(
               routineRuns.routineId,
               database
@@ -994,7 +971,7 @@ export function createRoutineStore(database: Database): RoutineStore {
           ),
         )
         .returning({ id: routineRuns.id });
-      return closed.length;
+      return annotated.length;
     },
 
     async markUnschedulable(id, reason) {

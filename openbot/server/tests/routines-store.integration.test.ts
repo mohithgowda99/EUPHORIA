@@ -1040,13 +1040,7 @@ describe("opening and closing a run", () => {
   });
 });
 
-/**
- * A server that dies mid-turn strands its run row open forever: the work item was finished on the
- * 202, so no retry ever comes back for that row, and nothing else writes it — the routines page
- * reads "running now" for a run no process is running. `reapAbandonedRuns` is the sweep's mop for
- * exactly that, and its age bound is what keeps it off live work: a young open row may be a turn
- * some server is still running, and closing it would turn the real `finishRun` into a silent no-op.
- */
+/** Stale source runs retain uncertainty until an authoritative outcome arrives. */
 describe("reaping the runs the server never finished", () => {
   /** Age one run row past the reaper's cutoff by hand; the reaper compares on the database's clock. */
   async function ageRun(runId: string, byMs: number) {
@@ -1056,7 +1050,7 @@ describe("reaping the runs the server never finished", () => {
       .where(eq(routineRuns.id, runId));
   }
 
-  test("closes only the rows past the cutoff, as skipped, and leaves live work alone", async () => {
+  test("annotates only old unresolved rows and leaves terminal outcomes alone", async () => {
     const { routine } = await makeRoutine();
     const abandoned = await store.insertRun(routine.id);
     const inFlight = await store.insertRun(routine.id);
@@ -1072,6 +1066,12 @@ describe("reaping the runs the server never finished", () => {
     // At least the row this test aged: the reaper is deliberately not routine-scoped, so a stray
     // abandoned row from elsewhere in the database may be swept up in the same call.
     expect(reaped).toBeGreaterThanOrEqual(1);
+    expect(
+      await store.reapAbandonedRuns(
+        10 * 60_000,
+        "the server did not finish this run; it may have restarted mid-turn",
+      ),
+    ).toBe(0);
 
     const rows = await database
       .select()
@@ -1080,15 +1080,15 @@ describe("reaping the runs the server never finished", () => {
     const byId = new Map(rows.map((row) => [row.id, row]));
 
     const abandonedRow = byId.get(abandoned.runId);
-    expect(abandonedRow?.status).toBe("skipped");
-    expect(abandonedRow?.finishedAt).toBeInstanceOf(Date);
+    expect(abandonedRow?.status).toBeNull();
+    expect(abandonedRow?.finishedAt).toBeNull();
     expect(abandonedRow?.error).toContain("did not finish this run");
 
     // The fresh open row is a turn some server may still be running: closing it would make the real
     // finishRun a silent no-op, which is the exact overreach the age bound exists to prevent.
     expect(byId.get(inFlight.runId)?.status).toBeNull();
 
-    // And a run with an outcome already has its truth; the reaper closes abandonment, not history.
+    // A confirmed outcome must remain unchanged.
     expect(byId.get(finished.runId)?.status).toBe("succeeded");
   });
 
@@ -1456,10 +1456,17 @@ describe("approved managed schedule offline reservation and recovery", () => {
       .update(routineRuns)
       .set({ startedAt: new Date(Date.now() - 60 * 60_000) })
       .where(eq(routineRuns.id, runId));
+    await store.reapAbandonedRuns(
+      10 * 60_000,
+      "Execution outcome is unconfirmed after restart.",
+    );
     await expect(
       f.bridge.migrate(f.owner.id, routine.id, "old_open_run"),
     ).rejects.toBeInstanceOf(RoutineRefusedError);
     expect(f.calls).toBe(0);
+    await expect(
+      store.startManualRun(f.owner.id, routine.id),
+    ).rejects.toBeInstanceOf(RoutineRefusedError);
     const [saved] = await database
       .select()
       .from(routines)
@@ -1470,6 +1477,16 @@ describe("approved managed schedule offline reservation and recovery", () => {
       .from(routineRuns)
       .where(eq(routineRuns.id, runId));
     expect(run.status).toBeNull();
+    expect(run.finishedAt).toBeNull();
+    // A late authoritative worker response must still be able to settle its own run.
+    await store.finishRun(runId, "succeeded");
+    const [settled] = await database
+      .select()
+      .from(routineRuns)
+      .where(eq(routineRuns.id, runId));
+    expect(settled.status).toBe("succeeded");
+    expect(settled.error).toBeNull();
+    expect(settled.finishedAt).toBeInstanceOf(Date);
   });
   test("simultaneous original-owner approvals create only one provider recurring schedule", async () => {
     const fixture = await managedFixture(async () => ({

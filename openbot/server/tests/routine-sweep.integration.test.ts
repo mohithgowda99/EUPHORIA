@@ -917,7 +917,7 @@ describe("consuming a claimed firing", () => {
    * never ran. At Helm defaults the old give-up branch was unreachable in time anyway (five 1-minute
    * retries against a 10-minute grace), so these rows used to leak for ever.
    */
-  test("a run row leaked at the attempt cap is closed by a later pass, so the page stops reading 'running'", async () => {
+  test("a run row leaked at the attempt cap remains uncertain after a later pass", async () => {
     const { owner, routine } = await makeRoutine();
     await offerFiring(
       routine.id,
@@ -952,17 +952,20 @@ describe("consuming a claimed firing", () => {
       warn.mockRestore();
     }
 
-    // No run row for this routine is left open once the reaper has passed.
+    // An uncertain attempt remains open even after its queue item is exhausted.
     const runs = await runsFor(routine.id);
     expect(runs.length).toBeGreaterThan(0);
-    expect(runs.every((run) => run.status !== null)).toBe(true);
+    expect(
+      runs.every(
+        (run) => run.status === null && run.error?.includes("unconfirmed"),
+      ),
+    ).toBe(true);
 
-    // The page-facing read agrees, and it reads "skipped", not "failed": the turn never ran, so the
-    // routine's own failure streak must not grow — ten flapping dispatches used to read as ten turn
-    // failures, enough to trip the fatigue rule and switch a perfectly healthy routine off.
+    // The page-facing read retains no terminal status; uncertainty must not
+    // fabricate a failure streak or a successful/skipped execution.
     const [summary] = await store.listFor(owner.id);
-    expect(summary?.lastRun?.status).toBe("skipped");
-    expect(summary?.lastRun?.finishedAt).toBeInstanceOf(Date);
+    expect(summary?.lastRun?.status).toBeNull();
+    expect(summary?.lastRun?.finishedAt).toBeNull();
     expect(await store.consecutiveFailures(routine.id)).toBe(0);
   });
 
@@ -1013,8 +1016,8 @@ describe("consuming a claimed firing", () => {
         ?.status,
     ).toBe("succeeded");
 
-    // And once the abandoned attempt's row is old enough that no turn could still be running it,
-    // the reaper closes it — as skipped, never touching the finished run beside it.
+    // Age annotates the unresolved attempt without changing its outcome or
+    // touching the confirmed run beside it.
     const attempt = runs.find((run) => run.id !== inFlight.runId);
     await database
       .update(routineRuns)
@@ -1029,7 +1032,10 @@ describe("consuming a claimed firing", () => {
       warnAgain.mockRestore();
     }
     const after = await runsFor(routine.id);
-    expect(after.find((run) => run.id === attempt?.id)?.status).toBe("skipped");
+    expect(after.find((run) => run.id === attempt?.id)?.status).toBeNull();
+    expect(after.find((run) => run.id === attempt?.id)?.error).toContain(
+      "unconfirmed",
+    );
     expect(after.find((run) => run.id === inFlight.runId)?.status).toBe(
       "succeeded",
     );
@@ -1085,11 +1091,12 @@ describe("consuming a claimed firing", () => {
     expect(report.fired).toEqual([]);
     expect(report.skipped[0]?.routineId).toBe(routine.id);
 
-    // Nothing about this firing is still open: attempt one's row is closed as skipped — no turn ran,
-    // so the fatigue rule must not count it — and attempt two never opened one.
+    // Attempt one retains uncertainty without counting as a confirmed failure;
+    // the expired retry never opens another run.
     const runs = await runsFor(routine.id);
     expect(runs).toHaveLength(1);
-    expect(runs[0]?.status).toBe("skipped");
+    expect(runs[0]?.status).toBeNull();
+    expect(runs[0]?.error).toContain("unconfirmed");
     expect(await store.consecutiveFailures(routine.id)).toBe(0);
     const [finished] = await firingsFor(routine.id);
     expect(finished?.finishedAt).not.toBeNull();
@@ -1101,7 +1108,7 @@ describe("consuming a claimed firing", () => {
    * system holding a reference to it — the page reads "running now" for a run no process is running.
    * The sweep's consuming pass is on a clock anyway, so it is the thing that mops these up.
    */
-  test("a run abandoned by a dead server is closed by the next pass, as skipped, with an honest reason", async () => {
+  test("an old run is annotated uncertain without fabricating a terminal outcome", async () => {
     const { owner, routine } = await makeRoutine();
     const { runId } = await store.insertRun(routine.id);
     // Aged past the reaper's cutoff (twice the server's five-minute turn timeout) by hand: the run
@@ -1122,11 +1129,12 @@ describe("consuming a claimed firing", () => {
     expect(report.considered).toBe(0);
 
     const runs = await runsFor(routine.id);
-    expect(runs[0]?.status).toBe("skipped");
-    expect(runs[0]?.error).toContain("never finished this run");
+    expect(runs[0]?.status).toBeNull();
+    expect(runs[0]?.error).toContain("unconfirmed");
+    expect(runs[0]?.error).toContain("unconfirmed");
     const [summary] = await store.listFor(owner.id);
-    expect(summary?.lastRun?.status).toBe("skipped");
-    expect(summary?.lastRun?.finishedAt).toBeInstanceOf(Date);
+    expect(summary?.lastRun?.status).toBeNull();
+    expect(summary?.lastRun?.finishedAt).toBeNull();
   });
 
   /**

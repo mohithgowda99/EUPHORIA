@@ -1,11 +1,11 @@
-# EUPHORIA — independent Section 2 repair checkpoint
+# EUPHORIA — source recovery repairs / VISION integration
 
-Branch `codex/section2-local-validation`; product code `9ecc6b279e686fa1b56e871105ff7720a5a89f83`, from feature input `2fa2c13`. **Integration and release HOLD; phase one incomplete.** Original feature/main/Section1/Section3 worktrees remain untouched.
+Branch `codex/section2-local-validation`; elapsed one-time recovery pushed at `0b3b8a8`, preceding native/source repair `9ecc6b2`, original Section2 input `2fa2c13`. Integration/release HOLD. Feature/main/Section1/Section3 worktrees preserved.
 
-Input locally verified: server types, gateway199/199, managed units37/37 and eight fresh migrated PostgreSQL suites69/69 through0075. Input native build failed. Repaired compilation, pinned binding use, explicit push sign-out ordering, original-source manual mutation exclusion/known receipt repair and settled recurring-create recovery. Current Debug/Release and iOS XCTest42/42 pass; repaired routines64/64 pass; types pass. Scoped lint retains11 warnings. No live provider/device/APNs/production evidence.
+Current source repair retains uncertainty for old unresolved runs, blocks managed cutover and duplicate manual start, accepts late authoritative completion and avoids repeat annotation churn.94/94 store/sweep/liveness tests, server typecheck and scoped Biome pass (22 infos). A broader111-test run has109 passes and2 GET routine DTO contract failures; exact names/evidence are in the validation handoff. Earlier cap-test timeout and subsequent passing runs are retained, not erased. Full fresh-DB sharded source sweep:6437 pass,26 fail,19 skip, exit1; exact failures committed in agents/validation/section2-20261029/full-repair-sweep.json. This branch is not a green full-server baseline.
 
-[Independent validation handoff](agents/EUPHORIA_SECTION2_LOCAL_VALIDATION.md) records exact SHAs, commands/log locations, evidence limits and review. Four important findings still block integration: age-based source reaper uncertainty, expired-account push registration, deleted-schedule idempotency and one-time recovery after time advances. Full-server failures and Section1-upgrade migration chain still need combined verification.
+Remaining source gates: scheduled-dispatch retries/overlap and legacy-reaped historical records; expired-account push lifecycle; deleted-schedule idempotency; route DTO compatibility; full-server/upgrade-chain validation. Provider spending enforcement and exact scheduled-root identity remain disabled/unverified.
 
-No paid API calls, recurrence, deployment, main merge or production credentials/data changes. Provider budget and exact scheduled root identity remain unresolved; disabled/unverified states stay explicit.
+User selected VISION as clean integration destination. Its independent branch `codex/native-integration` has selective native import and proven duplicate-renderer removal at `157f652`; no full fork/history/backend copy. Native core82, pinned comparison9, Debug/Release and43 iOS tests pass on full rerun; initial intermittent WebKit failure remains recorded there. Sections3–5 are incomplete. No paid inference, deployment, main merge or physical-device acceptance.
 
-**Next:** repair and review the four remaining lifecycle findings before controlled integration with verified Section1 and completed Section3.
+Next: resolve source retry/idempotency/security gates, then adopt the minimal verified backend dependency closure into VISION and validate authenticated native journeys.

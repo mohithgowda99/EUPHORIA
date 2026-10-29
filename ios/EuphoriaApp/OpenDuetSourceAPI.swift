@@ -83,6 +83,26 @@ struct SourceBrowserDecisionReceipt: Decodable, Sendable {
     let accepted: Bool
     let phase: String
 }
+struct SourceDelegationEvent: Decodable, Identifiable, Sendable {
+    let id: String?
+    let type: String
+    let status: String?
+    var stableID: String { (id ?? "") + ":" + type }
+}
+struct SourceDelegationActivity: Decodable, Sendable {
+    let rootTurnId: String?
+    let events: [SourceDelegationEvent]
+    let sourceState: String?
+    let providerStatus: String?
+    let complete: Bool
+}
+struct SourceHostedUploadStatus: Decodable, Sendable {
+    let status: String
+    let reason: String?
+    let path: String?
+    let bytes: Int?
+}
+
 
 struct SourceBot: Decodable, Identifiable, Sendable {
     let id: String
@@ -850,6 +870,24 @@ struct OpenDuetSourceAPI: Sendable {
             method: "POST", body: SourceHostedCancelRequest(rootTurnId: checkedID(rootTurnID)),
             queryItems: [URLQueryItem(name: "agentId", value: checkedID(botID))])
         guard result.accepted, result.phase == "requested", result.rootTurnId == rootTurnID
+        else { throw SourceAPIError.invalidResponse }
+        return result
+    }
+
+    func sourceDelegationActivity(channelID: String, botID: String) async throws -> SourceDelegationActivity {
+        let result: SourceDelegationActivity = try await request(
+            "api/delivery/conversations/" + checkedID(channelID) + "/delegation-activity",
+            method: "GET", queryItems: [URLQueryItem(name: "agentId", value: checkedID(botID))])
+        guard result.events.count <= 50 else { throw SourceAPIError.invalidResponse }
+        return result
+    }
+    func sourceHostedUploadStatus(channelID: String, botID: String,
+                                  uploadID: String) async throws -> SourceHostedUploadStatus {
+        let normalized = uploadID.replacingOccurrences(of: "-", with: "")
+        let result: SourceHostedUploadStatus = try await request(
+            "api/delivery/conversations/" + checkedID(channelID) + "/hosted-uploads/" + checkedID(normalized),
+            method: "GET", queryItems: [URLQueryItem(name: "agentId", value: checkedID(botID))])
+        guard ["confirmed","present_unverified","unknown"].contains(result.status)
         else { throw SourceAPIError.invalidResponse }
         return result
     }

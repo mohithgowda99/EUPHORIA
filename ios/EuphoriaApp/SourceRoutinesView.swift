@@ -42,7 +42,12 @@ struct SourceRoutinesView: View {
                         LabeledContent("Bot", value: routine.agentId)
                         LabeledContent("Execution", value: backendLabel(routine))
                         LabeledContent("Status", value: routine.enabled ? "Enabled" : "Paused")
-                        LabeledContent("Next intended run", value: routine.nextRunAt)
+                        if routine.executionBackend == nil || routine.executionBackend == "source" {
+                            LabeledContent("Next source run", value: routine.nextRunAt)
+                        } else {
+                            Text("Next cloud firing not yet synchronized with original source.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                         if let outcome = routine.lastRun?.status {
                             LabeledContent("Last run", value: outcome)
                         }

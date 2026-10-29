@@ -6,7 +6,7 @@ import UserNotifications
 /// A native APNs token registers only with the original authenticated
 /// OpenDuet DeliveryStore. No provider key, team secret or token is compiled
 /// into the app. Simulator push support does not prove device delivery.
-final class EuphoriaPushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+final class EuphoriaPushDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
     private static let deviceIDKey = "euphoria.apns.device-id"
     static let statusKey = "euphoria.apns.registration-status"
 

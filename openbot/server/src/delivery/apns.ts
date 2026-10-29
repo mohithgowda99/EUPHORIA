@@ -29,6 +29,8 @@ export function createApnsPushTransport(configuration:ApnsConfiguration) {
   return data+"."+sign("sha256",Buffer.from(data),{key,dsaEncoding:"ieee-p1363"}).toString("base64url");
  };
  return {
+  // APNs exposes no device delivery receipt endpoint.
+  receipt: undefined as undefined,
   async send(input:{token:string;title:string;body:string;channelId:string;
     kind:"reply"|"question"|"approval";requestId?:string|null}) {
    if(!/^[a-fA-F0-9]{64}$/.test(input.token))

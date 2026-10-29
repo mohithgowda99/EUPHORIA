@@ -462,7 +462,15 @@ export class AgentsClient {
       update.name=patch.name;
     }
     const changesSchedule=['expression','timezone','runAt'].some(k=>patch[k]!==undefined);
-    if(changesSchedule)Object.assign(update,checkedAutomationSchedule(patch));
+    if(changesSchedule){
+      // AutomationUpdateParams accepts expression/timezone/run_at but not
+      // the create-only schedule discriminant "type".
+      const schedule=checkedAutomationSchedule(patch);
+      if(schedule.type==='periodic'){
+        update.expression=schedule.expression;
+        update.timezone=schedule.timezone;
+      }else update.run_at=schedule.run_at;
+    }
     if(patch.target!==undefined&&patch.instructions!==undefined)
       throw Error('Use either target or instructions, never both');
     if(patch.target!==undefined)update.target=checkedAutomationTarget(patch.target);

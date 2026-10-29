@@ -823,6 +823,11 @@ export async function createManagedDevelopment(input:{database:Database;provider
     const [saved]=await database.select({payload:workItems.payload}).from(workItems)
      .where(and(eq(workItems.kind,'person.question'),eq(workItems.key,exact.call_id))).limit(1);
     if(!saved||stable(saved.payload)!==stable(payload))throw Error('MCP approval identity collision');
+    // Persisted question is authoritative; original delivery outbox handles
+    // notification dedupe and restarts even while the phone is terminated.
+    await router.notify(scope,{id:exact.call_id,kind:'approval',
+     requestId:exact.call_id,
+     text:'Connector approval required: '+preview});
    }else{
     const payload={sessionID:session.id,scope,call:exact};
     await queue.offer({kind:'managed.connector-read',key:exact.call_id,payload});
@@ -843,6 +848,8 @@ export async function createManagedDevelopment(input:{database:Database;provider
    const [existing]=await database.select({payload:workItems.payload}).from(workItems)
     .where(and(eq(workItems.kind,'person.question'),eq(workItems.key,savedCall.call_id))).limit(1);
    if(!existing||stable(existing.payload)!==stable(payload))throw Error('Question call identity collision');
+   await router.notify(scope,{id:savedCall.call_id,kind:'question',
+    requestId:savedCall.call_id,text:ask.question});
    return{surface:null};
   }
   if(call.name!=='euphoria_render_surface')throw Error('Unsupported managed tool');

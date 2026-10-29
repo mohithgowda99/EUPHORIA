@@ -47,6 +47,22 @@ struct SourceHostedArtifactEnvelope: Decodable, Sendable {
     let artifacts: [SourceHostedArtifact]
 }
 
+struct SourceHostedActivity: Decodable, Sendable {
+    let rootTurnId: String?
+    let canCancel: Bool
+    let cancelRequested: Bool
+    let requestConfirmed: Bool?
+    let outcomeUncertain: Bool?
+}
+private struct SourceHostedCancelRequest: Encodable {
+    let rootTurnId: String
+}
+struct SourceHostedCancelReceipt: Decodable, Sendable {
+    let accepted: Bool
+    let phase: String
+    let rootTurnId: String
+}
+
 struct SourceBot: Decodable, Identifiable, Sendable {
     let id: String
     let name: String
@@ -775,6 +791,24 @@ struct OpenDuetSourceAPI: Sendable {
             throw SourceAPIError.invalidResponse
         }
         return value
+    }
+
+    /// Only the exact server-correlated original Inbox root can be cancelled.
+    /// A cancellation receipt means request accepted, not work stopped.
+    func sourceHostedActivity(channelID: String, botID: String) async throws -> SourceHostedActivity {
+        return try await request(
+            "api/delivery/conversations/" + checkedID(channelID) + "/hosted-activity",
+            method: "GET", queryItems: [URLQueryItem(name: "agentId", value: checkedID(botID))])
+    }
+    func requestSourceHostedCancellation(channelID: String, botID: String,
+                                         rootTurnID: String) async throws -> SourceHostedCancelReceipt {
+        let result: SourceHostedCancelReceipt = try await request(
+            "api/delivery/conversations/" + checkedID(channelID) + "/hosted-cancel",
+            method: "POST", body: SourceHostedCancelRequest(rootTurnId: checkedID(rootTurnID)),
+            queryItems: [URLQueryItem(name: "agentId", value: checkedID(botID))])
+        guard result.accepted, result.phase == "requested", result.rootTurnId == rootTurnID
+        else { throw SourceAPIError.invalidResponse }
+        return result
     }
 
     func sourceHostedSubagents(channelID: String, botID: String) async throws -> [SourceHostedSubagent] {

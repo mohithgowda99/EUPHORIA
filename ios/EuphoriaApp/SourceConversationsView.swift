@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import SwiftData
 
 /// OpenDuet's actual Chat roster. The ORIGINAL ChannelStore and DeliveryRouter
@@ -158,9 +159,16 @@ struct SourceConversationDetailView: View {
     @State private var hostedArtifacts: [SourceHostedArtifact] = []
     @State private var exportedArtifact: (id: String, url: URL)?
     @State private var downloadingArtifactID: String?
+    @State private var selectingInputFile = false
+    @State private var preparingInputFile = false
+    @State private var inputUploadNotice: String?
 
     private var pending: [SourceMessageIntent] {
         allPending.filter { $0.ownerScope == ownerScope && $0.channelID == conversation.id }
+    }
+    private var unconfirmedUploads: [SourceMessageIntent] {
+        allPending.filter { $0.ownerScope == ownerScope &&
+            $0.channelID == "hosted_upload:" + conversation.id && $0.botID == selectedBotID }
     }
 
     @Environment(\.colorScheme) private var colorScheme
@@ -235,6 +243,26 @@ struct SourceConversationDetailView: View {
                             .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
                             .accessibilityElement(children: .contain)
                         }
+                        if !unconfirmedUploads.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label("File upload needs review", systemImage: "exclamationmark.triangle")
+                                    .font(.subheadline.weight(.semibold))
+                                ForEach(unconfirmedUploads) { item in
+                                    Text(item.message)
+                                    Text("The server may already have received this file. Check your Bot's hosted workspace before trying again.")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                    Button("I verified the file status") {
+                                        context.delete(item)
+                                        try? context.save()
+                                    }.font(.caption)
+                                }
+                            }
+                            .padding(12).background(botColor, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        if let inputUploadNotice {
+                            Label(inputUploadNotice, systemImage: "doc.badge.plus")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                         if !hostedArtifacts.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 Label("Generated files", systemImage: "doc.zipper")
@@ -292,6 +320,19 @@ struct SourceConversationDetailView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if allowsSending {
                 HStack(alignment: .bottom, spacing: 12) {
+                    Button {
+                        selectingInputFile = true
+                    } label: {
+                        if preparingInputFile {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "paperclip")
+                                .font(.body.weight(.medium))
+                        }
+                    }
+                    .accessibilityLabel("Add file to Bot sandbox")
+                    .disabled(busy || preparingInputFile || !unconfirmedUploads.isEmpty ||
+                              !pending.isEmpty || selectedBotID.isEmpty)
                     TextField("Message OpenDuet", text: $draft, axis: .vertical)
                         .lineLimit(1...6).focused($composing)
                         .padding(.vertical, 12).padding(.leading, 16)
@@ -307,6 +348,14 @@ struct SourceConversationDetailView: View {
                 .overlay(RoundedRectangle(cornerRadius: 28).stroke(.primary.opacity(0.08), lineWidth: 0.5))
                 .padding(.horizontal, 16).padding(.vertical, 8)
                 .background(surfaceColor.opacity(0.96))
+            }
+        }
+        .fileImporter(isPresented: $selectingInputFile, allowedContentTypes: [.item]) { selection in
+            switch selection {
+            case .success(let file):
+                Task { await prepareHostedInputFile(file) }
+            case .failure:
+                inputUploadNotice = "File picker closed without an accepted file."
             }
         }
         .animation(.timingCurve(0.23, 1, 0.32, 1, duration: 0.2), value: visual?.surface.surfaceID)
@@ -402,6 +451,48 @@ struct SourceConversationDetailView: View {
             catch { awaitingAgent = false; self.error = "The interactive response could not be verified. Refresh to check it." }
         } catch {
             self.error = "The original conversation could not be read. Your saved outgoing intent has not been replayed."
+        }
+    }
+
+    private func prepareHostedInputFile(_ file: URL) async {
+        guard !preparingInputFile, unconfirmedUploads.isEmpty, !selectedBotID.isEmpty else { return }
+        preparingInputFile = true
+        defer { preparingInputFile = false }
+        let access = file.startAccessingSecurityScopedResource()
+        defer { if access { file.stopAccessingSecurityScopedResource() } }
+        do {
+            let metadata = try file.resourceValues(forKeys: [.fileSizeKey])
+            guard let size = metadata.fileSize, (1...1_048_576).contains(size) else {
+                inputUploadNotice = "The maximum supported input file is 1 MB."
+                return
+            }
+            let rawName = file.lastPathComponent
+            let safeName = String(rawName.replacingOccurrences(
+                of: "[^A-Za-z0-9._-]", with: "_", options: .regularExpression).prefix(61))
+            guard !safeName.isEmpty, !safeName.contains("..") else {
+                inputUploadNotice = "Choose a file with a supported name."
+                return
+            }
+            let contents = try Data(contentsOf: file, options: .mappedIfSafe)
+            guard contents.count == size else { throw SourceAPIError.invalidResponse }
+            let id = UUID().uuidString
+            let originalBot = selectedBotID
+            let saved = SourceMessageIntent(ownerScope: ownerScope,
+                channelID: "hosted_upload:" + conversation.id, botID: originalBot,
+                externalID: id, message: rawName)
+            context.insert(saved)
+            try context.save() // Persist identity BEFORE any provider request.
+            let accepted = try await client.uploadSourceHostedFile(
+                channelID: conversation.id, botID: originalBot,
+                uploadID: saved.externalID, filename: safeName, contents: contents)
+            context.delete(saved)
+            try context.save()
+            guard selectedBotID == originalBot else { return }
+            draft += (draft.isEmpty ? "" : "\n") +
+                "Please analyze the uploaded file at " + accepted.path + "."
+            inputUploadNotice = "File uploaded to your Bot's sandbox. Send the drafted instruction when ready."
+        } catch {
+            inputUploadNotice = "File upload outcome could not be confirmed. Review the saved upload before selecting another file."
         }
     }
 

@@ -58,12 +58,12 @@ jobs:
       # visible to the next test's deterministic provider fixture.
       - name: Section 2 strict provider evidence and APNs offline regressions
         working-directory: openbot
-        run: bun test server/tests/managed-automation-identity.test.ts
+        run: bun test server/tests/managed-automation-identity.test.ts server/tests/managed-routine-webhook.test.ts
       - name: Run isolated source integration suites
         working-directory: openbot
         run: |
           bun test server/tests/managed-memory-context.test.ts server/tests/managed-connected-mcp.test.ts server/tests/managed-native-mcp.test.ts server/tests/managed-hosted-capabilities.test.ts server/tests/managed-hosted-artifacts.test.ts server/tests/managed-hosted-cancel.test.ts server/tests/managed-source-skills.test.ts server/tests/managed-hosted-skills.test.ts server/tests/managed-hosted-browser.test.ts
-          for suite in questions tasks mcp jsonb hosted cancel browser; do
+          for suite in questions tasks mcp jsonb hosted cancel browser routines; do
             export TEST_DB_NAME="euphoria_${suite}"
             (cd server && bun -e 'import postgres from "postgres"; const db=postgres(process.env.TEST_DATABASE_URL); await db.unsafe("CREATE DATABASE "+process.env.TEST_DB_NAME); await db.end();')
             export TEST_DATABASE_URL="postgres://euphoria_test:test_only_password@127.0.0.1:5432/${TEST_DB_NAME}"
@@ -76,6 +76,7 @@ jobs:
               hosted) bun test server/tests/managed-hosted-capabilities.integration.test.ts;;
               cancel) bun test server/tests/managed-hosted-cancel.integration.test.ts;;
               browser) bun test server/tests/managed-hosted-browser.integration.test.ts;;
+              routines) bun test server/tests/routines-store.integration.test.ts;;
             esac
           done
       - name: Check gateway regressions

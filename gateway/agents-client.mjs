@@ -203,6 +203,57 @@ export class AgentsClient {
   }
 
 
+  /** Original source authorizes owner, Bot, session and file identity first.
+   * This transport never decides which user may upload.
+   */
+  async retrieveEnvironment(environmentID) {
+    const id=identifier(environmentID);
+    return this.#environmentRequest('GET','/'+id);
+  }
+  async createEnvironmentFile(environmentID,{path,data},submissionKey) {
+    identifier(environmentID);key(submissionKey);
+    if(typeof path!=='string'||!/^\/workspace\/[A-Za-z0-9._-]{1,160}$/.test(path)||
+       path.includes('..')||typeof data!=='string'||data.length>1_400_000||
+       !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data))
+      throw Error('Invalid sandbox file upload');
+    const bytes=Buffer.from(data,'base64');
+    if(bytes.length===0||bytes.length>1024*1024||bytes.toString('base64')!==data)
+      throw Error('Invalid sandbox file bytes');
+    const result=await this.#environmentRequest('POST','/'+environmentID+'/files',
+      {type:'inline',path,data},submissionKey);
+    if(result?.environment_id!==environmentID||result?.path!==path||
+       result?.size_bytes!==bytes.length)
+      throw Error('Unverified hosted file receipt; do not retry automatically');
+    return result;
+  }
+  async #environmentRequest(method,path,body,submissionKey) {
+    const headers={Authorization:'Bearer '+this.#apiKey,
+      'OpenAI-Beta':'agents=v1','Content-Type':'application/json'};
+    if(method==='POST')headers['Idempotency-Key']=key(submissionKey);
+    let response;
+    try {
+      response=await this.#fetch('https://api.openai.com/v1/agents/environments'+path,{
+        method,headers,redirect:'error',signal:AbortSignal.timeout(30_000),
+        ...(body===undefined?{}:{body:JSON.stringify(body)})
+      });
+    }catch{
+      const error=Error('Hosted environment request uncertain; inspect before retry');
+      error.outcomeUnknown=method==='POST';throw error;
+    }
+    if(!response.ok){
+      try{await response.body?.cancel();}catch{}
+      const error=Error('Hosted environment API refused request ('+response.status+')');
+      error.status=response.status;
+      error.outcomeUnknown=method==='POST'&&(response.status>=500||response.status===408);
+      throw error;
+    }
+    try{return await response.json();}
+    catch{
+      const error=Error('Unverified hosted environment response');
+      error.outcomeUnknown=method==='POST';throw error;
+    }
+  }
+
   /** Bounded binary read, never an untrusted redirect or a provider URL shared
    * with iOS. CALLER MUST FIRST AUTHORIZE THE SOURCE OWNER AND EXACT ROOT.
    * The provider's artifact-content endpoint is isolated here so a provider

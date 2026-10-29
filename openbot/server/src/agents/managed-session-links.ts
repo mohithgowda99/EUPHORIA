@@ -1,6 +1,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
-import { managedAgentSessionLinks } from "../db/schema";
+import {DENIED_HOSTED_CAPABILITIES, type HostedCapabilities} from "./managed-hosted-capabilities";
+import { managedAgentSessionLinks, managedBotHostedCapabilities } from "../db/schema";
 
 /**
  * The only custom persistent state required to relate ORIGINAL OpenDuet
@@ -51,7 +52,7 @@ export function createManagedSessionLinkStore(database: Database) {
      * allowed to call OpenAI. Losers never repeat a possibly delivered write.
      * The caller must pass a stable queue-delivery identity as creationKey.
      */
-    async reserve(scope: ManagedSourceScope, creationKey: string):
+    async reserve(scope: ManagedSourceScope, creationKey: string, expectedCapabilities?: HostedCapabilities):
       Promise<{ create: true; providerSessionId: null } |
         { create: false; providerSessionId: string; creationKey: string }> {
       if (!creationKey || creationKey.length > 256) {
@@ -61,6 +62,15 @@ export function createManagedSessionLinkStore(database: Database) {
         // Serialise the ORIGINAL permission row with the FIRST provider
         // reservation, even across two backend processes.
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${scope.ownerUserId+":"+scope.botId}, 0))`);
+        if (expectedCapabilities) {
+          const [row] = await tx.select().from(managedBotHostedCapabilities)
+            .where(and(eq(managedBotHostedCapabilities.ownerUserId, scope.ownerUserId),
+              eq(managedBotHostedCapabilities.botId, scope.botId))).limit(1);
+          const current = row ?? DENIED_HOSTED_CAPABILITIES;
+          const fields = ["sandbox", "browser", "webSearch", "delegation", "maxConcurrentSubagents"] as const;
+          if (fields.some(field => current[field] !== expectedCapabilities[field]))
+            throw new Error("Hosted capabilities changed before session reservation; refresh and retry");
+        }
         const [created] = await tx.insert(managedAgentSessionLinks).values({
           ownerUserId: scope.ownerUserId,
           channelId: scope.channelId,

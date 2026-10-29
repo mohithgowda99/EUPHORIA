@@ -98,6 +98,8 @@ export async function createManagedDevelopment(input:{database:Database;provider
    const managedHosted=hostedDefinition(caps);
    const hostedSkillRefs=input.plugins&&caps.sandbox?
      await grantedHostedSkillReferences(input.plugins,scope.agentId,input.hostedSkillMappings??{}):[];
+   if(hostedSkillRefs.length)
+     throw Error('Agents API hosted skill references are unsupported; capability-directory installation must be verified before enabling mapped skills');
    const hostedEnvironment=caps.browser?
      browserEnvironment(input.browserHosts??[]):
      managedHosted.environment?
@@ -135,7 +137,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
 
    await channels.recordActivity(actor,scope.channelId,{text:scope.text,agentId:null,at:new Date()},{id:'delivery-input:'+scope.runId});
    await submitManagedSourceInput({scope:{ownerUserId:scope.ownerUserId,channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId},
-    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory+connectedInventory+grantedSkills+hostedGuidance+browserGuidance+delegationGuidance,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[]),
+    runId:scope.runId,expectedHostedCapabilities:caps,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory+connectedInventory+grantedSkills+hostedGuidance+browserGuidance+delegationGuidance,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[]),
        ...(input.allowWebSearch&&caps.webSearch?[{type:'web_search',mode:'live',context_size:'low'}]:[]),...(caps.browser?[{type:'computer_use',include_screenshots:true}]:[]),...nativeMCP.tools],
        ...managedHosted,environment:hostedEnvironment},links,turns,provider});
    return {replyText:'',pending:true};
@@ -331,7 +333,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
   const current=await currentBrowser(c.var.actor.id,c.req.param('id'),c.req.query('agentId')??'');
   if(!current)return c.json({requests:[]});
   const pending=pendingPublicOrigin(current.session.required_actions??[],input.browserHosts??[]);
-  const pendingAuth=(current.session.required_actions??[] as unknown[]).filter(a=>
+  const pendingAuth=((current.session.required_actions??[]) as unknown[]).filter(a=>
    a&&typeof a==='object'&&(a as any).type==='computer_use_approval_request'&&
    (a as any).request?.type==='browser_authentication'&&
    typeof (a as any).request_id==='string'&&
@@ -366,7 +368,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
   if(!current)return c.json({error:'Browser source root or grant unavailable'},409);
   const pending=pendingPublicOrigin(current.session.required_actions??[],input.browserHosts??[]);
   const origin=pending.find(p=>p.request_id===id);
-  const auth=(current.session.required_actions??[] as unknown[]).some(a=>
+  const auth=((current.session.required_actions??[]) as unknown[]).some(a=>
    a&&typeof a==='object'&&(a as any).type==='computer_use_approval_request'&&
    (a as any).request_id===id&&(a as any).request?.type==='browser_authentication');
   if(!origin&&!auth)return c.json({error:'Browser request no longer pending'},409);

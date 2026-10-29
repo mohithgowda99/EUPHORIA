@@ -1,3 +1,4 @@
+import type { HostedCapabilities } from "./managed-hosted-capabilities";
 import type { ManagedSourceScope } from "./managed-session-links";
 
 /**
@@ -23,6 +24,7 @@ export class ManagedSourceOutcomeUnknown extends Error {
 export async function submitManagedSourceInput(input: {
   scope: ManagedSourceScope;
   runId: string;
+  expectedHostedCapabilities?: HostedCapabilities;
   message: string;
   definition: { model: string; instructions: string; tools: unknown[]; reasoningEffort?: string; verbosity?: string;
     environment?:{type:"openai_hosted";container_size:"small";
@@ -31,7 +33,7 @@ export async function submitManagedSourceInput(input: {
       desktop?:{enabled:true}};
     multiAgent?:{enabled:true;max_concurrent_subagents:number} };
   links: {
-    reserve(scope: ManagedSourceScope, key: string): Promise<
+    reserve(scope: ManagedSourceScope, key: string, expectedCapabilities?: HostedCapabilities): Promise<
       { create: true; providerSessionId: null } |
       { create: false; providerSessionId: string; creationKey: string }
     >;
@@ -81,14 +83,14 @@ export async function submitManagedSourceInput(input: {
   // into a second provider follow-up. Return ONLY provider-accepted, never done.
   const previous = await input.turns.read(input.runId);
   if (previous) {
-    const linked = await input.links.reserve(input.scope, creationKey);
+    const linked = await input.links.reserve(input.scope, creationKey, input.expectedHostedCapabilities);
     if (linked.create || linked.providerSessionId !== previous.providerSessionId)
       throw new Error("Original Inbox/provider session correlation changed");
     const result = await input.turns.reserve(input.runId, originalScope, previous.providerSessionId);
     if (result !== "existing") throw new Error("Original managed receipt unexpectedly disappeared");
     return {sessionID:previous.providerSessionId,phase:"accepted"};
   }
-  const link = await input.links.reserve(input.scope, creationKey);
+  const link = await input.links.reserve(input.scope, creationKey, input.expectedHostedCapabilities);
   if (link.create && input.provider.createSessionStream) {
     // OpenAI's initial stream emits session.created before turn.created.
     // Bind each exact identity into ORIGINAL source state. No extra runner.

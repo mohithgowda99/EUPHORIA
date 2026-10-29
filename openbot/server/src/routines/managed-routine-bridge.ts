@@ -2,6 +2,7 @@ import {and,eq,isNull,sql} from "drizzle-orm";
 import type {Database} from "../db/client";
 import {managedAgentSessionLinks,managedRoutineInvocations,routineRuns,routines} from "../db/schema";
 import {nextOccurrence} from "./schedule";
+import {inspectAutomationDelivery,advanceInvocationCursor} from "./managed-automation-identity";
 import {RoutineNotFoundError,RoutineRefusedError} from "./store";
 
 /** Explicit bridge, not a new scheduler. Existing source RoutineStore and
@@ -203,17 +204,10 @@ export function createManagedRoutineBridge(input:{
   let inspected=0,unverified=0;
   async function observe(raw:unknown) {
    if(!raw||typeof raw!=="object")throw new Error("Invalid provider invocation");
-   const item=raw as {id?:string;automation_id?:string;session_id?:string|null;
-    status?:string;source?:{type?:string};skip_reason?:string|null;turn_id?:string};
-   if(!item.id||!validID(item.id)||item.automation_id!==automationID)
-    throw new Error("Provider automation/invocation identity mismatch");
-   if(!["queued","completed","failed","skipped"].includes(item.status??""))
-    throw new Error("Unknown provider invocation delivery state");
-   if(item.session_id && item.session_id!==sessionID)
-    throw new Error("Automation delivered into an unapproved source session");
-   const manual=item.source?.type==="manual";
-   if(!manual && item.source?.type!=="automation")
-    throw new Error("Unknown provider invocation source");
+   const evidence=inspectAutomationDelivery(raw,automationID,sessionID);
+   const item={id:evidence.id,session_id:evidence.sessionId,
+    status:evidence.status};
+   const manual=evidence.source==="manual";
    const [existing]=await db.select().from(managedRoutineInvocations).where(
     eq(managedRoutineInvocations.providerInvocationId,item.id)).limit(1);
    if(existing && existing.routineId!==id)
@@ -273,12 +267,11 @@ export function createManagedRoutineBridge(input:{
    const found=await provider.retrieveAutomationInvocation(automationID,receipt.providerInvocationId);
    await observe(found);
   }
-  if(page.has_more&&(!page.last_id||!validID(page.last_id)||page.last_id===cursor))
-   throw new Error("Provider pagination did not advance; retaining cursor");
+  const nextCursor=advanceInvocationCursor(cursor??null,page);
   // Advance only after the complete page was durably projected. A racing
   // worker can repeat this page harmlessly; it must not roll the cursor back.
   await db.update(routines).set({
-   providerInvocationCursor:page.has_more?page.last_id??null:null,
+   providerInvocationCursor:nextCursor,
    providerLastScannedAt:new Date()
   }).where(and(eq(routines.id,id),eq(routines.ownerUserId,owner),
    eq(routines.executionBackend,"managed"),

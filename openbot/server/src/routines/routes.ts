@@ -125,6 +125,10 @@ export function createRoutineRoutes(
       try{return c.json(await managed.state(c.var.actor.id,c.req.param("id")));}
       catch(error){return mapStoreError(c,error);}
     });
+    routes.post("/:id/managed/repair",requireUser,async c=>{
+      try{return c.json(await managed.repair(c.var.actor.id,c.req.param("id")));}
+      catch(error){return mapStoreError(c,error);}
+    });
     routes.post("/:id/managed/reconcile",requireUser,async c=>{
       try{return c.json(await managed.sync(c.var.actor.id,c.req.param("id")));}
       catch(error){return mapStoreError(c,error);}

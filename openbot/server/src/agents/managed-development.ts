@@ -60,7 +60,11 @@ import { createPluginStore, type PluginStore } from "../plugins/store";
 import { verifyManagedSessionWebhook } from "../routines/managed-automation-webhook";
 import { createManagedRoutineBridge } from "../routines/managed-routine-bridge";
 import { createRoutineRoutes } from "../routines/routes";
-import { createRoutineStore, RoutineRefusedError } from "../routines/store";
+import {
+  createRoutineStore,
+  RoutineRefusedError,
+  routineNotDeleted,
+} from "../routines/store";
 import { loadTenantPackage, synchronizeTenantPackage } from "../tenant-package";
 import { repeatAfterEach } from "../work/loop";
 import { createWorkQueue } from "../work/queue";
@@ -2461,6 +2465,7 @@ export async function createManagedDevelopment(input: {
         .where(
           and(
             eq(routines.executionBackend, "managed"),
+            routineNotDeleted(),
             eq(routines.ownerUserId, actor.id),
           ),
         )
@@ -2498,6 +2503,7 @@ export async function createManagedDevelopment(input: {
               eq(routines.ownerUserId, actor.id),
               eq(routines.providerSessionId, receipt.sessionId),
               eq(routines.executionBackend, "managed"),
+              routineNotDeleted(),
               ...(receipt.routineCursor
                 ? [sql`${routines.id} > ${receipt.routineCursor}`]
                 : []),
@@ -2890,14 +2896,17 @@ export async function createManagedDevelopment(input: {
                   : { cron: details.cron!, timezone: details.timezone! }),
               },
             );
-            if (created.state !== "managed")
+            if (created.state !== "managed" && created.state !== "deleted")
               throw Error(
                 "Schedule creation was previously reserved or uncertain; no automatic replay",
               );
             output = {
-              accepted: true,
+              accepted: created.state === "managed",
               routineId: created.routineId,
-              text: "User approved exactly this schedule. Source RoutineStore saved its cloud mapping.",
+              text:
+                created.state === "deleted"
+                  ? "This approved schedule was subsequently deleted. No replacement was created. Ask for a new schedule if the user wants one."
+                  : "User approved exactly this schedule. Source RoutineStore saved its cloud mapping.",
             };
           }
           await provider.submitToolResult(

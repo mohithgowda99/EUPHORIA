@@ -27,6 +27,7 @@ import {
   routines,
   workItems,
 } from "../db/schema";
+import { routineNotDeleted } from "../routines/store";
 import { DEFAULT_MAX_ATTEMPTS } from "../work/queue";
 
 export type ActivityKind =
@@ -142,6 +143,7 @@ export function createActivityStore(database: Database) {
           and(
             eq(routines.ownerUserId, ownerUserId),
             eq(routines.agentId, agentId),
+            routineNotDeleted(),
           ),
         );
       for (const routine of ownedRoutines)

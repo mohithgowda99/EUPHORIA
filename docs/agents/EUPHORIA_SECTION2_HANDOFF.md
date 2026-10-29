@@ -81,3 +81,12 @@ GitHub draft PR was opened to execute existing CI and the isolated EUPHORIA core
 
 ## Non-actions / isolation
 No main-branch or Section 1 branch mutation, no branch merge, no Section 3 work, no production database migration, no live paid model requests, no changes to production credentials or uploaded APNs key. Review PR remains **draft**.
+
+
+## Local validation continuation: deleted schedule approval replay (2026-10-29)
+
+Branch codex/section2-local-validation, following b334fe1. The original RoutineStore row now retains a terminal disabled managed-deletion reservation. Exact approval replay is idempotent after deletion and process restart; mismatched identity/ownership remains denied. Provider deletion uncertainty is preserved until exact absence is established. Existing source-routine hard deletion remains unchanged. Tombstones and their retained runs are hidden from normal source lists and Bot activity; this does not delete historical evidence. Original person.question continuation truthfully returns accepted:false for an approval whose resulting schedule was subsequently deleted.
+
+Executed:137 pass/0 fail/490 assertions across routines-store, routine-sweep, sweep-liveness, run-now and channel-activity suites;2 pass/0 fail/27 assertions in managed-schedule-recovery source fixtures. The source restart fixtures emitted reconciliation warnings, retained as evidence. Typecheck exit0; scoped Biome exit0 with52 warnings/73 infos. git diff --check passed. Tests first reproduced approval replay and retained-run activity defects before repair. A test typo was corrected; no assertion weakened. Independent review confirmed activity filtering closes its finding; review was inspection only. Raw local logs:/private/tmp/euphoria-section2-evidence/{pause-affected-tests.log,deleted-source-result.log,deleted-final-types.log,deleted-final-biome.log}.
+
+Limitations: full sharded source suite has not been rerun; measured prior6437 pass/26 fail/19 skip remains authoritative for that run. Earlier hard-deleted rows have no reservation to reuse; this patch is prospective protection, not historical recovery. Scheduled source dispatch overlap/retry, historical age-reaped records, expired-session device registration, migration upgrades and complete native/backend integration remain open. No live provider acceptance.

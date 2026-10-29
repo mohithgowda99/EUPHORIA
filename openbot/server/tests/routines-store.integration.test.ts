@@ -1,6 +1,7 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
+import { createActivityStore } from "../src/activity/activity";
 import { createAgentProfileStore } from "../src/agents/profile-store";
 import type { AgentActor } from "../src/agents/profile-types";
 import { createChannelStore } from "../src/channels/routes";
@@ -1487,6 +1488,127 @@ describe("approved managed schedule offline reservation and recovery", () => {
     expect(settled.status).toBe("succeeded");
     expect(settled.error).toBeNull();
     expect(settled.finishedAt).toBeInstanceOf(Date);
+  });
+  test("confirmed deletion retains the approved request across restart without resurrecting a schedule", async () => {
+    const f = await managedFixture(async () => ({
+      id: "auto_" + randomUUID().replaceAll("-", ""),
+    }));
+    const params = {
+      channelId: f.channel.id,
+      agentId: f.agentId,
+      instruction: "Send my morning reading.",
+      requestId: "deleted_" + randomUUID().replaceAll("-", "").slice(0, 20),
+      cron: "0 9 * * *",
+      timezone: "UTC",
+    };
+    const first = await f.bridge.createApprovedSchedule(f.owner.id, params);
+    await store.insertRun(first.routineId);
+    let deletes = 0;
+    f.provider.deleteAutomation = async () => {
+      deletes++;
+    };
+    await f.bridge.change(f.owner.id, first.routineId, "delete", "delete_once");
+    const restarted = createManagedRoutineBridge({
+      database,
+      provider: f.provider,
+      authorise: async (scope) =>
+        scope.ownerUserId === f.owner.id &&
+        scope.channelId === f.channel.id &&
+        scope.agentId === f.agentId,
+      assertSpendingBoundary: async () => {
+        throw Error("Deleted requests never authorize new spending");
+      },
+    });
+    expect(await restarted.createApprovedSchedule(f.owner.id, params)).toEqual({
+      routineId: first.routineId,
+      state: "deleted",
+      automationId: first.automationId,
+    });
+    expect(f.calls).toBe(1);
+    expect(deletes).toBe(1);
+    expect(await store.listFor(f.owner.id)).toEqual([]);
+    expect(
+      await createActivityStore(database).forBot(f.owner.id, f.agentId),
+    ).toEqual({ inProgress: [], scheduled: [], completed: [] });
+    await expect(
+      restarted.change(f.owner.id, first.routineId, "resume", "resume_deleted"),
+    ).rejects.toBeInstanceOf(RoutineNotFoundError);
+    await expect(
+      restarted.change(f.owner.id, first.routineId, "delete", "delete_again"),
+    ).rejects.toBeInstanceOf(RoutineNotFoundError);
+    await expect(
+      store.listRuns(f.owner.id, first.routineId),
+    ).rejects.toBeInstanceOf(RoutineNotFoundError);
+    await expect(
+      restarted.createApprovedSchedule(f.owner.id, {
+        ...params,
+        instruction: "Different work",
+      }),
+    ).rejects.toBeInstanceOf(RoutineRefusedError);
+    expect(f.calls).toBe(1);
+    expect(deletes).toBe(1);
+  });
+  test("ambiguous deletion stays frozen until exact provider absence is verified", async () => {
+    const f = await managedFixture(async () => ({
+      id: "auto_" + randomUUID().replaceAll("-", ""),
+    }));
+    const params = {
+      channelId: f.channel.id,
+      agentId: f.agentId,
+      instruction: "Send an approved digest.",
+      requestId:
+        "delete_repair_" + randomUUID().replaceAll("-", "").slice(0, 16),
+      cron: "0 9 * * *",
+      timezone: "UTC",
+    };
+    const first = await f.bridge.createApprovedSchedule(f.owner.id, params);
+    let deletes = 0;
+    f.provider.deleteAutomation = async () => {
+      deletes++;
+      throw Error("Provider reply lost");
+    };
+    await expect(
+      f.bridge.change(f.owner.id, first.routineId, "delete", "lost_delete"),
+    ).rejects.toThrow("Provider reply lost");
+    expect(
+      (await f.bridge.createApprovedSchedule(f.owner.id, params)).state,
+    ).toBe("unverified");
+    f.provider.retrieveAutomation = async () => {
+      throw Object.assign(Error("Service unavailable"), { status: 503 });
+    };
+    expect(
+      (await f.bridge.repair(f.owner.id, first.routineId)).reconciled,
+    ).toBe(false);
+    expect((await store.listFor(f.owner.id))[0]?.executionBackend).toBe(
+      "sync_unknown",
+    );
+    f.provider.retrieveAutomation = async () => {
+      throw Object.assign(Error("Not found"), { status: 404 });
+    };
+    expect(
+      (await f.bridge.repair(f.owner.id, first.routineId)).reconciled,
+    ).toBe(true);
+    expect(
+      (await f.bridge.createApprovedSchedule(f.owner.id, params)).state,
+    ).toBe("deleted");
+    expect(await store.listFor(f.owner.id)).toEqual([]);
+    expect(f.calls).toBe(1);
+    expect(deletes).toBe(1);
+    const [saved] = await database
+      .select()
+      .from(routines)
+      .where(eq(routines.id, first.routineId));
+    expect(saved.enabled).toBe(false);
+    expect(saved.providerSyncOperation).toBe("deleted");
+    expect(saved.providerAutomationId).toBe(first.automationId!);
+    const { owner: foreign } = await setUp();
+    await expect(
+      f.bridge.createApprovedSchedule(foreign.id, params),
+    ).rejects.toBeInstanceOf(RoutineRefusedError);
+    await expect(
+      f.bridge.state(foreign.id, first.routineId),
+    ).rejects.toBeInstanceOf(RoutineNotFoundError);
+    expect(f.calls).toBe(1);
   });
   test("simultaneous original-owner approvals create only one provider recurring schedule", async () => {
     const fixture = await managedFixture(async () => ({

@@ -13,7 +13,12 @@ import {
   mergeDeliveryStatus,
 } from "./managed-automation-identity";
 import { nextOccurrence } from "./schedule";
-import { RoutineNotFoundError, RoutineRefusedError } from "./store";
+import {
+  MANAGED_ROUTINE_DELETED,
+  RoutineNotFoundError,
+  RoutineRefusedError,
+  routineNotDeleted,
+} from "./store";
 
 /** Explicit bridge, not a new scheduler. Existing source RoutineStore and
  * routine_runs remain authoritative. The cloud creates invocations. */
@@ -124,7 +129,8 @@ export function createManagedRoutineBridge(input: {
       .from(routines)
       .where(and(eq(routines.id, id), eq(routines.ownerUserId, owner)))
       .limit(1);
-    if (!row) throw new RoutineNotFoundError();
+    if (!row || row.providerSyncOperation === MANAGED_ROUTINE_DELETED)
+      throw new RoutineNotFoundError();
     const [link] = await db
       .select()
       .from(managedAgentSessionLinks)
@@ -174,7 +180,8 @@ export function createManagedRoutineBridge(input: {
         .from(routines)
         .where(and(eq(routines.id, id), eq(routines.ownerUserId, owner)))
         .limit(1);
-      if (!row) throw new RoutineNotFoundError();
+      if (!row || row.providerSyncOperation === MANAGED_ROUTINE_DELETED)
+        throw new RoutineNotFoundError();
       if (row.executionBackend !== backend)
         throw new RoutineRefusedError(
           "Routine is already moving between execution backends. Reconcile it first.",
@@ -247,6 +254,30 @@ export function createManagedRoutineBridge(input: {
       throw new Error(
         "Provider accepted request but source mapping is uncertain; reconcile, never retry",
       );
+  }
+  async function markDeleted(owner: string, id: string, key: string) {
+    // Keep the only durable approved-request identity after confirmed deletion.
+    // Neither the original worker nor managed recovery may execute this record.
+    const deleted = await db
+      .update(routines)
+      .set({
+        enabled: false,
+        executionBackend: "managed",
+        providerSyncOperation: MANAGED_ROUTINE_DELETED,
+        providerSyncKey: null,
+        providerSyncAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(routines.id, id),
+          eq(routines.ownerUserId, owner),
+          eq(routines.executionBackend, "sync_unknown"),
+          eq(routines.providerSyncKey, key),
+        ),
+      )
+      .returning({ id: routines.id });
+    return deleted.length === 1;
   }
   async function migrate(owner: string, id: string, nonce: string) {
     const { row, sessionID } = await owned(owner, id);
@@ -367,6 +398,7 @@ export function createManagedRoutineBridge(input: {
       (once ? "routine_once_" : "routine_approved_") + digest.slice(0, 32);
     const key = keyFor(id, "create", requestId);
     let settledAutomationID: string | null = null;
+    let deleted = false;
     const reserved = await db.transaction(async (tx) => {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext(${"routine-cap-" + owner}))`,
@@ -393,6 +425,7 @@ export function createManagedRoutineBridge(input: {
           throw new RoutineRefusedError(
             "The approved request belongs to a different managed session; reconcile it first",
           );
+        deleted = previous.providerSyncOperation === MANAGED_ROUTINE_DELETED;
         if (
           previous.executionBackend === "managed" &&
           previous.providerAutomationId
@@ -437,6 +470,12 @@ export function createManagedRoutineBridge(input: {
       });
       return true;
     });
+    if (!reserved && deleted)
+      return {
+        routineId: id,
+        state: "deleted" as const,
+        automationId: settledAutomationID,
+      };
     if (!reserved && settledAutomationID)
       return {
         routineId: id,
@@ -507,19 +546,7 @@ export function createManagedRoutineBridge(input: {
       await provider.resumeAutomation(row.providerAutomationId, key);
     if (operation === "delete") {
       await provider.deleteAutomation(row.providerAutomationId);
-      // Original deletion semantics cascade original run history. Do not
-      // delete until provider confirms future invocations are stopped.
-      const deleted = await db
-        .delete(routines)
-        .where(
-          and(
-            eq(routines.id, id),
-            eq(routines.ownerUserId, owner),
-            eq(routines.providerSyncKey, key),
-          ),
-        )
-        .returning({ id: routines.id });
-      if (!deleted.length)
+      if (!(await markDeleted(owner, id, key)))
         throw new Error(
           "Provider deleted, original schedule deletion requires reconciliation",
         );
@@ -875,6 +902,7 @@ export function createManagedRoutineBridge(input: {
           eq(routines.id, id),
           eq(routines.ownerUserId, owner),
           eq(routines.executionBackend, "managed"),
+          routineNotDeleted(),
           ...(cursor
             ? [eq(routines.providerInvocationCursor, cursor)]
             : [isNull(routines.providerInvocationCursor)]),
@@ -998,17 +1026,7 @@ export function createManagedRoutineBridge(input: {
             reason: "Provider deletion cannot be verified",
           };
       }
-      const deleted = await db
-        .delete(routines)
-        .where(
-          and(
-            eq(routines.id, id),
-            eq(routines.ownerUserId, owner),
-            eq(routines.providerSyncKey, key),
-          ),
-        )
-        .returning({ id: routines.id });
-      return { reconciled: deleted.length === 1, operation: op };
+      return { reconciled: await markDeleted(owner, id, key), operation: op };
     }
     const providerRow = await provider.retrieveAutomation(
       row.providerAutomationId,

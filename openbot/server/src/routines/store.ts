@@ -47,6 +47,11 @@ import {
 import { describeCron, nextOccurrence, ScheduleRefusedError } from "./schedule";
 
 const SWEEP_ID = "routines";
+/** Confirmed managed deletion keeps its original request reservation in this
+ * canonical row. Hidden from ordinary reads; owner/Bot deletion still cascades. */
+export const MANAGED_ROUTINE_DELETED = "deleted";
+export const routineNotDeleted = () =>
+  sql`${routines.providerSyncOperation} IS DISTINCT FROM ${MANAGED_ROUTINE_DELETED}`;
 
 export class RoutineNotFoundError extends Error {
   constructor(message = "That routine does not exist.") {
@@ -476,7 +481,13 @@ export function createRoutineStore(database: Database): RoutineStore {
     const [row] = await database
       .select()
       .from(routines)
-      .where(and(eq(routines.id, id), eq(routines.ownerUserId, ownerUserId)))
+      .where(
+        and(
+          eq(routines.id, id),
+          eq(routines.ownerUserId, ownerUserId),
+          routineNotDeleted(),
+        ),
+      )
       .limit(1);
     // A routine that is not yours is a routine that does not exist: the `setPinned` rule.
     if (!row) throw new RoutineNotFoundError();
@@ -617,7 +628,7 @@ export function createRoutineStore(database: Database): RoutineStore {
         })
         .from(routines)
         .leftJoin(channels, eq(channels.id, routines.channelId))
-        .where(eq(routines.ownerUserId, ownerUserId))
+        .where(and(eq(routines.ownerUserId, ownerUserId), routineNotDeleted()))
         .orderBy(desc(routines.createdAt), desc(routines.id));
 
       const routineIds = rows.map((row) => row.routine.id);

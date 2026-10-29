@@ -140,7 +140,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
   if(session.id!==link.providerSessionId)throw Error('Provider identity mismatch');
   const calls=(session.required_actions??[]).filter((call:any)=>call.turn_id===current.receipt!.rootTurnId);
   if(!calls.length)return{surface:null};
-  if(calls.length!==1||calls[0].name!=='euphoria_render_surface')throw Error('Unsupported managed tool');
+  if(calls.length!==1||calls[0].type!=='function_call'||calls[0].name!=='euphoria_render_surface')throw Error('Unsupported managed tool');
   const call=calls[0];const args=typeof call.arguments==='string'?JSON.parse(call.arguments):call.arguments;
   argumentFingerprint(args); // Bound size/depth before rendering.
   let surface;
@@ -217,7 +217,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
      const [previous]=await database.select().from(workItems).where(and(eq(workItems.kind,'managed.native-response'),eq(workItems.key,key))).limit(1);
      if(previous){await store.setInbox(row.inboxId,'accepted','The generated interface is still unsupported after one correction. No further model retry was made.');continue;}
      await queue.offer({kind:'managed.native-response',key,payload:{scope:invalid.renderScope,sessionID:invalid.renderSessionID,call:invalid.renderCall,
-      refusal:'Interface rejected; no user decision occurred. Use canonical native JSON for this choice: {"schemaVersion":1,"surfaceID":"temporary","revision":0,"nodes":[{"id":"day","kind":"askChoice","title":"Choose a workout day","options":[{"id":"pull","label":"Pull day"},{"id":"legs","label":"Leg day"}]}]}. For A2UI every message requires version v0.9, catalogId https://a2ui.org/specification/v0_9/basic_catalog.json, all components reachable from root, and initial bound data. Do not claim the user answered.'}});continue;
+      refusal:'Interface rejected; no user decision occurred. Reissue euphoria_render_surface with valid structured content for the CURRENT user request only. Native surfaces require schemaVersion 1, a valid node graph, and supported node properties. A2UI v0.9 requires catalogId https://a2ui.org/specification/v0_9/basic_catalog.json, a reachable root, and initial bound data. Do not invent options, effects, or human answers.'}});continue;
     }
    }}
    try{await reconcileManagedSourceInbox({...row,rootTurnID:row.rootTurnID,inbox:store,links,provider,

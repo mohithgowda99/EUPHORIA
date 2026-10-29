@@ -118,7 +118,7 @@ export function createManagedTaskAdapter(deps: {
       opened.channelId,
       input.agentId,
       input.task.instruction,
-      "task:" + opened.id,
+      `task:${opened.id}`,
     );
     return opened;
   }
@@ -168,7 +168,7 @@ export function createManagedTaskAdapter(deps: {
     for (const row of rows) {
       entries.push({
         kind: "reply",
-        id: row.id + ":input",
+        id: `${row.id}:input`,
         text: row.text,
         at: row.createdAt.toISOString(),
       });
@@ -181,7 +181,7 @@ export function createManagedTaskAdapter(deps: {
       )
         entries.push({
           kind: "update",
-          id: row.id + ":output",
+          id: `${row.id}:output`,
           text: row.completed.replyText,
           at: null,
         });

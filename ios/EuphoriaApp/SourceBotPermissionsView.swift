@@ -7,6 +7,7 @@ struct SourceBotPermissionsView: View {
     let client: OpenDuetSourceAPI
     let botID: String
     @State private var catalogue: [SourceSkill] = []
+    @State private var availableTools: [SourcePluginTool] = []
     @State private var grants: SourceBotGrants?
     @State private var busy = false
     @State private var error: String?
@@ -38,18 +39,29 @@ struct SourceBotPermissionsView: View {
                     Text("No skills available to this account.").foregroundStyle(.secondary)
                 }
             }
-            Section("Connected tools this Bot may use") {
-                ForEach(grants?.tools ?? [], id: \.ref) { tool in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(tool.ref).font(.headline)
-                        Text(tool.description).font(.caption).foregroundStyle(.secondary)
+            Section("MCP tool permissions") {
+                Text("EUPHORIA's server verifies administrator rights, each Bot grant and the current source policy. A granted write still requires its separate approval.")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(availableTools) { tool in
+                    Toggle(isOn: Binding(
+                        get: { grants?.tools.contains(where: { $0.ref == tool.ref }) ?? false },
+                        set: { value in Task { await setMCPGrant(tool.ref, value) } }
+                    )) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(tool.ref).font(.headline)
+                            Text(tool.description).font(.caption).foregroundStyle(.secondary)
+                            Text(tool.destructive ? "Destructive action: separate policy required" :
+                                tool.effect == "write" ? "Write: one-time human approval required" : "Read")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
                     }
+                    .disabled(busy || grants == nil || tool.destructive)
                 }
-                if grants?.tools.isEmpty ?? true {
-                    Text("No connected tools are granted to this Bot.")
+                if availableTools.isEmpty && !busy && error == nil {
+                    Text("No server-advertised tools available. Connect a service first.")
                         .foregroundStyle(.secondary)
                 }
-                Text("Connecting or revoking an external account uses the original OpenDuet connection service. This view cannot grant account-wide MCP access by itself.")
+                Text("Only administrators may change MCP tool grants. Changes to already-running provider sessions require reconciliation.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if busy { ProgressView("Reading original Bot permissions…") }
@@ -64,14 +76,33 @@ struct SourceBotPermissionsView: View {
         busy = true
         defer { busy = false }
         do {
-            let results = try await client.sourceSkills()
-            let owned = try await client.sourceBotGrants(botID: botID)
-            catalogue = results
-            grants = owned
+            async let results = client.sourceSkills()
+            async let owned = client.sourceBotGrants(botID: botID)
+            async let servers = client.availableSourceConnections()
+            catalogue = try await results
+            grants = try await owned
+            let discovered = try await servers
+            availableTools = discovered.flatMap(\.tools)
+                .filter { !$0.ref.isEmpty }
+                .sorted { $0.ref < $1.ref }
             self.error = nil
         } catch {
             self.error = "Bot tools and skills cannot be verified. The previous grant state will not be assumed current."
             grants = nil
+            availableTools = []
+        }
+    }
+    private func setMCPGrant(_ ref: String, _ enabled: Bool) async {
+        guard !busy, grants != nil else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            try await client.setSourceMCPGrant(botID: botID, ref: ref, enabled: enabled)
+            grants = try await client.sourceBotGrants(botID: botID)
+            self.error = nil
+        } catch {
+            grants = nil
+            self.error = "Tool grant change was refused or could not be confirmed. Refresh permissions before acting again. MCP changes require administrator access."
         }
     }
     private func setSkill(_ slug: String, _ enabled: Bool) async {

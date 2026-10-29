@@ -397,6 +397,11 @@ struct SourceManagedRoutineReceipt: Decodable, Identifiable {
     let source: String
     let createdAt: String
 }
+struct SourceManagedRoutineRepair: Decodable {
+    let reconciled: Bool
+    let reason: String?
+    let operation: String?
+}
 struct SourceManagedRoutineState: Decodable {
     let backend: String
     let automationId: String?
@@ -1117,6 +1122,9 @@ struct OpenDuetSourceAPI: Sendable {
             "api/routines/" + checkedID(id) + "/enabled", method: "PUT",
             body: SourceRoutineEnabledInput(enabled: enabled))
         guard response.enabled == enabled else { throw SourceAPIError.invalidResponse }
+    }
+    func repairManagedRoutine(id: String) async throws -> SourceManagedRoutineRepair {
+        try await request("api/routines/" + checkedID(id) + "/managed/repair", method: "POST")
     }
     func managedRoutineState(id: String) async throws -> SourceManagedRoutineState {
         try await get("api/routines/" + checkedID(id) + "/managed/state")

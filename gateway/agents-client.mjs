@@ -510,12 +510,27 @@ function checkedEnvironment(value) {
   if (value.type === 'none' && Object.keys(value).length === 1) return {type: 'none'};
   if (value.type !== 'openai_hosted') throw Error('Unsupported Agents environment');
   const keys = Object.keys(value);
-  if (keys.some(k => !['type', 'container_size', 'network'].includes(k))) throw Error('Unapproved Agents environment option');
+  if (keys.some(k => !['type', 'container_size', 'network', 'skills'].includes(k))) throw Error('Unapproved Agents environment option');
   if (value.container_size !== undefined && value.container_size !== 'small') throw Error('Only small hosted sandbox is approved');
   if (!value.network || typeof value.network !== 'object' || Array.isArray(value.network) ||
       Object.keys(value.network).length !== 1 || value.network.access !== 'disabled')
     throw Error('Hosted sandbox network access must be disabled');
-  return {type:'openai_hosted',container_size:'small',network:{access:'disabled'}};
+  const skills=value.skills===undefined?[]:value.skills;
+  if(!Array.isArray(skills)||skills.length>4)throw Error('Unsupported hosted skill count');
+  const seen=new Set();
+  const pinned=skills.map(entry=>{
+    if(!entry||typeof entry!=='object'||Array.isArray(entry)||
+       Object.keys(entry).sort().join(',')!=='skill_id,type,version'||
+       entry.type!=='skill_reference'||
+       typeof entry.skill_id!=='string'||!/^skill_[A-Za-z0-9_-]{4,56}$/.test(entry.skill_id)||
+       typeof entry.version!=='string'||!/^[1-9][0-9]{0,8}$/.test(entry.version)||
+       seen.has(entry.skill_id))
+      throw Error('Unsupported hosted skill reference');
+    seen.add(entry.skill_id);
+    return{type:'skill_reference',skill_id:entry.skill_id,version:entry.version};
+  });
+  return {type:'openai_hosted',container_size:'small',network:{access:'disabled'},
+    ...(pinned.length?{skills:pinned}:{})};
 }
 function checkedDelegation(value) {
   if (value === undefined || value === null || value === false) return undefined;

@@ -55,6 +55,7 @@ jobs:
             server/tests/managed-connected-mcp.test.ts \
             server/tests/managed-person-questions.integration.test.ts \
             server/tests/managed-source-tasks.integration.test.ts \
+            server/tests/managed-source-mcp.integration.test.ts \
             server/tests/managed-completed-jsonb.integration.test.ts
       - name: Check gateway regressions
         working-directory: gateway

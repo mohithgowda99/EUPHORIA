@@ -8,6 +8,8 @@ The handoff commit itself is necessarily newer; read the exact checked-out SHA u
 Based on continuation `aed235fd4ae6fb13c7bd4d511700a83f556652f8`, which incorporates `fix/native-completed-choice-lifecycle` (98c71dd) and the JSONB normalization migration.
 Nothing merged to main or reset on the original laptop worktree.
 
+**Concurrent branch divergence:** While this branch was being committed, `feature/phase1-core-continuation-20261029` advanced **9 commits** from our common base `aed235f`. Our implementation branch has 32 source commits from that base. The newer continuation modified `managed-development.ts`, native source Chat/API, native tests, and independently created a handoff at the same path. Do not blindly merge or overwrite either handoff. In a separate Mac worktree, fetch both heads, compare those specific files, reconcile the newer native/provider recovery tests with this branch's additional question/task/memory/A2UI code, then run full offline suites. Neither side is automatically validated by this divergence check.
+
 **The user specifically excluded the production backend cutover from this iteration.** That work remains blocked/unimplemented, not secretly moved. This branch is *not* a verified complete or production-ready personal-agent product.
 
 ## Workstream truth table

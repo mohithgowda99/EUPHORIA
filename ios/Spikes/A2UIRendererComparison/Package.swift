@@ -1,8 +1,9 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// Deliberately isolated: do NOT add this dependency to the shipping iOS app
-// until source-fixture and device acceptance gates are satisfied.
+// The same pinned upstream dependency is now linked into the shipping app for
+// source-validated display-only surfaces. Full action conformance and device
+// validation remain explicit gates. This comparison package retains its tests.
 let package = Package(
     name: "A2UIRendererComparison",
     platforms: [.iOS("27.0"), .macOS(.v14)],

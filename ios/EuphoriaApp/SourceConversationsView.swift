@@ -156,6 +156,9 @@ struct SourceConversationDetailView: View {
     @State private var needsHumanAnswer = false
     @State private var visualCompleted = false
     @State private var completedVisuals: [SourceCompletedVisual] = []
+    @State private var hostedActivity: SourceHostedActivity?
+    @State private var confirmingHostedCancel = false
+    @State private var cancelNotice: String?
     @State private var hostedArtifacts: [SourceHostedArtifact] = []
     @State private var subagents: [SourceHostedSubagent] = []
     @State private var exportedArtifact: (id: String, url: URL)?
@@ -191,6 +194,23 @@ struct SourceConversationDetailView: View {
                     Text("Your choice").font(.subheadline).foregroundStyle(.secondary)
                 }
                 else if awaitingAgent { Text("Thinking…").font(.subheadline).foregroundStyle(.secondary) }
+                if let activity = hostedActivity, awaitingAgent || activity.cancelRequested {
+                    if activity.canCancel && !activity.cancelRequested {
+                        Button("Stop this Bot run", role: .destructive) {
+                            confirmingHostedCancel = true
+                        }
+                        .font(.subheadline)
+                        .disabled(busy)
+                    } else if activity.cancelRequested {
+                        Text(activity.outcomeUncertain == true
+                             ? "Stop request outcome uncertain. Refresh before taking further action."
+                             : "Stop requested. Waiting for the provider to confirm the turn ended.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                if let cancelNotice {
+                    Text(cancelNotice).font(.caption).foregroundStyle(.secondary)
+                }
             }
             .padding(.bottom, 8)
             ScrollViewReader { scroll in
@@ -375,6 +395,15 @@ struct SourceConversationDetailView: View {
                 .background(surfaceColor.opacity(0.96))
             }
         }
+        .confirmationDialog("Stop this Bot's current hosted run?",
+                            isPresented: $confirmingHostedCancel, titleVisibility: .visible) {
+            Button("Request stop", role: .destructive) {
+                Task { await stopCurrentHostedRun() }
+            }
+            Button("Keep running", role: .cancel) {}
+        } message: {
+            Text("A stop request is not instant. EUPHORIA keeps the original task and any completed results; it will not retry an uncertain cancellation.")
+        }
         .fileImporter(isPresented: $selectingInputFile, allowedContentTypes: [.item]) { selection in
             switch selection {
             case .success(let file):
@@ -392,6 +421,9 @@ struct SourceConversationDetailView: View {
             await reload()
         }
         .onChange(of: selectedBotID) { _, _ in
+            hostedActivity = nil
+            cancelNotice = nil
+            hostedActivity = nil
             hostedArtifacts = []
             subagents = []
             if let previous = exportedArtifact?.url { try? FileManager.default.removeItem(at: previous) }
@@ -451,6 +483,8 @@ struct SourceConversationDetailView: View {
             if exportedArtifact?.id != nil && !hostedArtifacts.contains(where: { $0.id == exportedArtifact?.id }) {
                 exportedArtifact = nil
             }
+            hostedActivity = try? await client.sourceHostedActivity(
+                channelID: conversation.id, botID: selectedBotID)
             hostedArtifacts = (try? await client.sourceHostedArtifacts(channelID: conversation.id, botID: selectedBotID)) ?? []
             subagents = (try? await client.sourceHostedSubagents(channelID: conversation.id,
                                                                   botID: selectedBotID)) ?? []
@@ -489,6 +523,24 @@ struct SourceConversationDetailView: View {
             if let previous = exportedArtifact?.url { try? FileManager.default.removeItem(at: previous) }
             exportedArtifact = nil
             self.error = "The original conversation could not be read. Your saved outgoing intent has not been replayed."
+        }
+    }
+
+    private func stopCurrentHostedRun() async {
+        guard !busy, let activity = hostedActivity,
+              activity.canCancel, !activity.cancelRequested,
+              let root = activity.rootTurnId, !selectedBotID.isEmpty else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            let accepted = try await client.requestSourceHostedCancellation(
+                channelID: conversation.id, botID: selectedBotID, rootTurnID: root)
+            guard accepted.rootTurnId == root else { throw SourceAPIError.invalidResponse }
+            cancelNotice = "Stop requested. This does not guarantee the hosted turn is finished."
+            hostedActivity = try await client.sourceHostedActivity(
+                channelID: conversation.id, botID: selectedBotID)
+        } catch {
+            cancelNotice = "Stop outcome could not be confirmed. Refresh status; do not submit another stop request."
         }
     }
 

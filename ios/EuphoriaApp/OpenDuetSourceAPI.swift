@@ -16,6 +16,16 @@ struct SourceHostedCapabilitiesResponse: Decodable, Sendable {
     let capabilities: SourceHostedCapabilities
     let locked: Bool
 }
+private struct SourceHostedFileInput: Encodable {
+    let uploadId: String
+    let filename: String
+    let data: String
+}
+struct SourceHostedFileReceipt: Decodable, Sendable {
+    let path: String
+    let bytes: Int
+    let status: String
+}
 struct SourceHostedArtifact: Decodable, Identifiable, Sendable {
     let id: String
     let turnId: String
@@ -729,6 +739,32 @@ struct OpenDuetSourceAPI: Sendable {
         else { throw SourceAPIError.invalidInput }
         return try await request("api/agents/" + checkedID(botID) + "/hosted-capabilities",
                                  method: "PUT", body: capabilities)
+    }
+
+    /// Upload only to an already-connected, source-authorized hosted environment.
+    /// The immutable UUID is saved by the caller before sending. A 503 does not
+    /// authorize another upload with a different ID.
+    func uploadSourceHostedFile(channelID: String, botID: String, uploadID: String,
+                                filename: String, contents: Data) async throws -> SourceHostedFileReceipt {
+        guard UUID(uuidString: uploadID) != nil,
+              (1...1_048_576).contains(contents.count),
+              (1...61).contains(filename.count),
+              filename.range(of: "^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$",
+                             options: .regularExpression) != nil,
+              !filename.contains("..")
+        else { throw SourceAPIError.invalidInput }
+        let value: SourceHostedFileReceipt = try await request(
+            "api/delivery/conversations/" + checkedID(channelID) + "/hosted-files",
+            method: "POST", body: SourceHostedFileInput(
+                uploadId: uploadID.replacingOccurrences(of: "-", with: ""),
+                filename: filename, data: contents.base64EncodedString()),
+            queryItems: [URLQueryItem(name: "agentId", value: checkedID(botID))])
+        guard value.status == "uploaded",
+              value.bytes == contents.count,
+              value.path.hasPrefix("/workspace/") else {
+            throw SourceAPIError.invalidResponse
+        }
+        return value
     }
 
     /// Read only artifacts whose exact provider root is tied to this original

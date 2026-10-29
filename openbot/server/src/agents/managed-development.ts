@@ -100,15 +100,15 @@ import { reconcileManagedSourceInbox } from "./managed-source-reconciliation";
 // @ts-expect-error audited JavaScript boundary
 import { AgentsClient } from "../../../../gateway/agents-client.mjs";
 
-// @ts-expect-error existing canonical renderer contract
 import {
   normalizeRenderInput,
   renderInputSchema,
+  // @ts-expect-error existing canonical renderer JS boundary
 } from "../../../../gateway/a2ui-form.mjs";
-// @ts-expect-error existing canonical human operation validation
 import {
   decisionResult,
   stable,
+  // @ts-expect-error existing canonical visual-contract JS boundary
 } from "../../../../gateway/visual-contract.mjs";
 // @ts-expect-error existing bounded provider argument validation
 import { argumentFingerprint } from "../../../../gateway/provider-arguments.mjs";
@@ -858,7 +858,7 @@ export async function createManagedDevelopment(input: {
       const pendingAuth = (
         current.session.required_actions ?? ([] as unknown[])
       ).filter(
-        (a) =>
+        (a: unknown) =>
           a &&
           typeof a === "object" &&
           (a as any).type === "computer_use_approval_request" &&
@@ -887,7 +887,7 @@ export async function createManagedDevelopment(input: {
             submitted: recorded.has(p.request_id),
             uncertain: !!recorded.get(p.request_id)?.lastError,
           })),
-          ...pendingAuth.map((a) => ({
+          ...pendingAuth.map((a: unknown) => ({
             id: (a as any).request_id,
             kind: "authentication",
             origin: null,
@@ -940,7 +940,7 @@ export async function createManagedDevelopment(input: {
       );
       const origin = pending.find((p) => p.request_id === id);
       const auth = (current.session.required_actions ?? ([] as unknown[])).some(
-        (a) =>
+        (a: unknown) =>
           a &&
           typeof a === "object" &&
           (a as any).type === "computer_use_approval_request" &&

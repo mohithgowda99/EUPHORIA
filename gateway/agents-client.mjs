@@ -427,48 +427,75 @@ export class AgentsClient {
     }]},submissionKey);
   }
 
-  /** Managed provider scheduling transport, NOT an owner/grant decision.
-   * Only existing source-authorized sessions may be targeted by the caller.
-   * Never equate invocation delivery with completed agent execution.
+  /** Provider transport only. The source owner, grants and spending policy must
+   * be verified by the caller before any write. Invocation delivery != turn success.
+   * Mutating requests are single-shot; ambiguous responses require reconciliation.
    */
-  async createAutomation({name,sessionID,instructions,expression,timezone,runAt},submissionKey) {
-    identifier(sessionID);key(submissionKey);
-    if(typeof name!=='string'||!name.trim()||name.length>120||
-       typeof instructions!=='string'||!instructions.trim()||instructions.length>4000)
-      throw Error('Invalid automation name or instructions');
-    const periodic=typeof expression==='string'&&expression.length<=80&&
-      expression.trim().split(/\s+/).length===5&&
-      /^([0-9]|[1-5][0-9])$/.test(expression.split(' ')[0]);
-    const once=Number.isSafeInteger(runAt)&&runAt>Math.floor(Date.now()/1000)+60&&
-      runAt<Math.floor(Date.now()/1000)+366*86400;
-    if(periodic===once)throw Error('Specify exactly one bounded automation schedule');
-    if(periodic){
-      if(typeof timezone!=='string'||timezone.length>64)throw Error('Invalid automation timezone');
-      try{new Intl.DateTimeFormat('en-US',{timeZone:timezone});}
-      catch{throw Error('Unknown automation timezone');}
-    }
-    const body={type:periodic?'periodic':'once',name,
-      ...(periodic?{expression,timezone}:{run_at:runAt}),
-      target:{type:'existing_session',session_id:sessionID,instructions}};
-    return this.#automationRequest('POST','',body,submissionKey);
+  async createAutomation({name,sessionID,instructions,expression,timezone,runAt,target},submissionKey) {
+    key(submissionKey);
+    if(typeof name!=='string'||!name.trim()||name.length>120)
+      throw Error('Invalid automation name');
+    const scheduled=checkedAutomationSchedule({expression,timezone,runAt});
+    const resolvedTarget=target===undefined
+      ? {type:'existing_session',session_id:identifier(sessionID),instructions:automationInstruction(instructions)}
+      : checkedAutomationTarget(target);
+    return this.#automationRequest('POST','',{...scheduled,name,target:resolvedTarget},submissionKey);
+  }
+  async listAutomations({sessionID,after,limit=50}={}) {
+    if(!Number.isInteger(limit)||limit<1||limit>100)throw Error('Invalid automation page limit');
+    const query=new URLSearchParams({limit:String(limit)});
+    if(sessionID!==undefined)query.set('session_id',identifier(sessionID));
+    if(after!==undefined)query.set('after',identifier(after));
+    return checkedAutomationList(await this.#automationRequest('GET','?'+query));
   }
   async retrieveAutomation(id) {
     return this.#automationRequest('GET','/'+identifier(id));
   }
-  async listAutomationInvocations(id) {
-    const result=await this.#automationRequest('GET','/'+identifier(id)+'/invocations');
-    if(!result||!Array.isArray(result.data))throw Error('Invalid automation invocation list');
+  async updateAutomation(id,patch,submissionKey) {
+    key(submissionKey);
+    if(!patch||typeof patch!=='object'||Array.isArray(patch))throw Error('Invalid automation update');
+    const unknown=Object.keys(patch).filter(k=>!['name','expression','timezone','runAt','instructions','target'].includes(k));
+    if(unknown.length)throw Error('Unknown automation update property');
+    const update={};
+    if(patch.name!==undefined){
+      if(typeof patch.name!=='string'||!patch.name.trim()||patch.name.length>120)throw Error('Invalid automation name');
+      update.name=patch.name;
+    }
+    const changesSchedule=['expression','timezone','runAt'].some(k=>patch[k]!==undefined);
+    if(changesSchedule)Object.assign(update,checkedAutomationSchedule(patch));
+    if(patch.target!==undefined&&patch.instructions!==undefined)
+      throw Error('Use either target or instructions, never both');
+    if(patch.target!==undefined)update.target=checkedAutomationTarget(patch.target);
+    if(patch.instructions!==undefined){
+      // Target is replaced wholesale by the API. A session ID cannot be
+      // inferred from a mutable automation name. Caller must pass full target.
+      throw Error('Updating instructions requires complete target with original session identity');
+    }
+    if(!Object.keys(update).length)throw Error('Empty automation update');
+    return this.#automationRequest('POST','/'+identifier(id),update,submissionKey);
+  }
+  async listAutomationInvocations(id,{after,limit=50}={}) {
+    if(!Number.isInteger(limit)||limit<1||limit>100)throw Error('Invalid invocation page limit');
+    const query=new URLSearchParams({limit:String(limit)});
+    if(after!==undefined)query.set('after',identifier(after));
+    return checkedAutomationList(await this.#automationRequest('GET','/'+identifier(id)+'/invocations?'+query));
+  }
+  async retrieveAutomationInvocation(automationID,invocationID) {
+    const result=await this.#automationRequest('GET','/'+identifier(automationID)+'/invocations/'+identifier(invocationID));
+    if(result?.id!==invocationID)throw Error('Automation invocation identity mismatch');
     return result;
   }
+  async invokeAutomation(id,submissionKey) {
+    return this.#automationRequest('POST','/'+identifier(id)+'/invocations',undefined,key(submissionKey));
+  }
   async pauseAutomation(id,submissionKey) {
-    return this.#automationRequest('POST','/'+identifier(id)+'/pause',undefined,submissionKey);
+    return this.#automationRequest('POST','/'+identifier(id)+'/pause',undefined,key(submissionKey));
   }
   async resumeAutomation(id,submissionKey) {
-    return this.#automationRequest('POST','/'+identifier(id)+'/resume',undefined,submissionKey);
+    return this.#automationRequest('POST','/'+identifier(id)+'/resume',undefined,key(submissionKey));
   }
   async deleteAutomation(id) {
-    // DELETE is a consequential remote mutation. An unknown outcome is NOT
-    // automatically retried, and an in-flight invocation may still deliver.
+    // DELETE has no idempotency key: unknown outcome must be reconciled.
     return this.#automationRequest('DELETE','/'+identifier(id));
   }
   async #automationRequest(method,path,body,submissionKey) {
@@ -647,4 +674,74 @@ async function recognizedSpendControlError(response) {
     return value?.error?.param==='spend_control' &&
       value?.error?.code==='unknown_parameter';
   }catch{return false;}
+}
+
+
+// Supported provider schedule, intentionally bounded at the transport edge.
+// Product-specific cron minimum intervals are also checked by source RoutineStore.
+function checkedAutomationSchedule({expression,timezone,runAt}) {
+  const periodic=expression!==undefined,once=runAt!==undefined;
+  if(periodic===once)throw Error('Specify exactly one automation schedule');
+  if(once) {
+    if(!Number.isSafeInteger(runAt)||runAt<=Math.floor(Date.now()/1000)+60||
+       runAt>=Math.floor(Date.now()/1000)+366*86400)throw Error('Invalid one-time date');
+    return {type:'once',run_at:runAt};
+  }
+  if(typeof expression!=='string'||expression.length>80)throw Error('Invalid cron');
+  const parts=expression.trim().split(/\s+/);
+  if(parts.length!==5||parts.some(p=>!/^[A-Za-z0-9*\/,-]+$/.test(p)))
+    throw Error('Invalid five-field cron');
+  // Conservatively require a minute-field separation of >=15 minutes.
+  // Refuse minute ranges with arbitrary step until the source parser proves them safe.
+  const minute=parts[0];
+  const minutes=minute.split(',').flatMap(term=>{
+    if(/^\d{1,2}$/.test(term))return [Number(term)];
+    if(/^\*\/(15|20|30|60)$/.test(term)) {
+      const step=Number(term.slice(2));return Array.from({length:Math.ceil(60/step)},(_,i)=>i*step);
+    }
+    return [NaN];
+  }).sort((a,b)=>a-b);
+  if(!minutes.length||minutes.some(v=>!Number.isInteger(v)||v<0||v>59))
+    throw Error('Cron minute field requires bounded frequency');
+  for(let i=0;i<minutes.length;i++)
+    if((minutes[(i+1)%minutes.length]+(i===minutes.length-1?60:0)-minutes[i])<15)
+      throw Error('Automations must run at most every 15 minutes');
+  if(typeof timezone!=='string'||!timezone||timezone.length>64)
+    throw Error('Invalid automation timezone');
+  try{new Intl.DateTimeFormat('en-US',{timeZone:timezone});}
+  catch{throw Error('Unknown automation timezone');}
+  return {type:'periodic',expression:parts.join(' '),timezone};
+}
+function automationInstruction(value) {
+  if(typeof value!=='string'||!value.trim()||value.length>4000)
+    throw Error('Invalid automation instruction');
+  return value;
+}
+function checkedAutomationTarget(value) {
+  if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Invalid automation target');
+  if(value.type==='existing_session'){
+    if(Object.keys(value).some(k=>!['type','session_id','instructions'].includes(k)))
+      throw Error('Unknown existing-session target field');
+    return {type:'existing_session',session_id:identifier(value.session_id),
+      instructions:automationInstruction(value.instructions)};
+  }
+  if(value.type==='new_session'){
+    // Caller MUST separately establish enforceable per-invocation budget.
+    // No credentials can be sent through an arbitrary target object.
+    if(Object.keys(value).some(k=>!['type','agent_id','input','environment'].includes(k))||
+       !value.agent_id||!Array.isArray(value.input)||value.input.length<1||
+       value.input.length>10||!value.input.every(m=>m&&m.role==='user'&&
+       typeof m.content==='string'&&m.content.trim()&&m.content.length<=4000))
+      throw Error('Unsupported new-session automation target');
+    const result={type:'new_session',agent_id:identifier(value.agent_id),
+      input:value.input.map(m=>({role:'user',content:m.content}))};
+    if(value.environment!==undefined)result.environment=checkedEnvironment(value.environment);
+    return result;
+  }
+  throw Error('Unknown automation target');
+}
+function checkedAutomationList(value) {
+  if(!value||!Array.isArray(value.data)||value.data.length>100)
+    throw Error('Invalid automation list response');
+  return value;
 }

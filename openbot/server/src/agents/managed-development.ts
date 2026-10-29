@@ -98,7 +98,8 @@ export async function createManagedDevelopment(input:{database:Database;provider
     .where(and(eq(workItems.kind,'person.response'),isNull(workItems.finishedAt),
       eq(workItems.attempts,100),sql`${workItems.payload}->>'ownerUserId' = ${owner}`))
     .orderBy(desc(workItems.createdAt)).limit(100);
-  return c.json({requests:[],questions:await questions.list(owner),recoveries});
+  return c.json({requests:[],questions:await questions.list(owner),
+    recoveries:recoveries.map(r=>({...r,canContinue:r.error?.startsWith('Provider question closed;')??false}))});
  });
  app.post('/api/approvals/questions/:id/respond',requireUser,async c=>{
   let body:unknown;
@@ -118,6 +119,48 @@ export async function createManagedDevelopment(input:{database:Database;provider
   }
   try{return c.json(await questions.respond(c.var.actor.id,c.req.param('id'),(body as {response:string}).response),202);}
   catch{return c.json({error:'Question already answered, missing or unauthorized'},409);}
+ });
+ // Only a CLOSED, ordinary question can become an explicitly requested new
+ // source user message. An uncertain HTTP POST or connector write is not
+ // recoverable by replay. The original response remains immutable for audit.
+ app.post('/api/approvals/recovery/:id/continue',requireUser,async c=>{
+  const owner=c.var.actor.id,id=c.req.param('id');
+  const [response]=await database.select().from(workItems)
+   .where(and(eq(workItems.kind,'person.response'),eq(workItems.key,id),
+     isNull(workItems.finishedAt),eq(workItems.attempts,100),
+     sql`${workItems.payload}->>'ownerUserId' = ${owner}`)).limit(1);
+  if(!response?.lastError?.startsWith('Provider question closed;'))
+   return c.json({error:'No safely recoverable expired question'},409);
+  const stored=response.payload as {ownerUserId?:string;question?:{question?:string};response?:string};
+  const [source]=await database.select({payload:workItems.payload}).from(workItems)
+   .where(and(eq(workItems.kind,'person.question'),eq(workItems.key,id))).limit(1);
+  const q=source?.payload as {actorId?:string;botId?:string;channelId?:string;threadId?:string;managed?:unknown}|undefined;
+  if(!q||q.actorId!==owner||typeof stored.question?.question!=='string'||
+    typeof stored.response!=='string'||q.managed===undefined)
+   return c.json({error:'Saved question identity unavailable'},409);
+  let correlation;
+  try{correlation=parseManagedCorrelation(q.managed);}catch{
+   return c.json({error:'Connector approvals cannot be recovered as a user message'},409);
+  }
+  const scope=correlation.scope;
+  if(scope.ownerUserId!==owner||scope.channelId!==q.channelId||
+    scope.agentId!==q.botId||scope.threadId!==q.threadId||!await authorised(scope))
+   return c.json({error:'Bot or channel permission revoked'},403);
+  const requestID='manual-question-recovery:'+id;
+  const text='The previous provider function call expired; do not assume any tool result. I explicitly authorize a NEW turn using this saved response.\nQuestion: '+
+    stored.question.question+'\nMy answer: '+stored.response;
+  if(text.length>16000)return c.json({error:'Saved context exceeds provider input limit'},413);
+  const queued=await store.offerInbox({...scope,bindingId:null,source:'native',
+    realm:'question-recovery',externalId:requestID,text});
+  if(!queued.queued){
+   const [existing]=await database.select().from(deliveryInbox).where(and(
+    eq(deliveryInbox.source,'native'),eq(deliveryInbox.realm,'question-recovery'),
+    eq(deliveryInbox.externalId,requestID))).limit(1);
+   if(!existing||existing.ownerUserId!==owner||existing.channelId!==scope.channelId||
+     existing.agentId!==scope.agentId||existing.text!==text)
+    return c.json({error:'Recovery identity collision'},409);
+  }
+  return c.json({accepted:true,queued:queued.queued},202);
  });
  const managedTasks=createManagedTaskAdapter({
   database,channels,delivery:store,requireUser,

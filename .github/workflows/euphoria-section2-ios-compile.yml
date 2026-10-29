@@ -19,6 +19,13 @@ jobs:
         run: |
           xcodebuild -version
           xcodebuild -showsdks
+      - name: Validate OpenStep project syntax against the untouched Section 1 baseline
+        run: |
+          git show a3e92acf50408f8b82c171dcf3fa7a09b9ae9cac:ios/Euphoria.xcodeproj/project.pbxproj > /tmp/section1.pbxproj
+          echo "Baseline property-list parser:"
+          plutil -lint /tmp/section1.pbxproj || true
+          echo "Section 2 property-list parser:"
+          plutil -lint ios/Euphoria.xcodeproj/project.pbxproj
       - name: Check project and target
         run: xcodebuild -list -project ios/Euphoria.xcodeproj
       - name: Build unsigned native Debug app

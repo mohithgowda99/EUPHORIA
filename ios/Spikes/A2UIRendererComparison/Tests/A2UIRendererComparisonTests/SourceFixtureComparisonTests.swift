@@ -5,7 +5,8 @@ import A2UISwiftUI
 import VisualRuntimeCore
 @testable import A2UIRendererComparison
 
-/// Source-derived fixtures already checked into EUPHORIA, not invented demo cards.
+/// Protocol fixtures for the supported EUPHORIA projection and pinned upstream renderer.
+/// The settings fixture uses supported controls; volume is retained model metadata, not a native slider.
 /// These tests intentionally require the complete source package and can be run
 /// on a Mac with network/SPM access; they are not a claim of completed conformance.
 final class SourceFixtureComparisonTests: XCTestCase {
@@ -48,6 +49,8 @@ final class SourceFixtureComparisonTests: XCTestCase {
         let processor = try processor(document)
         XCTAssertEqual(processor.model.getSurface(document.surfaceId)?
                            .dataModel.get("/settings/volume")?.numberValue, 45)
+        XCTAssertEqual(processor.model.getSurface(document.surfaceId)?.dataModel.get("/settings/name")?.stringValue, "Focus")
+        XCTAssertEqual(try document.value(id: "notifications", property: "value"), .bool(true))
         // Render-tree construction is evaluated separately from message decoding.
         let surface = SurfaceModel(id: document.surfaceId, catalog: basicCatalog)
         let vm = SurfaceViewModel(surface: surface)

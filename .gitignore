@@ -6,3 +6,6 @@ node_modules/
 /ios/VisualRuntimeCore/.build/
 
 /gateway/.state/
+
+# Local Swift comparison build products; the upstream package revision is pinned.
+/ios/Spikes/A2UIRendererComparison/.build/

@@ -1,0 +1,71 @@
+{
+  "version": "v0.9",
+  "surfaceId": "settings",
+  "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json",
+  "revision": 0,
+  "components": [
+    {
+      "id": "root",
+      "component": "Column",
+      "children": [
+        "title",
+        "name",
+        "notifications",
+        "submit"
+      ]
+    },
+    {
+      "id": "title",
+      "component": "Text",
+      "text": "Workspace settings",
+      "variant": "h2"
+    },
+    {
+      "id": "name",
+      "component": "TextField",
+      "label": "Name",
+      "value": {
+        "path": "/settings/name"
+      }
+    },
+    {
+      "id": "notifications",
+      "component": "CheckBox",
+      "label": "Notifications",
+      "value": {
+        "path": "/settings/notifications"
+      }
+    },
+    {
+      "id": "submit",
+      "component": "Button",
+      "child": "submitLabel",
+      "action": {
+        "event": {
+          "name": "save_settings",
+          "context": {
+            "name": {
+              "path": "/settings/name"
+            },
+            "notifications": {
+              "path": "/settings/notifications"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "submitLabel",
+      "component": "Text",
+      "text": "Save"
+    }
+  ],
+  "dataModel": {
+    "settings": {
+      "name": "Focus",
+      "notifications": true,
+      "volume": 45
+    }
+  },
+  "localEdits": {}
+}

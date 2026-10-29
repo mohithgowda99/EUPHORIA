@@ -64,7 +64,7 @@ set +e
 xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Debug \
   -sdk iphonesimulator -destination "platform=iOS Simulator,id=$EUPHORIA_SIMULATOR_ID" \
   -derivedDataPath "$DERIVED_DATA" -resultBundlePath "$RESULT_BUNDLE" \
-  CODE_SIGNING_ALLOWED=NO test 2>&1 | tee "$LOG_DIR/Debug-tests.log"
+  CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES test 2>&1 | tee "$LOG_DIR/Debug-tests.log"
 test_exit=${PIPESTATUS[0]}
 set -e
 

@@ -917,11 +917,11 @@ struct OpenDuetSourceAPI: Sendable {
     }
     func downloadSourceHostedArtifact(channelID: String, botID: String,
                                       artifact: SourceHostedArtifact) async throws -> URL {
-        let route = "api/delivery/conversations/" + checkedID(channelID) +
-            "/artifacts/" + checkedID(artifact.id) + "/content"
+        let route = "api/delivery/conversations/" + (try checkedID(channelID)) +
+            "/artifacts/" + (try checkedID(artifact.id)) + "/content"
         guard var url = URLComponents(url: endpoint.baseURL.appendingPathComponent(route),
                                       resolvingAgainstBaseURL: false) else { throw SourceAPIError.invalidInput }
-        url.queryItems = [URLQueryItem(name: "agentId", value: checkedID(botID))]
+        url.queryItems = [URLQueryItem(name: "agentId", value: try checkedID(botID))]
         guard let requestURL = url.url else { throw SourceAPIError.invalidInput }
         var request = URLRequest(url: requestURL, timeoutInterval: 30)
         request.httpMethod = "GET"

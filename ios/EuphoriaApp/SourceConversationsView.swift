@@ -726,7 +726,7 @@ struct SourceConversationDetailView: View {
             exportedArtifact = (id: artifact.id, url: file)
             error = nil
         } catch {
-            error = "The generated file is unavailable or its source authorization could not be confirmed."
+            self.error = "The generated file is unavailable or its source authorization could not be confirmed."
         }
     }
 

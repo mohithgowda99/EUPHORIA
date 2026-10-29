@@ -48,7 +48,7 @@ struct EuphoriaNativeA2UIEngineView: View {
                         guard ["TextField", "CheckBox", "ChoicePicker"].contains(component.component),
                               let path = component.properties["value"]?.object?["path"]?.text else { continue }
                         let componentID = component.id
-                        let subscription = context.subscribeDynamicValue(.dataBinding(path)) { value in
+                        let subscription = context.subscribeDynamicValue(.dataBinding(path: path)) { value in
                             guard let value,
                                   let bytes = try? JSONEncoder().encode(value),
                                   let converted = try? JSONDecoder().decode(A2UIValue.self, from: bytes)
@@ -60,7 +60,7 @@ struct EuphoriaNativeA2UIEngineView: View {
                 }
                 error = nil
             } catch {
-                error = "The A2UI surface could not be validated. No action was submitted."
+                self.error = "The A2UI surface could not be validated. No action was submitted."
             }
         }
         .onDisappear {

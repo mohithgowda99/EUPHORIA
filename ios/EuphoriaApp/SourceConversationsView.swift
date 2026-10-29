@@ -337,6 +337,10 @@ struct SourceConversationDetailView: View {
                     awaitingAgent = true
                 } else if response.deliveryState == "sent" { awaitingAgent = false; lastSendAccepted = false }
                 if response.submissionUncertain == true { self.error = "Your saved response awaits verification; automatic retry is disabled." }
+                if response.decisionRecoveryRequired != nil {
+                    awaitingAgent = false
+                    self.error = "Your decision was saved, but the provider action is no longer available. Nothing was sent again. A new authorized continuation is required."
+                }
                 if let surface = response.surface {
                     if visual?.surface.surfaceID != surface.surfaceID {
                         visual = try VisualSnapshotRepository(context: context).load(surfaceID: surface.surfaceID)

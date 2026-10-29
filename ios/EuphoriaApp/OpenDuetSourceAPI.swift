@@ -444,6 +444,39 @@ struct SourceManagedRoutineState: Decodable {
 
 private struct SourceRoutineEnabledResult: Decodable { let enabled: Bool }
 
+struct SourceProactiveSetting: Decodable, Identifiable, Sendable {
+    let id: String
+    let ownerUserId: String
+    let agentId: String
+    let channelId: String
+    let threadId: String
+    let focus: String
+    let enabled: Bool
+    let intervalMinutes: Int
+    let nextRunAt: String
+    let lastRunAt: String?
+    let lastStatus: String
+    let lastError: String?
+}
+struct SourceProactiveSettingsEnvelope: Decodable, Sendable {
+    let settings: [SourceProactiveSetting]
+    let autonomousExecution: String
+}
+struct SourceProactiveSettingEnvelope: Decodable, Sendable {
+    let setting: SourceProactiveSetting
+}
+private struct SourceProactiveDraftInput: Encodable {
+    let agentId: String
+    let channelId: String
+    let focus: String
+    let intervalMinutes: Int
+    let enabled = false
+}
+private struct SourceProactiveDraftUpdate: Encodable {
+    let focus: String
+    let intervalMinutes: Int
+    let enabled = false
+}
 struct SourceSuggestion: Decodable, Identifiable, Sendable {
     let id: String
     let agentId: String
@@ -1224,6 +1257,41 @@ struct OpenDuetSourceAPI: Sendable {
 
     /// Up Next cards are original ProactiveStore suggestions, not tasks or
     /// provider sessions. Only the source engine may start or dismiss them.
+    /// Original ProactiveStore. Managed autonomous research is deliberately
+    /// DISABLED until the provider's hard budget and root mapping are verified.
+    func sourceProactiveSettings() async throws -> SourceProactiveSettingsEnvelope {
+        let result: SourceProactiveSettingsEnvelope = try await get("api/proactive/settings")
+        guard result.settings.count <= 500,
+              result.settings.allSatisfy({ !$0.enabled }),
+              result.autonomousExecution == "blocked_until_verified_execution_and_budget"
+        else { throw SourceAPIError.invalidResponse }
+        return result
+    }
+    func createProactiveDraft(agentId: String, channelId: String,
+                              focus: String, interval: Int) async throws -> SourceProactiveSetting {
+        guard (15...1440).contains(interval), focus.count <= 1000 else {
+            throw SourceAPIError.invalidInput
+        }
+        let page: SourceProactiveSettingEnvelope = try await request(
+            "api/proactive/settings", method: "POST",
+            body: SourceProactiveDraftInput(agentId: checkedID(agentId),
+                channelId: checkedID(channelId), focus: focus,
+                intervalMinutes: interval))
+        guard !page.setting.enabled else { throw SourceAPIError.invalidResponse }
+        return page.setting
+    }
+    func editProactiveDraft(id: String, focus: String, interval: Int) async throws -> SourceProactiveSetting {
+        guard (15...1440).contains(interval), focus.count <= 1000 else { throw SourceAPIError.invalidInput }
+        let page: SourceProactiveSettingEnvelope = try await request(
+            "api/proactive/settings/" + checkedID(id), method: "PATCH",
+            body: SourceProactiveDraftUpdate(focus: focus, intervalMinutes: interval))
+        guard page.setting.id == id, !page.setting.enabled else { throw SourceAPIError.invalidResponse }
+        return page.setting
+    }
+    func deleteProactiveDraft(id: String) async throws {
+        let _: SourceVoidResponse = try await request(
+            "api/proactive/settings/" + checkedID(id), method: "DELETE")
+    }
     func sourceSuggestions() async throws -> [SourceSuggestion] {
         let response: SourceSuggestionsResponse = try await get("api/proactive/suggestions")
         guard response.suggestions.count <= 2000,

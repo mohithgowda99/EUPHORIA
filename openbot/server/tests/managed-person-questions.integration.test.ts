@@ -41,6 +41,7 @@ for(const expires of [false,true])test.skipIf(!url)(
   async retrieveTurn(){return{id:root,session_id:sess,subagent_id:null,status:pending?"in_progress":"completed"};},
   async listTurnItems(){return {data:[],has_more:false};},
   async listItems(){return{data:[],has_more:false};},
+  async sendMessage(){ return {accepted:true}; },
   async submitToolResult(_session:string,result:{turnID:string;callID:string;output:unknown}){
    expect(_session).toBe(sess);
    expect(result.turnID).toBe(root);expect(result.callID).toBe(callID);

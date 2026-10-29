@@ -1,3 +1,15 @@
+# EUPHORIA | Section 2 continuation after recovery/APNs CI checkpoint | 2026-10-29
+
+**Status: INCOMPLETE, NOT ACCEPTED END TO END.** Current branch: `feature/phase1-section2-autonomous-bots`. Separate Section 1 baseline is unchanged; draft review PR https://github.com/mohithgowda99/EUPHORIA/pull/1 is not merge-ready.
+
+The continuation adds strictly unverified AutomationInvocation-to-root identity projection; fair persisted page cursors, older receipt rereads and signed webhook reconciliation; original source Inbox human-question / connector-write approval notification fanout; native APNs HTTP/2 delivery plus explicit iOS permission/token registration; and a human-authorized, original-RoutineStore, one-time schedule route and native entry point. There is no second scheduler or general-purpose agent runner. The spending boundary stays default DENY; no paid inference, real APNs, production deployment or live iPhone acceptance was attempted.
+
+**Blocking provider/API issue:** The documented AutomationInvocation has delivery `status` and `session_id` but **no authoritative root turn ID**. Therefore no scheduled run is claimed to have finished, and no scheduled-run approval, source briefing or source-owned push result can be safely attributed yet. A session idle event, latest turn, or webhook are not proof. **Blocking spending issue:** provider rejected `spend_control`; no verified per-invocation hard budget. Production multi-tenant Better Auth and public remote host remain absent from loopback managed assembly.
+
+GitHub CI discovered parse, format and Drizzle migration snapshot defects; corrected syntax, pinned gate actions, and committed the Biome-formatted source/schema snapshot. A draft PR runs the offline gates. **Only final-head CI results can prove current changes pass.** The full factual implementation, commands and remaining limitations are in `docs/agents/EUPHORIA_SECTION2_HANDOFF.md`.
+
+---
+
 # EUPHORIA | Section 2 autonomous Bots engineering checkpoint | 2026-10-29
 
 **Branch:** `feature/phase1-section2-autonomous-bots`; **baseline:** `a3e92acf50408f8b82c171dcf3fa7a09b9ae9cac`.

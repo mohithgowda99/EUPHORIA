@@ -64,3 +64,20 @@ export function advanceInvocationCursor(
     throw new Error("Invalid provider cursor; preserve saved position");
   return page.last_id;
 }
+/** Provider delivery may be observed out of order by concurrent workers.
+ * A failed/skipped DELIVERY is terminal, and a completed delivery cannot
+ * regress to queued. Neither state proves agent execution.
+ */
+export function mergeDeliveryStatus(
+  prior:"unknown"|"queued"|"completed"|"failed"|"skipped",
+  incoming:AutomationDeliveryEvidence["status"]
+):AutomationDeliveryEvidence["status"]{
+  if(prior==="failed"||prior==="skipped"){
+    if(incoming==="failed"||incoming==="skipped"){
+      if(prior!==incoming)throw Error("Conflicting terminal delivery evidence");
+    }
+    return prior;
+  }
+  if(prior==="completed"&&incoming==="queued")return "completed";
+  return incoming;
+}

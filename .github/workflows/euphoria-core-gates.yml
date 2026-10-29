@@ -8,6 +8,9 @@ on:
       - feature/phase1-section1-lifecycle-20261029
       - feature/phase1-section1-openai-completion-20261029
       - feature/phase1-section2-autonomous-bots
+  pull_request:
+    branches:
+      - feature/phase1-section1-openai-completion-20261029
   workflow_dispatch:
 permissions:
   contents: read

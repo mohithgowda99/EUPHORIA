@@ -256,7 +256,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
   for(let pageNo=0;pageNo<10;pageNo++){
    const page=await provider.listArtifacts(link.providerSessionId,{limit:100,order:'desc',after});
    if(!Array.isArray(page?.data)||page.data.length>100)throw Error('Invalid hosted artifact listing');
-   for(const raw of page.data){const artifact=projectHostedArtifact(raw,allowedRoots);
+   for(const raw of page.data){const artifact=projectHostedArtifact(raw,allowedRoots,link.providerSessionId);
     if(artifact)items.push(artifact);}
    if(!page.has_more){
     if(!await authorised(scope))throw Error('Original Bot permission revoked');
@@ -278,7 +278,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
   const owned=found.items.find(x=>x?.id===artifactID);
   if(!owned||!found.sessionID)return c.json({error:'Artifact not available in this original conversation'},404);
   const remote=await provider.retrieveArtifact(found.sessionID,artifactID);
-  if(remote?.turn_id!==owned.turnId||remote?.id!==owned.id)
+  if(remote?.turn_id!==owned.turnId||remote?.session_id!==found.sessionID||remote?.id!==owned.id||remote?.size_bytes!==owned.sizeBytes)
    return c.json({error:'Artifact provider identity changed'},409);
   const scope=await scopeFor(c.var.actor.id,channelID,botID);
   if(!scope)return c.json({error:'Original access revoked'},403);

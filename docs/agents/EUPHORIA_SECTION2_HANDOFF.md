@@ -1,121 +1,67 @@
-# EUPHORIA | SECTION 2 AUTONOMOUS BOTS ENGINEERING HANDOFF
+# EUPHORIA | SECTION 2 ENGINEERING HANDOFF
 Date: 2026-10-29
-Branch: `feature/phase1-section2-autonomous-bots`
-Source baseline: `feature/phase1-section1-openai-completion-20261029`, commit `a3e92acf50408f8b82c171dcf3fa7a09b9ae9cac`.
-Implementation checkpoint before this document: `489febad51393110438f81fff0a4e1ec99233b88`.
-Final branch HEAD is the newer commit containing this document; inspect with `git rev-parse HEAD`.
+Branch: `feature/phase1-section2-autonomous-bots` (isolated remote branch, no merge).
+Source baseline: `feature/phase1-section1-openai-completion-20261029` at `a3e92acf50408f8b82c171dcf3fa7a09b9ae9cac`.
+Draft review PR: https://github.com/mohithgowda99/EUPHORIA/pull/1 (DRAFT, not merge-ready).
 
-## Executive status
+## Status: PARTIALLY IMPLEMENTED, SECTION 2 NOT ACCEPTED
 
-**PARTIAL. DO NOT CLAIM SECTION 2 ACCEPTANCE.**
+**Do not describe the scheduled-Bot/iPhone-closed acceptance scenario as passing.**
+Source and UI integration, owner-bound provider mappings, recovery cursors, human questions and source approval notification routing, real native APNs transport and token registration, one-time scheduling reservation, and offline test fixtures have been added. Existing original OpenDuet RoutineStore, Delivery Inbox/outbox, WorkQueue, ProactiveStore, TaskStore and approval paths remain the only source product authorities. No new scheduling worker, agent runner or credential vault was introduced.
 
-The provider transport, source routine ownership cutover, signed-webhook receipt boundary, bounded invocation inspection and native controls are implemented as **unvalidated code** on this isolated branch. Original OpenDuet remains owner of routines, Bots, channels, run history, source Delivery Inbox, WorkQueue, person approvals, tasks, proactive suggestions and source connector grants. OpenAI remains owner of the cloud schedule and agent execution. No duplicate local scheduler, general-purpose agent runner, second task store or new credential vault has been added.
+**Hard external execution-correlation limitation:** Published OpenAI `AutomationInvocation` provides `id`, `automation_id`, `session_id`, `source`, `status`, timestamps, skip/error, but NO `turn_id` or documented invocation-to-root execution identifier. The API explicitly describes `completed` as delivery, not agent-work completion:
+- https://developers.openai.com/api/reference/resources/beta/subresources/agents/subresources/automations/subresources/invocations/methods/retrieve
+- https://developers.openai.com/api/reference/resources/beta/subresources/agents/subresources/automations/subresources/invocations/methods/list
 
-**Hard stop: no enforceable provider-side per-recurring-invocation budget has been established.** The current provider rejected `spend_control`, and managed routine creation/resumption/manual invocation/edits refuse execution unless a trusted `verifiedAutomationSpendingBoundary` is provided to the server-side development factory. The CLI entrypoint DOES NOT supply this callback; an environment variable cannot silently bypass it. No paid live provider calls were made.
+The strict `managed-automation-identity.ts` inspector excludes fabricated roots, including undocumented `turn_id` values and latest-turn inference. `managed-routine-bridge.ts` records delivered invocations as **`executionStatus=unverified`**; delivery failures/skips can be closed as delivery failures/skips only. A signed session webhook is an inspection hint, not terminal execution evidence. **Scheduled briefing, scheduled human question and scheduled connector-write attribution cannot yet be executed safely** without an official provider correlation contract or a separately proven root identity. Reusing generic source Inbox turn correlation for an unrelated shared-session schedule is forbidden.
 
-**Hard stop: full root-turn correlation is unproven.** Public Automations invocation records document delivery status and session ID, but do not guarantee a root turn ID. The current reader will not mark a scheduled run succeeded without an exact session, root turn, terminal provider status and nonempty assistant output. This intentionally makes uncorrelated invocations stay **unverified**. A webhook indicating `agent.session.idle` or a completed invocation is not work completion.
+**Hard spending boundary:** OpenAI Agents API rejected per-session `spend_control` on the deployed API observed by Section 1. `verifiedAutomationSpendingBoundary` defaults to an async refusal. Migration, one-time creation, resume, manual invocation, and edits all require it. No `spend_control` bypass, paid recurring inference, live provider calls, production deployment or key change was performed. The loopback-only `managed-development.ts` cannot be treated as a reachable authenticated multi-tenant iPhone backend.
 
-## Exact modifications
+## Changes, by acceptance objective
 
-- `gateway/agents-client.mjs`: create/list/retrieve/update/pause/resume/delete, manual invocation, list/retrieve invocation transport. Existing-session and typed new-session targets; recurring five-field cron + IANA zone, one-time Unix `run_at`; conservative frequency checks. No automatic replay on uncertain network responses.
-- `gateway/tests/agents-automations.test.mjs`: offline request-path, target normalization, input validation, failure and idempotency fixtures.
-- `openbot/server/src/db/schema/coworker.ts`: additive `executionBackend` (`source`, `provisioning`, `managed`, `sync_unknown`), provider ID/sync intent fields, small invocation and webhook identity receipt tables.
-- `openbot/server/drizzle/0074_managed_routine_ownership.sql` and `openbot/server/drizzle/meta/_journal.json`: additive migration and journal. Existing routines default to `source`; they are not migrated or disabled implicitly. Unique provider automation ID, unique provider invocation ID and event receipt PK.
-- `openbot/server/src/routines/store.ts`: the source due-scan, clock CAS, firing eligibility, manual-run transaction, reaper and unschedulable transition exclude managed/uncertain backends. Shares original manual-run advisory lock with migration, closing manual-run/cutover race. Original RoutineStore owns all original run rows.
-- `openbot/server/src/routines/managed-routine-bridge.ts`: explicit original-owner and live source-channel/Bot/session checks; guarded migration, pause/resume, edit, delete and manual invocation; original run receipt correlation; unique, bounded read-only invocation/turn reconciliation and source-channel reply projection; conservative ambiguity repair. Provider POST failures never automatically re-fire original routines. Duplicate or ambiguous manual invocations cannot generate a second original run. Lost provider `create` replies can be reconciled by exhaustive, bounded search for exact `EUPHORIA:<routine-id>` name in the saved session.
-- `openbot/server/src/routines/managed-automation-webhook.ts`: Standard Webhooks `whsec_` raw-body HMAC verification, five-minute clock skew, duplicate identity keys, strict supported session event types and bounded payload size.
-- `openbot/server/src/routines/routes.ts`: original `/api/routines` now reports the source execution backend and raw cron (for owner-authorized native edit); owner-scoped managed migrate/pause/resume/edit/delete/manual/reconcile/repair/state methods. Legacy routes remain source-authoritative; conversational create/update remains in original builtin routine tools.
-- `openbot/server/src/agents/managed-development.ts`: mounts original RoutineStore and managed bridge in the existing loopback development assembly, with explicit default-deny spending callback. Signed webhook route only if server has `OPENAI_WEBHOOK_SECRET`; inserts deduplicated receipt, never interprets event as finished work. Bounded 60-second read-only recovery poll scans at most ten managed routines per pass and thirty recent invocations each.
-- `ios/EuphoriaApp/OpenDuetSourceAPI.swift`: typed original routine backend, provider receipts, managed actions, edit, repair, original status and history transport.
-- `ios/EuphoriaApp/SourceRoutinesView.swift`: native SwiftUI source routine list, provider-versus-execution distinction, provider receipt and original run-history inspection, explicit migration and destructive-action confirmations, pause/resume/edit/manual run/reconciliation/repair. Real backend responses only; no simulated timers or inferred completion.
-- `openbot/server/tests/managed-routine-webhook.test.ts`: offline signed raw-body fixture, tampering/replay/unknown-event denial.
-- `openbot/server/tests/routines-store.integration.test.ts`: added database regression fixtures excluding provider-owned/provisioning/uncertain routines from original source firing.
+### Provider identity, original routine ownership
+- `gateway/agents-client.mjs`: published Automations create/list/retrieve/update/pause/resume/delete and manual/list/retrieve invocation transport; corrected update body to omit the create-only `type` discriminator.
+- `openbot/server/src/routines/managed-automation-identity.ts`: validated delivery identity and documented no-root status, fail-closed cursor advancement.
+- `openbot/server/src/routines/managed-routine-bridge.ts`: managed creation/ownership and uncertain-POST repair; exact original owner/Bot/channel/session checks; transactional source routine cutover; durable pagination and deduped provider invocation/source run ledger; pending-receipt reread, strict root unverified.
+- `openbot/server/src/routines/store.ts`: original local due/clock/manual/reaper excludes provider-owned and uncertain rows.
+- `openbot/server/src/routines/routes.ts`: original owner-scoped source list/history/actions, managed CRUD/repair/inspection; human-approved one-time creation `POST /api/routines/managed/once`.
+- One-time creation reserves a unique original `routines` row with `cron='@once'` and executionBackend `provisioning` BEFORE provider POST. It shares `routine-cap-<owner>` advisory lock and the original 20-routine cap, stores a stable ID from owner+requestId, freezes unknown results and never repeats a provider write. The original sweeper never invokes it. A provider-approved one-time date can be edited via managed edit with `runAt`.
+- **Not complete:** provider-origin *Bot-created* schedules must remain blocked until the original human has explicitly approved the exact proposed schedule and a trusted request identity is attached; no model-authored automation may silently infer consent. One-time `@once` is a special provider record, not source cron.
 
-## Migration and operational contract
+### Fair restart recovery and webhooks
+- Additive migrations `0074_managed_routine_ownership.sql`, `0075_managed_automation_recovery_cursor.sql`, Drizzle snapshot `meta/0075_snapshot.json`, journal. Existing rows remain `source`.
+- Per-routine `providerInvocationCursor` and `providerLastScannedAt`; each pass reads up to 30 list entries + 10 older unverified receipts. Replayed pages are deduplicated transactionally. Original recovery tick sorts managed routines by least-recently scanned state across restarts.
+- Signed webhooks are verified on raw payload, receipt-key deduplicated and queued for bounded owner/session-filtered provider reread using `routineCursor`, `inspectedAt`. The webhook **never** authorizes source writes or marks work finished.
+- **Remaining**: inspect under concurrent CI/workers and real provider pagination order; provider paging can age out old records, so unobserved history must remain unverified. On a read failure, source must never replay paid work.
 
-1. Apply migration `0074_managed_routine_ownership.sql` with the existing OpenDuet migrator in a disposable database. Do not run against a production database in Section 2.
-2. Existing `source` rows remain governed by original RoutineStore sweeps and original conversational routine tools. Provider mapping is always an explicit user operation with an exact source owner, Bot, channel and existing managed session.
-3. Before remote creation, a single original transaction changes `source -> provisioning`, stores the stable operation key and disables source firing. On positive provider ID acknowledgement, it becomes `managed` with the provider automation/session binding. An unknown response remains frozen and must be inspected through `/managed/repair`; **never automatically reenable the source scheduler**.
-4. Before any managed mutation, a database claim moves `managed -> sync_unknown` with the original operation key. Only confirmed provider success settles it back to `managed`. Recovery can verify exact matching create/pause/resume/delete state; ambiguous edits remain blocked rather than replayed.
-5. A manual run reserves one `routine_runs` row and one provider-receipt mapping atomically before provider POST. An uncertain manual POST must not be repeated under a new key.
-6. A scheduled provider invocation creates an original run only once, deduplicated by provider invocation ID. Delivery `completed` is not execution success. Completion requires the **exact authoritative root turn**, saved provider items, no pending human action, nonempty output and a fresh source authorization check. Only then does `channels.recordActivity` publish a stable-source-ID reply and the original run close. Source notifications and generated files are not assumed to have been delivered by APNs.
-7. Webhook receipt IDs are deduplicated. Webhooks only prompt source/provider reading. No arbitrary provider payload is treated as authorization, a task, or a completion event.
-8. Stop, edits and deletion affect future invocations, not necessarily work already delivered to a provider session. In-flight cancellation and approvals remain Section 1's original human-action pathways; do not infer them from schedule controls.
-9. The `GET /api/routines/:id/managed/state` endpoint is owner-scoped and returns receipt statuses only. Native UI must distinguish `deliveryStatus`, `executionStatus`, original `routine_runs` outcomes and source waiting approvals.
+### Human approvals and notification delivery
+- Existing `managed-development.ts` already maps *authoritatively correlated source Inbox turns* to original `person.question` and connector-write approval work items; this continuation additionally calls original `router.notify(scope,...)` after durable question/approval offer, with stable provider call ID for dedupe. Original source approval must be granted once before consequential write. These are source Inbox turns only; **NOT uncorrelated scheduled invocations**.
+- `openbot/server/src/delivery/apns.ts`: real HTTP/2 Apple Push Notification service with ES256 .p8 JWT, sandbox/production endpoint, alert payloads and APNs accepted/failed result. Never claims device display or invents APNs receipt.
+- Original `delivery/router.ts` and `delivery/routes.ts`: native APNs transport option, original outbox/WorkQueue, token registration bound to authenticated owner and configured project, invalid-token revocation, optional provider receipt.
+- `ios/EuphoriaApp/EuphoriaApp.swift`: APNs delegate + explicit permission/token callback and server registration through saved authenticated account; notification tap opens original approval/chat UI.
+- `ios/EuphoriaApp/SourceMoreView.swift`: user-facing enable-native-notifications action with factual status.
+- `ios/EuphoriaApp/OpenDuetSourceAPI.swift`, `SourceRoutinesView.swift`: original source routine/managed receipt state, one-time selection/schedule, pause/resume/edit/reconcile and native status views. No local scheduler.
+- APNs credentials are NOT added to iOS or committed. The server needs `EUPHORIA_APNS_ENABLED=1`, `EUPHORIA_PUSH_PROJECT_ID` (UUID), `APNS_TEAM_ID`, `APNS_KEY_ID`, `APNS_BUNDLE_ID`, `APNS_AUTH_KEY_P8_BASE64`, `APNS_ENVIRONMENT=sandbox|production`. A physical signed iPhone build, correct push entitlement and a **public authenticated backend** are required for genuine locked-phone push validation. No APNs 200 or on-device notification observed yet.
 
-## Capability and evidence matrix
+### ProactiveStore and tasks
+- Existing `managed-task-adapter.ts` already uses the **original** `createProactiveStore` and `createTaskStore`, supports source suggestion list/dismiss/start with idempotent, owner-scoped transactional suggestion-to-task and original TaskThreads. No duplicate store.
+- **Not complete:** managed cloud-proactive *read-only discovery generation* and proactive periodic execution are NOT wired to the production multi-user original `ProactiveEngine`; do not claim proactive autonomy or a background check-in works. The provider root/budget boundaries remain hard prerequisites.
 
-| Capability | Implemented in source | Offline verified here | Live verified | Blocked |
-|---|---|---|---|---|
-| OpenAI periodic/once Automations transport | Yes | Fixtures written, **not executed** | No | Hard spending boundary |
-| Original RoutineStore owner/backends/no source double fire | Yes | PostgreSQL fixtures written, **not executed** | No | Migration/typecheck pending |
-| Managed routine migrate/pause/resume/edit/delete/manual/repair | Guarded code | Not executed | No | Hard budget, uncertain provider mutations |
-| Provider invocation receipt and restart-safe read inspection | Partial | Not executed | No | Exact invocation-to-root mapping missing |
-| Signed session webhook and dedup | Code + fixtures | Not executed | No | Webhook secret, public endpoint and delivery test |
-| Native schedules, controls and history | SwiftUI code | Xcode **not run** | No | Backend/live connection and UX acceptance |
-| Original source replies | Only after confirmed provider root | Not executed | No | Root correlation and deployment |
-| Original notifications to native iPhone | No APNs path wired | No | No | APNs credentials, native token registration and transport |
-| Original source Tasks, ProactiveStore, MCP grants and approvals | Reused from baseline | Section 1 tests separate | No | Autonomous suggestion-to-routine and schedules tool grants not complete |
-| One-time routine through original `RoutineStore` | No; provider transport supports once | No | No | Original store remains cron-only |
-| Agent-created Automations tool with current owner grant | **Deliberately disabled** | No | No | Must enforce original Bot grants, limits and spending cap on every schedule |
-| Multiuser production autonomous deployment | No | No | No | Better Auth production seam explicitly excluded |
+## Tests and validation
+GitHub draft PR was opened to execute existing CI and the isolated EUPHORIA core offline-gates workflow. Written fixture:
+- `openbot/server/tests/managed-automation-identity.test.ts`: no delivery=execution, wrong automation/session denial, manual provenance, pagination errors, APNs signer/no receipt.
+- Existing `gateway/tests/agents-automations.test.mjs`, `server/tests/managed-routine-webhook.test.ts` and original routine-store integration tests cover provider request, signed webhook tamper/replay and source/managed scheduler exclusivity.
+- Workflow `.github/workflows/euphoria-core-gates.yml`: branch & draft-PR offline typecheck and Postgres fixtures; pinned action SHAs.
+- GitHub CI run `40830452969` failed repository format and migration snapshot checks. `40830452991` failed security audit on unpinned existing gate actions; fixed pins afterward.
+- A temporary **branch-only**, write-enabled maintenance workflow used the repository's exact Biome formatter and Drizzle snapshot generator to commit `322c1858f5bf6ba5530fd62acacab32d275930f6`. The temporary workflow was then **removed**. These formatting changes may touch additional inherited source files; inspect the diff rather than assume they are feature work.
+- Final current-head CI outcomes must be collected before acceptance. Historical earlier passes are not evidence of the latest head. This environment cannot clone the private repo (DNS/network unavailable) or build iOS (no Xcode/macOS). Never claim tests that are only written or checks that are queued as passes.
 
-## Known defects, release gates and next authorized engineering work
+## Required next validation, explicitly constrained
+1. Run `bun install --frozen-lockfile`, `bun run format:check`, `bun run --filter server typecheck`, and latest head CI in isolated checkout.
+2. Apply `0074` and `0075` migrations to **disposable** PostgreSQL and test two workers / duplicate webhooks / invocation pages / unknown create and manual POST / revocations / restart scans. Test original source sweeper excludes `managed`, `provisioning`, and `sync_unknown`.
+3. On Mac, build the SwiftUI scheme in Xcode for Debug and Release, verify APNs entitlement and permission/re-registration/tap routing.
+4. Obtain an official root correlation field or supported alternate provider execution contract for scheduled delivery (not a guessed latest turn). Only then integrate scheduled questions, source briefing and authorized result notification. Also require trusted **provider-side hard spending controls** prior to enabling paid recurring work.
+5. Validate actual public Better Auth tenancy, webhooks, APNs credentials, correct notification delivery and approval resume with physical iPhone locked, ONLY after separate deployment/credential/paid-call authorization.
 
-1. **Mandatory provider budget:** resolve the rejected `spend_control` against the deployed Agents API and find a provider-enforced or independently provable hard spend constraint for unattended recurring inference. Do not set `EUPHORIA_ALLOW_ONE_UNCAPPED_JOURNEY=1` as a workaround. Do not create automation resources until explicit spending authorization.
-2. **Exact root correlation:** the documented automation invocation has `session_id`, `status` and `source.type`, not necessarily `turn_id`. Establish an unambiguous invocation-to-session root mapping from authoritative events or source-stamped input. If the API cannot supply this, preserve `unverified` instead of guessing from last session turn or timestamps. Include canceled/blocked/failed per-turn cases.
-3. **Source-managed multiuser authentication:** the current `managed-development.ts` is loopback and fixed `DEV_ACTOR`; production `index.ts` uses old Intelligence. Do not deploy or claim multiuser isolation before a separate authorized production cutover.
-4. **Native real notifications:** existing `openbot/server/src/delivery/push.ts` is Expo push for OpenBot mobile, not verified APNs for SwiftUI EUPHORIA. Native device token enrollment, APNs signing, Apple entitlements, registration, user preferences, delivery receipts and disabled/quiet hours must be implemented and tested. Source channel activity alone is not a push.
-5. **Proactive autonomy and authorized connected tools:** the baseline ProactiveStore/TaskStore and approval UI exist, but no fully validated schedule proposal/acceptance path to managed Routines, and no permissible agent-authored automation tool grant. Continue default deny rather than enabling raw `automations` tools in a hosted session.
-6. **One-time original routine ownership:** OpenAI transport supports `once` but the original `RoutineStore` schema/logic is five-field cron; no source-owned one-time routine migration/expiry has been added.
-7. **Deleted/paused semantics:** native delete cascades original routine run history by existing schema; archival retention should be separately approved before production. Pausing does not cancel already delivered work. Unknown remote edits are not auto repaired.
-8. **A2UI/artifacts:** native run receipts show factual state but scheduled artifacts/results cannot be opened until exact provider-root/Artifact mapping passes source ownership.
-9. **No CI or local worktree proof:** GitHub connector created and pushed a **distinct remote branch**, but the editing environment did not have an accessible local Git checkout to construct a literal local worktree. Section 1's checkout and remote branch were never touched. The separate Mac agent should create its own isolated local worktree.
-
-## Reproducible MacBook validation procedure (unexecuted)
-
-```bash
-git fetch origin
-git worktree add ../EUPHORIA-SECTION2 -b validation/section2 origin/feature/phase1-section2-autonomous-bots
-cd ../EUPHORIA-SECTION2
-git rev-parse HEAD
-git diff a3e92acf50408f8b82c171dcf3fa7a09b9ae9cac..HEAD --stat
-
-# Gateway offline contract tests (Node 24+)
-cd gateway
-npm ci
-npm test
-cd ..
-
-# Original source types and tests
-cd openbot
-bun install --frozen-lockfile
-cd server
-bun run typecheck
-# Use fresh disposable local Postgres, never production data:
-# Put DATABASE_URL in ../.env and apply existing migration runner.
-bun run db:migrate
-bun test tests/managed-routine-webhook.test.ts
-bun test tests/routines-store.integration.test.ts
-bun test tests/routine-sweep.integration.test.ts
-bun test tests/routine-routes.test.ts
-cd ../..
-
-# Native simulator build, on macOS with project schemes validated:
-xcodebuild -list -project ios/Euphoria.xcodeproj
-# Select actual scheme and simulator from preceding output:
-# xcodebuild -project ios/Euphoria.xcodeproj -scheme <actual-scheme> \
-#   -destination 'platform=iOS Simulator,name=<available simulator>' build
-```
-
-Then run manual offline HTTP fixtures with provider stub: owner A creates a routine, duplicate migration attempts, lost provider POST/response, explicit repair, paused/edited/deleted provider state, source-sweep race under two replicas, manual invocation idempotency, source user B denial, invalid webhook signature/replay and process restart. Verify `routine_runs` IDs, provider mappings, `source`-backend exclusion and owner revocation in the database.
-
-**Only after** explicit paid-provider approval and a verified hard budget boundary: create an actual weekday `0 8 * * MON-FRI` `Asia/Kolkata` automation using a read-only Bot with one approved source connector, let the provider deliver an invocation with the iPhone app closed, inspect the original session and exact root turn, verify source-owned result, required human approval for consequential write, APNs receipt and live pause/resume/edit/delete/manual semantics. Do NOT claim passage unless genuine API IDs, source run IDs, webhook receipts, original channel output and physical-device push receipts are retained in the acceptance evidence.
-
-## Section 1 integration note
-
-Baseline `a3e92acf50408f8b82c171dcf3fa7a09b9ae9cac` was taken only from the named Section 1 branch. Section 1's independent validation agent may commit additional source fixes after this point. Do not force-merge or copy their unverified updates. Once independently validated, inspect their exact diffs and rebase/cherry-pick only reviewable relevant commits through a controlled integration branch, then rerun RoutineStore migration, source ownership, managed-session binding, existing MCP approval and iOS tests.
-
-## Acceptance verdict
-
-The reference scenario, “Every weekday at 8 AM in Asia/Kolkata, research authorized sources, save a briefing, notify me and ask before external send,” is **NOT achieved end-to-end**. It has a cloud transport and source-aware safety boundary, but no verified spend-cap-authorized automation, exact managed invocation-to-root completion projection, real native APNs delivery or live phone acceptance. Preserve this honest status for Section 2; do not start Sections 3, 4 or 5.
+## Non-actions / isolation
+No main-branch or Section 1 branch mutation, no branch merge, no Section 3 work, no production database migration, no live paid model requests, no changes to production credentials or uploaded APNs key. Review PR remains **draft**.

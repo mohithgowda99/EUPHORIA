@@ -139,3 +139,52 @@ test.skipIf(!address)('invalid native generation receives at most one durable co
   await source.tick();expect(rejects).toBe(1);
  }finally{await database.$client.close();}
 });
+
+test.skipIf(!address)('closed provider action preserves one decision without sending a stale tool result',async()=>{
+ const database=createDatabase(address!);
+ const sessionID='sess_'+crypto.randomUUID().replaceAll('-',''),rootID='turn_'+crypto.randomUUID().replaceAll('-',''),callID='call_'+crypto.randomUUID().replaceAll('-','');
+ const token='development-test-only-12345678901234567890';
+ let pending=true,remoteSubmissions=0;
+ const args={schemaVersion:1,surfaceID:'temporary',revision:0,nodes:[{id:'choice',kind:'askChoice',title:'Which?',options:[{id:'yes',label:'Yes'}]}]};
+ const call={type:'function_call',name:'euphoria_render_surface',turn_id:rootID,call_id:callID,arguments:args};
+ const provider={
+  async createSessionStream(){return{close(){},events:(async function*(){
+   yield{type:'agent.session.created',event_id:'evt_'+sessionID,session:{id:sessionID}};
+   yield{type:'agent.session.turn.created',event_id:'evt_'+rootID,session_id:sessionID,turn_id:rootID,turn:{id:rootID,session_id:sessionID,subagent_id:null}};
+  })()};},
+  async retrieveSession(){return{id:sessionID,status:pending?'requires_action':'idle',required_actions:pending?[call]:[]};},
+  async retrieveTurn(){return{id:rootID,session_id:sessionID,subagent_id:null,status:pending?'in_progress':'completed'};},
+  async listTurnItems(){return{data:[],has_more:false};},
+  async listItems(){return this.listTurnItems();},
+  async submitToolResult(){remoteSubmissions++;},
+ };
+ try{
+  const source=await createManagedDevelopment({database,provider,token,model:'fixture-only'});
+  const actor={id:DEV_ACTOR.id,role:DEV_ACTOR.role};
+  const bot=await source.profiles.create(actor,{name:'Closed action',title:'Assistant',roleDescription:'Ask once',systemPrompt:'Ask once',visibility:'private'});
+  const channel=await source.channels.create(actor,[bot.id]);
+  const path='/api/delivery/conversations/'+channel.id;
+  const headers={cookie:'euphoria-development='+token,'content-type':'application/json'};
+  const query='?agentId='+bot.id;
+  expect((await source.app.request(path+'/messages',{method:'POST',headers,body:JSON.stringify({agentId:bot.id,text:'Ask something',externalId:crypto.randomUUID()})})).status).toBe(202);
+  await source.tick();
+  const saved=(await (await source.app.request(path+'/visual'+query,{headers})).json()).surface;
+  expect(saved.surfaceID).toBe(callID);
+  const action={id:crypto.randomUUID(),surfaceID:callID,expectedRevision:0,nodeID:'choice',kind:'choose',values:{choice:'yes',label:'Yes'}};
+  expect((await source.app.request(path+'/visual/actions'+query,{method:'POST',headers,body:JSON.stringify(action)})).status).toBe(202);
+  pending=false; // The exact required_action closed while the original answer was queued.
+  await source.tick();
+  expect(remoteSubmissions).toBe(0);
+  const [receipt]=await database.select().from(workItems).where(and(eq(workItems.kind,'managed.native-response'),eq(workItems.key,callID)));
+  expect(receipt.finishedAt).toBeNull();
+  expect(receipt.payload.action.values.choice).toBe('yes');
+  expect(receipt.lastError).toContain('Provider action closed');
+  const reboot=await createManagedDevelopment({database,provider,token,model:'fixture-only'});
+  await reboot.tick();
+  expect(remoteSubmissions).toBe(0);
+  const recovery=await reboot.app.request(path+'/visual'+query,{headers});
+  expect(recovery.status).toBe(200);
+  expect((await recovery.json()).decisionRecoveryRequired).toContain('Provider action closed');
+  expect((await reboot.app.request(path+'/visual/actions'+query,{method:'POST',headers,body:JSON.stringify(action)})).status).toBe(409);
+ }finally{await database.$client.close();}
+});

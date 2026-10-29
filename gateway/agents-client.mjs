@@ -267,7 +267,7 @@ export class AgentsClient {
        typeof instructions!=='string'||!instructions.trim()||instructions.length>4000)
       throw Error('Invalid automation name or instructions');
     const periodic=typeof expression==='string'&&expression.length<=80&&
-      expression.split(/\\s+/).length===5&&
+      expression.trim().split(/\s+/).length===5&&
       /^([0-9]|[1-5][0-9])$/.test(expression.split(' ')[0]);
     const once=Number.isSafeInteger(runAt)&&runAt>Math.floor(Date.now()/1000)+60&&
       runAt<Math.floor(Date.now()/1000)+366*86400;

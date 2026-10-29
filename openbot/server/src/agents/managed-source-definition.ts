@@ -28,12 +28,17 @@ export async function resolveManagedSourceBot(input: {
   botId: string;
   agent: { model: string; instructions: string; tools: [] };
 }> {
-  if (!input.actor.id || !input.botId ||
-      !input.model || input.model.length > 128) {
+  if (
+    !input.actor.id ||
+    !input.botId ||
+    !input.model ||
+    input.model.length > 128
+  ) {
     throw new ManagedSourceBotRefusal("Invalid managed Bot request");
   }
   const profile: AgentProfile | null = await input.profiles.get(
-    input.actor, input.botId,
+    input.actor,
+    input.botId,
   );
   if (!profile || profile.id !== input.botId || profile.deletedAt) {
     throw new ManagedSourceBotRefusal("Bot is unavailable to this owner");
@@ -42,7 +47,7 @@ export async function resolveManagedSourceBot(input: {
   // channel remains. The original Store.get is the authorization boundary.
   const entries = await input.registered(input.actor);
   const resolved = entries.find((agent) => agent.id === profile.id);
-  if (!resolved || resolved.type !== "built_in") {
+  if (resolved?.type !== "built_in") {
     throw new ManagedSourceBotRefusal(
       "This Bot has no supported managed OpenAI execution configuration",
     );

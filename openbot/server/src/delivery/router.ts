@@ -2,6 +2,7 @@ import { resolveUpdateRoute, type UpdateRoute } from "../agents/lifecycle";
 import type { DrawnComponent } from "@openbot/toolkit/run-turn";
 import type { WorkItem, WorkQueue } from "../work/queue";
 import type { ExpoPushTransport } from "./push";
+import type { ApnsPushTransport } from "./apns";
 import type { DeliveryStore } from "./store";
 import {
   type ChatTransport,
@@ -43,8 +44,12 @@ const TWILIO_UNSUBSCRIBED = "21610";
  * fabricate a final reply or a failure notification.
  */
 function managedOutcomeUnknown(error: unknown): boolean {
-  return typeof error === "object" && error !== null &&
-    "outcomeUnknown" in error && error.outcomeUnknown === true;
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "outcomeUnknown" in error &&
+    error.outcomeUnknown === true
+  );
 }
 export type DeliveryWorkKind =
   | "delivery.inbound"
@@ -94,7 +99,7 @@ export function createDeliveryRouter(deps: {
     slack?: TextTransport;
     teams?: TextTransport;
     sms?: TextTransport;
-    push?: ExpoPushTransport;
+    push?: ExpoPushTransport | ApnsPushTransport;
   };
   /** The person's routing by kind; defaults to the lifecycle lane's `resolveUpdateRoute`. */
   routeFor?(input: {
@@ -280,20 +285,36 @@ export function createDeliveryRouter(deps: {
         state: result.pending ? "accepted" : "sent",
       });
       return {
-        kind: extras.approvals.length || result.waiting || result.pending ? "waiting" : "replied",
+        kind:
+          extras.approvals.length || result.waiting || result.pending
+            ? "waiting"
+            : "replied",
         binding,
         inboxId: row.id,
         // A pending managed turn is not a verified assistant message, even
         // if transport already saw partial text or UI components.
         replyText: result.pending ? "" : result.replyText,
-        ...(result.pending ? {} : result.components?.length ? { components: result.components } : {}),
+        ...(result.pending
+          ? {}
+          : result.components?.length
+            ? { components: result.components }
+            : {}),
         extras,
       };
     } catch (error) {
       if (managedOutcomeUnknown(error)) {
-        await deps.store.setInbox(row.id, "accepted",
-          "Managed agent submission outcome is uncertain; awaiting reconciliation.");
-        return { kind: "waiting", binding, inboxId: row.id, replyText: "", extras };
+        await deps.store.setInbox(
+          row.id,
+          "accepted",
+          "Managed agent submission outcome is uncertain; awaiting reconciliation.",
+        );
+        return {
+          kind: "waiting",
+          binding,
+          inboxId: row.id,
+          replyText: "",
+          extras,
+        };
       }
       // The governed turn stopped for a person: a durable approval or hand-off is now pending.
       if (
@@ -429,8 +450,11 @@ export function createDeliveryRouter(deps: {
       } catch (error) {
         if (!(await owns())) return;
         if (managedOutcomeUnknown(error)) {
-          await deps.store.setInbox(row.id, "accepted",
-            "Managed agent submission outcome is uncertain; awaiting reconciliation.");
+          await deps.store.setInbox(
+            row.id,
+            "accepted",
+            "Managed agent submission outcome is uncertain; awaiting reconciliation.",
+          );
           return;
         }
         await deps.store.setInbox(
@@ -451,10 +475,10 @@ export function createDeliveryRouter(deps: {
         current.transport !== "push" ||
         current.state !== "accepted" ||
         !current.providerId ||
-        !deps.providers.push
+        !deps.providers.push?.receipt
       )
         return;
-      const receipt = await deps.providers.push.receipt(current.providerId);
+      const receipt = await deps.providers.push!.receipt!(current.providerId);
       if (!(await owns())) return;
       if (receipt.status === "pending") {
         await deps.store.setOutbox(
@@ -557,7 +581,12 @@ export function createDeliveryRouter(deps: {
         null,
         result.id,
       );
-      if (row.transport === "push") await deps.store.offerReceipt(row.id);
+      if (
+        row.transport === "push" &&
+        result.status === "accepted" &&
+        deps.providers.push?.receipt
+      )
+        await deps.store.offerReceipt(row.id);
       await deps.audit?.({
         ownerUserId: row.ownerUserId,
         channelId: row.channelId,
@@ -595,7 +624,12 @@ export function createDeliveryRouter(deps: {
       );
       if (
         error instanceof DeliveryProviderError &&
-        error.code === "DeviceNotRegistered" &&
+        [
+          "DeviceNotRegistered",
+          "BadDeviceToken",
+          "Unregistered",
+          "DeviceTokenNotForTopic",
+        ].includes(error.code) &&
         row.deviceId
       )
         await deps.store.removeDevice(row.ownerUserId, row.deviceId);

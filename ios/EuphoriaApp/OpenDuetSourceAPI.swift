@@ -325,16 +325,52 @@ private struct SourceChecklistChange: Encodable {
     let expectedChecklistRevision: String
 }
 
+/// Original DeliveryStore registration, never a second notification backend.
+struct SourceDeliveryConfiguration: Decodable, Sendable {
+    struct Availability: Decodable, Sendable {
+        let push: Bool
+        let nativeAPNs: Bool?
+    }
+    let pushProjectId: String?
+    let available: Availability
+}
+struct SourcePushRegistration: Encodable, Sendable {
+    let id: String
+    let token: String
+    let projectId: String
+    let platform = "ios"
+}
+struct SourceRegisteredPushDevice: Decodable, Sendable {
+    struct Device: Decodable, Sendable { let id: String?; let enabled: Bool? }
+    let device: Device
+}
+
+struct SourceManagedOnceInput: Encodable, Sendable {
+    let requestId: String
+    let agentId: String
+    let channelId: String
+    let instruction: String
+    let runAt: Int
+}
+struct SourceManagedOnceResult: Decodable, Sendable {
+    let routineId: String
+    let state: String
+    let automationId: String?
+    let reason: String?
+}
 struct SourceRoutine: Decodable, Identifiable, Sendable {
     let id: String
     let agentId: String
     let schedule: String
+    let cron: String?
     let timezone: String
     let instruction: String
     let channel: SourceRoutineChannel
     let enabled: Bool
     let nextRunAt: String
     let lastRun: SourceRoutineOutcome?
+    let executionBackend: String?
+    let providerAutomationId: String?
 }
 struct SourceRoutineChannel: Decodable, Sendable {
     let id: String
@@ -362,8 +398,85 @@ struct SourceRoutineRun: Decodable, Identifiable, Sendable {
 }
 struct SourceRoutineRunsResponse: Decodable, Sendable { let runs: [SourceRoutineRun] }
 private struct SourceRoutineEnabledInput: Encodable { let enabled: Bool }
+private struct SourceManagedRoutineActionInput: Encodable { let requestId: String }
+private struct SourceManagedRoutineEditInput: Encodable {
+    let requestId: String
+    let patch: SourceManagedRoutineEditPatch
+}
+struct SourceManagedRoutineEditPatch: Encodable {
+    let instruction: String?
+    let cron: String?
+    let timezone: String?
+}
+struct SourceManagedRoutineMutation: Decodable {
+    let accepted: Bool?
+    let receiptKey: String?
+    let invocationId: String?
+    let uncertain: Bool?
+    let enabled: Bool?
+    let automationId: String?
+    let state: String?
+    let deleted: Bool?
+    let updated: Bool?
+}
+struct SourceManagedRoutineReceipt: Decodable, Identifiable {
+    let id: String
+    let invocationId: String?
+    let sessionId: String?
+    let rootTurnId: String?
+    let deliveryStatus: String
+    let executionStatus: String
+    let originalRunId: String?
+    let source: String
+    let createdAt: String
+}
+struct SourceManagedRoutineRepair: Decodable {
+    let reconciled: Bool
+    let reason: String?
+    let operation: String?
+}
+struct SourceManagedRoutineState: Decodable {
+    let backend: String
+    let automationId: String?
+    let syncOperation: String?
+    let invocations: [SourceManagedRoutineReceipt]
+}
+
 private struct SourceRoutineEnabledResult: Decodable { let enabled: Bool }
 
+struct SourceProactiveSetting: Decodable, Identifiable, Sendable {
+    let id: String
+    let ownerUserId: String
+    let agentId: String
+    let channelId: String
+    let threadId: String
+    let focus: String
+    let enabled: Bool
+    let intervalMinutes: Int
+    let nextRunAt: String
+    let lastRunAt: String?
+    let lastStatus: String
+    let lastError: String?
+}
+struct SourceProactiveSettingsEnvelope: Decodable, Sendable {
+    let settings: [SourceProactiveSetting]
+    let autonomousExecution: String
+}
+struct SourceProactiveSettingEnvelope: Decodable, Sendable {
+    let setting: SourceProactiveSetting
+}
+private struct SourceProactiveDraftInput: Encodable {
+    let agentId: String
+    let channelId: String
+    let focus: String
+    let intervalMinutes: Int
+    let enabled = false
+}
+private struct SourceProactiveDraftUpdate: Encodable {
+    let focus: String
+    let intervalMinutes: Int
+    let enabled = false
+}
 struct SourceSuggestion: Decodable, Identifiable, Sendable {
     let id: String
     let agentId: String
@@ -740,6 +853,33 @@ struct OpenDuetSourceAPI: Sendable {
             delegate: SourceRejectRedirects(), delegateQueue: nil)
     }
 
+    func deliveryConfiguration() async throws -> SourceDeliveryConfiguration {
+        try await get("api/delivery")
+    }
+
+    /// APNs device token belongs to the authenticated ORIGINAL user.
+    /// The backend checks the project, token format and owner isolation.
+    func registerNativePush(token: String, deviceID: UUID) async throws {
+        guard token.range(of: "^[a-fA-F0-9]{64}$", options: .regularExpression) != nil
+        else { throw SourceAPIError.invalidInput }
+        let config = try await deliveryConfiguration()
+        guard config.available.push, config.available.nativeAPNs == true,
+              let projectId = config.pushProjectId, UUID(uuidString: projectId) != nil
+        else { throw SourceAPIError.unavailable }
+        let response: SourceRegisteredPushDevice = try await request(
+            "api/delivery/devices", method: "POST",
+            body: SourcePushRegistration(id: deviceID.uuidString.lowercased(),
+                token: token.lowercased(), projectId: projectId))
+        guard response.device.id == deviceID.uuidString.lowercased(),
+              response.device.enabled == true
+        else { throw SourceAPIError.invalidResponse }
+    }
+
+    func unregisterNativePush(deviceID: UUID) async throws {
+        let _: SourceVoidResponse = try await request(
+            "api/delivery/devices/" + deviceID.uuidString.lowercased(), method: "DELETE")
+    }
+
     func capabilities() async throws -> DeploymentCapabilities {
         try await get("api/capabilities")
     }
@@ -1056,6 +1196,17 @@ struct OpenDuetSourceAPI: Sendable {
     /// Existing OpenDuet routine metadata, run history and pause controls.
     /// Managed Agents Automations has not been wired yet: do not create a
     /// competing scheduler or imply that original sweeps are managed dispatch.
+    func createManagedOnce(agentId: String, channelId: String, instruction: String,
+                           at date: Date, requestId: UUID) async throws -> SourceManagedOnceResult {
+        let unix = Int(date.timeIntervalSince1970)
+        guard unix > Int(Date().timeIntervalSince1970) + 900,
+              unix < Int(Date().timeIntervalSince1970) + 366 * 86_400
+        else { throw SourceAPIError.invalidInput }
+        return try await request("api/routines/managed/once", method: "POST",
+            body: SourceManagedOnceInput(requestId: requestId.uuidString.lowercased(),
+                agentId: checkedID(agentId), channelId: checkedID(channelId),
+                instruction: instruction, runAt: unix))
+    }
     func sourceRoutines() async throws -> SourceRoutinesResponse {
         try await get("api/routines")
     }
@@ -1070,8 +1221,76 @@ struct OpenDuetSourceAPI: Sendable {
         guard response.enabled == false else { throw SourceAPIError.invalidResponse }
     }
 
+    func setSourceRoutineEnabled(id: String, enabled: Bool) async throws {
+        let response: SourceRoutineEnabledResult = try await request(
+            "api/routines/" + checkedID(id) + "/enabled", method: "PUT",
+            body: SourceRoutineEnabledInput(enabled: enabled))
+        guard response.enabled == enabled else { throw SourceAPIError.invalidResponse }
+    }
+    func repairManagedRoutine(id: String) async throws -> SourceManagedRoutineRepair {
+        try await request("api/routines/" + checkedID(id) + "/managed/repair", method: "POST")
+    }
+    func managedRoutineState(id: String) async throws -> SourceManagedRoutineState {
+        try await get("api/routines/" + checkedID(id) + "/managed/state")
+    }
+    func reconcileManagedRoutine(id: String) async throws -> SourceManagedRoutineMutation {
+        // Reconciliation is READ-ONLY against the provider, but can settle
+        // already completed original source results with stable receipt IDs.
+        try await request("api/routines/" + checkedID(id) + "/managed/reconcile", method: "POST")
+    }
+    func changeManagedRoutine(id: String, operation: String, requestId: String) async throws -> SourceManagedRoutineMutation {
+        guard ["migrate","pause","resume","delete"].contains(operation) else {
+            throw SourceAPIError.invalidInput
+        }
+        return try await request("api/routines/" + checkedID(id) + "/managed/" + operation,
+            method: "POST", body: SourceManagedRoutineActionInput(requestId: checkedID(requestId)))
+    }
+    func editManagedRoutine(id: String, requestId: String,
+                            patch: SourceManagedRoutineEditPatch) async throws -> SourceManagedRoutineMutation {
+        try await request("api/routines/" + checkedID(id) + "/managed/edit", method: "POST",
+            body: SourceManagedRoutineEditInput(requestId: checkedID(requestId), patch: patch))
+    }
+    func runSourceRoutine(id: String, requestId: String) async throws -> SourceManagedRoutineMutation {
+        try await request("api/routines/" + checkedID(id) + "/run", method: "POST",
+            body: SourceManagedRoutineActionInput(requestId: checkedID(requestId)))
+    }
+
     /// Up Next cards are original ProactiveStore suggestions, not tasks or
     /// provider sessions. Only the source engine may start or dismiss them.
+    /// Original ProactiveStore. Managed autonomous research is deliberately
+    /// DISABLED until the provider's hard budget and root mapping are verified.
+    func sourceProactiveSettings() async throws -> SourceProactiveSettingsEnvelope {
+        let result: SourceProactiveSettingsEnvelope = try await get("api/proactive/settings")
+        guard result.settings.count <= 500,
+              result.autonomousExecution == "blocked_until_verified_execution_and_budget"
+        else { throw SourceAPIError.invalidResponse }
+        return result
+    }
+    func createProactiveDraft(agentId: String, channelId: String,
+                              focus: String, interval: Int) async throws -> SourceProactiveSetting {
+        guard (15...1440).contains(interval), focus.count <= 1000 else {
+            throw SourceAPIError.invalidInput
+        }
+        let page: SourceProactiveSettingEnvelope = try await request(
+            "api/proactive/settings", method: "POST",
+            body: SourceProactiveDraftInput(agentId: checkedID(agentId),
+                channelId: checkedID(channelId), focus: focus,
+                intervalMinutes: interval))
+        guard !page.setting.enabled else { throw SourceAPIError.invalidResponse }
+        return page.setting
+    }
+    func editProactiveDraft(id: String, focus: String, interval: Int) async throws -> SourceProactiveSetting {
+        guard (15...1440).contains(interval), focus.count <= 1000 else { throw SourceAPIError.invalidInput }
+        let page: SourceProactiveSettingEnvelope = try await request(
+            "api/proactive/settings/" + checkedID(id), method: "PATCH",
+            body: SourceProactiveDraftUpdate(focus: focus, intervalMinutes: interval))
+        guard page.setting.id == id, !page.setting.enabled else { throw SourceAPIError.invalidResponse }
+        return page.setting
+    }
+    func deleteProactiveDraft(id: String) async throws {
+        let _: SourceVoidResponse = try await request(
+            "api/proactive/settings/" + checkedID(id), method: "DELETE")
+    }
     func sourceSuggestions() async throws -> [SourceSuggestion] {
         let response: SourceSuggestionsResponse = try await get("api/proactive/suggestions")
         guard response.suggestions.count <= 2000,

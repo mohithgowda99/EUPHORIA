@@ -76,8 +76,10 @@ struct SourceApprovalsView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(question.question).font(.headline)
                             if let why = question.why { Text(why).font(.caption).foregroundStyle(.secondary) }
-                            if question.approvalKind == "connector_write" {
-                                Text("Review the connector, effect and exact arguments above. This authorizes only this one action.")
+                            if question.approvalKind == "connector_write" || question.approvalKind == "automation_schedule" {
+                                Text(question.approvalKind == "automation_schedule"
+                                    ? "Review the exact schedule, time zone and Bot instruction above. Allow once means one approval to CREATE the displayed schedule. A recurring schedule may execute repeatedly, only after cloud spending limits are verified."
+                                    : "Review the connector, effect and exact arguments above. This authorizes only this one action.")
                                     .font(.caption).foregroundStyle(.secondary)
                                 HStack {
                                     Button("Allow once") { confirmConnectorAllowID = question.id }
@@ -107,7 +109,7 @@ struct SourceApprovalsView: View {
         .navigationTitle("Approvals")
         .refreshable { await refresh() }
         .task { await refresh() }
-        .confirmationDialog("Allow this connector write exactly once?", isPresented: Binding(
+        .confirmationDialog("Authorize this exact Bot action once?", isPresented: Binding(
             get: { confirmConnectorAllowID != nil },
             set: { if !$0 { confirmConnectorAllowID = nil } }
         ), titleVisibility: .visible) {
@@ -119,7 +121,7 @@ struct SourceApprovalsView: View {
             }
             Button("Cancel", role: .cancel) { confirmConnectorAllowID = nil }
         } message: {
-            Text("Review the exact connector arguments shown in the request. A lost acknowledgment is never automatically replayed.")
+            Text("Review the exact schedule or connector arguments shown in the request. This approves one creation or connector write. An uncertain provider outcome is never automatically replayed.")
         }
         .confirmationDialog("Deny this EUPHORIA request?", isPresented: Binding(
             get: { confirmDenyID != nil },

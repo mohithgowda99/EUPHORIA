@@ -519,6 +519,20 @@
       "when": 1793320000000,
       "tag": "0073_managed_hosted_browser",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1793325000000,
+      "tag": "0074_managed_routine_ownership",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1793329000000,
+      "tag": "0075_managed_automation_recovery_cursor",
+      "breakpoints": true
     }
   ]
 }

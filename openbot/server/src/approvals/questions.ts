@@ -64,9 +64,19 @@ export function listedQuestion(row: {
         question: value.data.question,
         why: value.data.why,
         channelId: value.data.channelId ?? null,
-        approvalKind: row.payload && typeof row.payload === "object" && "managed" in row.payload &&
-          (row.payload as {managed?:{kind?:unknown}}).managed?.kind === "connector_write"
-          ? "connector_write" : null,
+        approvalKind:
+          row.payload &&
+          typeof row.payload === "object" &&
+          "managed" in row.payload
+            ? ["connector_write", "automation_schedule"].includes(
+                String(
+                  (row.payload as { managed?: { kind?: unknown } }).managed
+                    ?.kind,
+                ),
+              )
+              ? (row.payload as { managed?: { kind?: string } }).managed?.kind
+              : null
+            : null,
         createdAt: row.createdAt,
       }
     : null;

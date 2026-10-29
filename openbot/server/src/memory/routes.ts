@@ -59,15 +59,25 @@ export function createMemoryRoutes(
   routes.get("/sources/available/:botId", async (context) =>
     context.json({
       tools: ingestion
-        ? await ingestion.availableSources(context.var.actor.id,context.req.param("botId"))
+        ? await ingestion.availableSources(
+            context.var.actor.id,
+            context.req.param("botId"),
+          )
         : [],
     }),
   );
   routes.post("/sources", async (context) =>
     context.json(
       await (ingestion
-        ? ingestion.createSource(context.var.actor.id,await body(context.req.raw))
-        : Promise.reject(new MemoryRefusedError("Memory source connections are not configured."))),
+        ? ingestion.createSource(
+            context.var.actor.id,
+            await body(context.req.raw),
+          )
+        : Promise.reject(
+            new MemoryRefusedError(
+              "Memory source connections are not configured.",
+            ),
+          )),
       201,
     ),
   );
@@ -92,7 +102,11 @@ export function createMemoryRoutes(
     context.json(
       await (ingestion
         ? ingestion.sync(context.var.actor.id, context.req.param("id"))
-        : Promise.reject(new MemoryRefusedError("Memory source connections are not configured."))),
+        : Promise.reject(
+            new MemoryRefusedError(
+              "Memory source connections are not configured.",
+            ),
+          )),
     ),
   );
   routes.delete("/sources/:id", async (context) => {

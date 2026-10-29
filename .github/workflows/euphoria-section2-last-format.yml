@@ -1,0 +1,40 @@
+name: Section 2 final scoped offline formatting (temporary)
+on:
+  push:
+    branches: [feature/phase1-section2-autonomous-bots]
+    paths: [.github/workflows/euphoria-section2-last-format.yml]
+  pull_request:
+    branches: [feature/phase1-section1-openai-completion-20261029]
+concurrency:
+  group: section2-last-format
+  cancel-in-progress: true
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feature/phase1-section2-autonomous-bots
+          persist-credentials: true
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - name: Format only three touched source files and two offline fixtures
+        working-directory: openbot
+        run: |
+          bun install --frozen-lockfile
+          bunx biome format --write server/src/routines/managed-routine-bridge.ts server/src/routines/managed-automation-identity.ts server/tests/managed-automation-identity.test.ts server/tests/managed-source-tasks.integration.test.ts
+      - name: Commit only touched source-format changes to Section 2
+        run: |
+          git config user.name euphoria-section2-ci
+          git config user.email euphoria-section2-ci@users.noreply.github.com
+          git add openbot/server/src/routines/managed-routine-bridge.ts openbot/server/src/routines/managed-automation-identity.ts openbot/server/tests/managed-automation-identity.test.ts openbot/server/tests/managed-source-tasks.integration.test.ts
+          if ! git diff --cached --quiet; then
+            git commit -m "Section 2: exact Biome formatting for hardened provider recovery and original proactive tests"
+            git fetch origin feature/phase1-section2-autonomous-bots
+            git rebase origin/feature/phase1-section2-autonomous-bots
+            git push origin HEAD:feature/phase1-section2-autonomous-bots
+          fi

@@ -1,3 +1,29 @@
+# EUPHORIA | Section 2 continuation after recovery/APNs CI checkpoint | 2026-10-29
+
+**Status: INCOMPLETE, NOT ACCEPTED END TO END.** Current branch: `feature/phase1-section2-autonomous-bots`. Separate Section 1 baseline is unchanged; draft review PR https://github.com/mohithgowda99/EUPHORIA/pull/1 is not merge-ready.
+
+The continuation adds strictly unverified AutomationInvocation-to-root identity projection; fair persisted page cursors, older receipt rereads and signed webhook reconciliation; original source Inbox human-question / connector-write approval notification fanout; native APNs HTTP/2 delivery plus explicit iOS permission/token registration; and a human-authorized, original-RoutineStore, one-time schedule route and native entry point. There is no second scheduler or general-purpose agent runner. The spending boundary stays default DENY; no paid inference, real APNs, production deployment or live iPhone acceptance was attempted.
+
+**Blocking provider/API issue:** The documented AutomationInvocation has delivery `status` and `session_id` but **no authoritative root turn ID**. Therefore no scheduled run is claimed to have finished, and no scheduled-run approval, source briefing or source-owned push result can be safely attributed yet. A session idle event, latest turn, or webhook are not proof. **Blocking spending issue:** provider rejected `spend_control`; no verified per-invocation hard budget. Production multi-tenant Better Auth and public remote host remain absent from loopback managed assembly.
+
+GitHub Section 2 core branch gates **PASSED on implementation commit `95c0e244`**: 294 offline tests, 0 failures, TypeScript server typecheck, repeatable disposable PostgreSQL migrations, and 199 gateway regressions; security/zizmor passed. The repository-wide lint job still reports existing managed-agent source code lint findings, so all CI is NOT green. The final documentation commit(s) are not equivalent to a new validated source build. The full factual implementation, test run IDs and remaining limitations are in `docs/agents/EUPHORIA_SECTION2_HANDOFF.md`.
+
+---
+
+# EUPHORIA | Section 2 autonomous Bots engineering checkpoint | 2026-10-29
+
+**Branch:** `feature/phase1-section2-autonomous-bots`; **baseline:** `a3e92acf50408f8b82c171dcf3fa7a09b9ae9cac`.
+**Status: PARTIAL IMPLEMENTATION, NOT ACCEPTED E2E.** The branch adds a guarded OpenAI Automations transport, additive original-RoutineStore execution-backend and provider receipts, fail-closed migration/repair, signed session webhook receipts, bounded read-only reconciliation, and native SwiftUI schedule/invocation controls. Existing routines default to the original scheduler; provider-owned/uncertain routines are excluded from its firing and reaper paths.
+
+**Explicit deployment blocker:** The deployed Agents API rejected per-session `spend_control`; no enforceable recurring per-automation hard inference budget has been verified. The managed routine bridge is default-deny in the development assembly. No paid live creation, device push, webhook deployment, or real provider invocation was attempted. The documented OpenAI invocation response does not guarantee an exact root-turn ID, so completion must remain **unverified** unless authoritative correlation is available; an accepted automation notification is not a finished Bot result.
+
+Original OpenDuet Bot, RoutineStore, routine_runs, Delivery Inbox, WorkQueue, ProactiveStore, task/approval and connector grants are not replaced. Managed development remains loopback-only with fixed dev actor, and the original production server's Better Auth/Intelligence integration remains unchanged. Native code has not been Xcode-built. No tests were executed in this repository-editing environment, even though offline fixtures were committed. The separate MacBook agent must typecheck, migrate disposable Postgres, run fixtures, build iOS and inspect live flows only after budget authorization.
+
+**Section 2 handoff:** `docs/agents/EUPHORIA_SECTION2_HANDOFF.md`.
+Section 1's independent validation branch was not modified or merged. Sections 3, 4 and 5 were not started.
+
+---
+
 # EUPHORIA | Section 1 OpenAI-first implementation checkpoint | 2026-10-29
 
 **Current branch:** `feature/phase1-section1-openai-completion-20261029`

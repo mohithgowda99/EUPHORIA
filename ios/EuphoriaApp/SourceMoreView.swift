@@ -1,8 +1,11 @@
 import SwiftUI
+import UserNotifications
 
 /// OpenDuet's secondary product areas, grouped without changing the original
 /// features or replacing them with mock pages. Every destination is native.
 struct SourceMoreView: View {
+    @State private var notificationStatus = UserDefaults.standard.string(forKey: EuphoriaPushDelegate.statusKey) ?? "Not enabled"
+    @State private var enablingNotifications = false
     var body: some View {
         List {
             Section("Your Bots") {
@@ -21,6 +24,11 @@ struct SourceMoreView: View {
                 } label: {
                     Label("Routines and responsibilities", systemImage: "calendar.badge.clock")
                 }
+                NavigationLink {
+                    SourceProactiveSettingsView()
+                } label: {
+                    Label("Proactive research", systemImage: "sparkle.magnifyingglass")
+                }
             }
             Section("External services") {
                 NavigationLink {
@@ -28,6 +36,30 @@ struct SourceMoreView: View {
                 } label: {
                     Label("Connections", systemImage: "point.3.connected.trianglepath.dotted")
                 }
+            }
+            Section("Notifications") {
+                Button {
+                    enablingNotifications = true
+                    Task {
+                        do {
+                            _ = try await EuphoriaPushDelegate.requestPermissionAndRegister()
+                            notificationStatus = UserDefaults.standard.string(
+                                forKey: EuphoriaPushDelegate.statusKey) ?? "Awaiting APNs"
+                        } catch {
+                            notificationStatus = "iOS notification permission request failed."
+                        }
+                        enablingNotifications = false
+                    }
+                } label: {
+                    Label("Enable native iPhone notifications", systemImage: "bell.badge")
+                }
+                .disabled(enablingNotifications)
+                Text(notificationStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Approval and briefing alerts use Apple's push service and your authenticated OpenDuet delivery account. A reachable server and signed APNs credentials are required.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("Create") {
                 NavigationLink {

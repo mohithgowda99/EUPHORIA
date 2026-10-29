@@ -114,6 +114,22 @@ export const routines = pgTable(
     /** IANA zone the cron is read in. UTC when the person never said otherwise. */
     timezone: text("timezone").notNull().default("UTC"),
     enabled: boolean("enabled").notNull().default(true),
+    /** Explicit execution owner. A provisioning or ambiguous transition NEVER
+     * fires from the original sweeper. Existing rows remain source-owned. */
+    executionBackend: text("execution_backend")
+      .$type<"source" | "provisioning" | "managed" | "sync_unknown">()
+      .notNull()
+      .default("source"),
+    providerAutomationId: text("provider_automation_id"),
+    providerSessionId: text("provider_session_id"),
+    providerSyncKey: text("provider_sync_key"),
+    providerSyncOperation: text("provider_sync_operation"),
+    providerSyncAt: timestamp("provider_sync_at", { withTimezone: true }),
+    /** Durable pagination. A crash repeats at most one page; dedupe is receipt-keyed. */
+    providerInvocationCursor: text("provider_invocation_cursor"),
+    providerLastScannedAt: timestamp("provider_last_scanned_at", {
+      withTimezone: true,
+    }),
     /** The sweep's read target. Recomputed on every write and CAS-advanced by the sweep. */
     nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
     /**
@@ -173,4 +189,49 @@ export const routineRuns = pgTable(
   (table) => [
     index("routine_runs_by_routine_idx").on(table.routineId, table.startedAt),
   ],
+);
+
+/** Small provider-to-original-run identity receipt. Original routine_runs remains
+ * the run ledger; this table NEVER authorizes an execution or stores output. */
+export const managedRoutineInvocations = pgTable(
+  "managed_routine_invocations",
+  {
+    receiptKey: text("receipt_key").primaryKey(),
+    routineId: text("routine_id")
+      .notNull()
+      .references(() => routines.id, { onDelete: "cascade" }),
+    providerInvocationId: text("provider_invocation_id").unique(),
+    providerSessionId: text("provider_session_id"),
+    rootTurnId: text("root_turn_id"),
+    originalRunId: text("original_run_id").references(() => routineRuns.id, {
+      onDelete: "set null",
+    }),
+    deliveryStatus: text("delivery_status").notNull().default("unknown"),
+    executionStatus: text("execution_status").notNull().default("unverified"),
+    source: text("source").$type<"schedule" | "run_now">().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index("managed_routine_invocations_routine_idx").on(
+      table.routineId,
+      table.createdAt,
+    ),
+  ],
+);
+
+/** Exact signed webhooks only. No stored webhook payloads and no event replay. */
+export const managedRoutineWebhookReceipts = pgTable(
+  "managed_routine_webhook_receipts",
+  {
+    webhookId: text("webhook_id").primaryKey(),
+    sessionId: text("session_id").notNull(),
+    eventType: text("event_type").notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    /** A signed event is not a verified turn. Resume its bounded owner-scoped scan after restart. */
+    routineCursor: text("routine_cursor"),
+    inspectedAt: timestamp("inspected_at", { withTimezone: true }),
+  },
 );

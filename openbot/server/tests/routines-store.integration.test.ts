@@ -13,6 +13,8 @@ import {
   intelligenceChannelMappings,
   routineRuns,
   routines,
+  managedAgentSessionLinks,
+  managedRoutineInvocations,
   users,
 } from "../src/db/schema";
 import {
@@ -23,6 +25,10 @@ import {
   RoutineNotFoundError,
   RoutineRefusedError,
 } from "../src/routines/store";
+import {
+  createManagedRoutineBridge,
+  type ManagedAutomationProvider,
+} from "../src/routines/managed-routine-bridge";
 import { TEST_POOL, testDatabaseUrl } from "./support/database";
 
 const databaseUrl = testDatabaseUrl();
@@ -1190,6 +1196,7 @@ describe("the runner's read of one firing", () => {
       channelId: channel.id,
       // Read at dispatch so a routine paused after it was queued still does not run.
       enabled: true,
+      executionBackend: "source",
       instruction: "Post the standup summary.",
     });
   });
@@ -1325,5 +1332,204 @@ describe("counting the failures at the tail", () => {
     expect(await store.consecutiveFailures(routine.id)).toBeGreaterThanOrEqual(
       10,
     );
+  });
+});
+
+describe("explicit cloud scheduler ownership", () => {
+  test("managed schedules are invisible to original sweeper even if still enabled and overdue", async () => {
+    const { owner, routine } = await makeRoutine();
+    const due = new Date("2001-03-04T09:00:00Z");
+    await database
+      .update(routines)
+      .set({
+        executionBackend: "managed",
+        providerAutomationId: `auto_fixture_${randomUUID()}`,
+        nextRunAt: due,
+      })
+      .where(eq(routines.id, routine.id));
+    const dueNow = await store.dueRoutines(100);
+    expect(dueNow.some((x) => x.id === routine.id)).toBe(false);
+    expect(await store.routineForFiring(routine.id)).toEqual({
+      id: routine.id,
+      enabled: false,
+    });
+    expect(await store.advanceNextRun(routine.id, due)).toBe(false);
+    await expect(store.startManualRun(owner.id, routine.id)).rejects.toThrow(
+      /managed routines/i,
+    );
+    await expect(store.setEnabled(owner.id, routine.id, false)).rejects.toThrow(
+      /managed routine/i,
+    );
+    const [summary] = await store.listFor(owner.id);
+    expect(summary?.executionBackend).toBe("managed");
+  });
+  test("provisioning and uncertain migrations also cannot fire in source worker", async () => {
+    for (const backend of ["provisioning", "sync_unknown"] as const) {
+      const { routine } = await makeRoutine();
+      await database
+        .update(routines)
+        .set({
+          executionBackend: backend,
+          nextRunAt: new Date("2001-03-04T09:00:00Z"),
+        })
+        .where(eq(routines.id, routine.id));
+      expect(
+        (await store.dueRoutines(100)).some((x) => x.id === routine.id),
+      ).toBe(false);
+      expect((await store.routineForFiring(routine.id))?.enabled).toBe(false);
+    }
+  });
+});
+
+describe("approved managed schedule offline reservation and recovery", () => {
+  async function managedFixture(
+    create: (input: {
+      name: string;
+      sessionID: string;
+      instructions: string;
+      expression?: string;
+      timezone?: string;
+      runAt?: number;
+    }) => Promise<{ id?: string }>,
+  ) {
+    const { owner, agentId, channel } = await setUp();
+    const sessionID = "sess_" + randomUUID().replaceAll("-", "");
+    const threadID = "thread_" + randomUUID().replaceAll("-", "");
+    await database.insert(managedAgentSessionLinks).values({
+      ownerUserId: owner.id,
+      botId: agentId,
+      channelId: channel.id,
+      sourceThreadId: threadID,
+      providerSessionId: sessionID,
+      creationKey: "fixture",
+    });
+    let allowed = true,
+      calls = 0;
+    const provider = {
+      createAutomation: async (data: Parameters<typeof create>[0]) => {
+        calls++;
+        return create(data);
+      },
+      listAutomationInvocations: async () => ({ data: [], has_more: false }),
+      retrieveAutomationInvocation: async () => {
+        throw Error("Unexpected invocation");
+      },
+      listAutomations: async () => ({ data: [], has_more: false }),
+    } as unknown as ManagedAutomationProvider;
+    const bridge = createManagedRoutineBridge({
+      database,
+      provider,
+      authorise: async (scope) =>
+        allowed &&
+        scope.ownerUserId === owner.id &&
+        scope.channelId === channel.id &&
+        scope.agentId === agentId &&
+        scope.threadId === threadID,
+      assertSpendingBoundary: async () => {},
+    });
+    return {
+      bridge,
+      owner,
+      agentId,
+      channel,
+      sessionID,
+      get calls() {
+        return calls;
+      },
+      revoke() {
+        allowed = false;
+      },
+    };
+  }
+  test("simultaneous original-owner approvals create only one provider recurring schedule", async () => {
+    const fixture = await managedFixture(async () => ({
+      id: "auto_" + randomUUID().replaceAll("-", ""),
+    }));
+    const param = {
+      channelId: fixture.channel.id,
+      agentId: fixture.agentId,
+      instruction: "Provide an approved daily digest.",
+      requestId: "consent_" + randomUUID().replaceAll("-", "").slice(0, 20),
+      cron: "0 9 * * *",
+      timezone: "UTC",
+    };
+    const [a, b] = await Promise.all([
+      fixture.bridge.createApprovedSchedule(fixture.owner.id, param),
+      fixture.bridge.createApprovedSchedule(fixture.owner.id, param),
+    ]);
+    expect(fixture.calls).toBe(1);
+    expect([a.state, b.state].sort()).toEqual(["managed", "unverified"]);
+    const rows = await store.listFor(fixture.owner.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].executionBackend).toBe("managed");
+    expect(
+      (await store.dueRoutines(100)).some((x) => x.id === rows[0].id),
+    ).toBe(false);
+  });
+  test("unknown provider POST remains frozen and cannot automatically replay", async () => {
+    const f = await managedFixture(async () => {
+      throw Error("Lost provider acknowledgement");
+    });
+    const params = {
+      channelId: f.channel.id,
+      agentId: f.agentId,
+      instruction: "A single review",
+      requestId: "unknown_" + randomUUID().replaceAll("-", "").slice(0, 18),
+      runAt: Math.floor(Date.now() / 1000) + 7200,
+    };
+    await expect(
+      f.bridge.createApprovedSchedule(f.owner.id, params),
+    ).rejects.toThrow();
+    const second = await f.bridge.createApprovedSchedule(f.owner.id, params);
+    expect(second.state).toBe("unverified");
+    expect(f.calls).toBe(1);
+    const [row] = await store.listFor(f.owner.id);
+    expect(row.executionBackend).toBe("provisioning");
+    expect((await store.dueRoutines(100)).some((x) => x.id === row.id)).toBe(
+      false,
+    );
+  });
+  test("owner revocation freezes new creations even with matching provider session", async () => {
+    const f = await managedFixture(async () => ({
+      id: "auto_" + randomUUID().replaceAll("-", ""),
+    }));
+    f.revoke();
+    await expect(
+      f.bridge.createApprovedSchedule(f.owner.id, {
+        channelId: f.channel.id,
+        agentId: f.agentId,
+        instruction: "Not authorized",
+        requestId: "revoked_" + randomUUID().replaceAll("-", "").slice(0, 18),
+        runAt: Math.floor(Date.now() / 1000) + 7200,
+      }),
+    ).rejects.toThrow();
+    expect(f.calls).toBe(0);
+  });
+  test("strict default-deny spending cap blocks source reservation before provider POST", async () => {
+    const f = await managedFixture(async () => ({
+      id: "auto_" + randomUUID().replaceAll("-", ""),
+    }));
+    const blocked = createManagedRoutineBridge({
+      database,
+      provider: {
+        createAutomation: async () => {
+          throw Error("Provider must not be touched");
+        },
+      } as unknown as ManagedAutomationProvider,
+      authorise: async () => true,
+      assertSpendingBoundary: async () => {
+        throw Error("Hard spending limit unavailable");
+      },
+    });
+    await expect(
+      blocked.createApprovedSchedule(f.owner.id, {
+        channelId: f.channel.id,
+        agentId: f.agentId,
+        instruction: "Do not spend",
+        requestId: "cap_" + randomUUID().replaceAll("-", "").slice(0, 18),
+        runAt: Math.floor(Date.now() / 1000) + 7200,
+      }),
+    ).rejects.toThrow(/spending/);
+    expect(await store.listFor(f.owner.id)).toHaveLength(0);
   });
 });

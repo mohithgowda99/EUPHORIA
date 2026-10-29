@@ -57,6 +57,7 @@ export function createManagedRoutineBridge(input:{
  async function claim(owner:string,id:string,backend:"source"|"managed",
     operation:string,key:string) {
   return db.transaction(async tx=>{
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${"routine-run-"+id}))`);
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"managed-routine:"+id},0))`);
     const [row]=await tx.select().from(routines)
       .where(and(eq(routines.id,id),eq(routines.ownerUserId,owner))).limit(1);

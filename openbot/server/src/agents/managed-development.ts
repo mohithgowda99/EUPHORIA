@@ -216,7 +216,10 @@ export async function createManagedDevelopment(input:{database:Database;provider
    // The choice occurred during this source turn, BEFORE its final assistant reply.
    completedSurfaces.push({afterMessageID:row.inboxID,surface,selectedLabel});
   }
-  return c.json({surface:result.surface,completedSurfaces,submissionUncertain:result.submissionUncertain??false,
+  const pendingQuestion=(await questions.list(c.var.actor.id)).some(q=>q.threadId===
+   (result.scope?.threadId??(await scopeFor(c.var.actor.id,c.req.param('id')??'',c.req.query('agentId')??''))?.threadId)&&
+   q.conversationBotId===(c.req.query('agentId')??''));
+  return c.json({surface:result.surface,completedSurfaces,pendingQuestion,submissionUncertain:result.submissionUncertain??false,
    deliveryState:latest?.state??null,deliveryError:latest?.error??null,
    decisionRecoveryRequired:latest?.state==='sent'?null:unresolved?.error??null});
  });

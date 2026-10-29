@@ -37,7 +37,7 @@ test.skipIf(!url)("native Tasks/Up Next reuse source IDs, avoid duplicate manage
    model:"fixture",token});
   const actor={id:DEV_ACTOR.id,role:DEV_ACTOR.role};
   const bot=await app1.profiles.create(actor,{
-   name:"Managed Tasks Bot",title:"Research",roleDescription:"Task executor",visibility:"private"});
+   name:"Managed Tasks Bot",title:"Research",roleDescription:"Task executor",systemPrompt:"Task executor",visibility:"private"});
   const headers={cookie:"euphoria-development="+token,"content-type":"application/json"};
   const submit=await app1.app.request("/api/openduet/tasks",{
    method:"POST",headers,body:JSON.stringify({botId:bot.id,title:"Research standards",instruction:"Summarize the standards"})});

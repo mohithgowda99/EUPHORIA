@@ -345,6 +345,19 @@ struct SourceRegisteredPushDevice: Decodable, Sendable {
     let device: Device
 }
 
+struct SourceManagedOnceInput: Encodable, Sendable {
+    let requestId: String
+    let agentId: String
+    let channelId: String
+    let instruction: String
+    let runAt: Int
+}
+struct SourceManagedOnceResult: Decodable, Sendable {
+    let routineId: String
+    let state: String
+    let automationId: String?
+    let reason: String?
+}
 struct SourceRoutine: Decodable, Identifiable, Sendable {
     let id: String
     let agentId: String
@@ -1150,6 +1163,17 @@ struct OpenDuetSourceAPI: Sendable {
     /// Existing OpenDuet routine metadata, run history and pause controls.
     /// Managed Agents Automations has not been wired yet: do not create a
     /// competing scheduler or imply that original sweeps are managed dispatch.
+    func createManagedOnce(agentId: String, channelId: String, instruction: String,
+                           at date: Date, requestId: UUID) async throws -> SourceManagedOnceResult {
+        let unix = Int(date.timeIntervalSince1970)
+        guard unix > Int(Date().timeIntervalSince1970) + 900,
+              unix < Int(Date().timeIntervalSince1970) + 366 * 86_400
+        else { throw SourceAPIError.invalidInput }
+        return try await request("api/routines/managed/once", method: "POST",
+            body: SourceManagedOnceInput(requestId: requestId.uuidString.lowercased(),
+                agentId: checkedID(agentId), channelId: checkedID(channelId),
+                instruction: instruction, runAt: unix))
+    }
     func sourceRoutines() async throws -> SourceRoutinesResponse {
         try await get("api/routines")
     }

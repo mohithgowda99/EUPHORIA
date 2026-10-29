@@ -7,6 +7,26 @@ import FoundationNetworking
 /// Native transport for the ORIGINAL OpenDuet/OpenBot product routes.
 /// Deliberately independent of the transitional EUPHORIA Agents session routes:
 /// Bot identity, permission checks, credentials and lifecycle stay in OpenBot.
+struct SourceHostedCapabilities: Codable, Sendable {
+    let sandbox: Bool
+    let delegation: Bool
+    let maxConcurrentSubagents: Int
+}
+struct SourceHostedCapabilitiesResponse: Decodable, Sendable {
+    let capabilities: SourceHostedCapabilities
+    let locked: Bool
+}
+struct SourceHostedArtifact: Decodable, Identifiable, Sendable {
+    let id: String
+    let turnId: String
+    let filename: String
+    let mimeType: String
+    let sizeBytes: Int
+}
+struct SourceHostedArtifactEnvelope: Decodable, Sendable {
+    let artifacts: [SourceHostedArtifact]
+}
+
 struct SourceBot: Decodable, Identifiable, Sendable {
     let id: String
     let name: String
@@ -694,6 +714,64 @@ struct OpenDuetSourceAPI: Sendable {
         let response: SourceBotResponse = try await request(
             "api/agents/" + checkedID(id) + "/duplicate", method: "POST")
         return response.agent
+    }
+
+    /// Hosted execution is granted by the original Bot's OWNER, not by an
+    /// agent-generated surface. Settings are immutable once any provider
+    /// session has been reserved for this Bot.
+    func sourceHostedCapabilities(botID: String) async throws -> SourceHostedCapabilitiesResponse {
+        try await get("api/agents/" + checkedID(botID) + "/hosted-capabilities")
+    }
+    func updateSourceHostedCapabilities(botID: String,
+                                        capabilities: SourceHostedCapabilities) async throws -> SourceHostedCapabilitiesResponse {
+        guard (1...3).contains(capabilities.maxConcurrentSubagents),
+              capabilities.delegation || capabilities.maxConcurrentSubagents == 1
+        else { throw SourceAPIError.invalidInput }
+        return try await request("api/agents/" + checkedID(botID) + "/hosted-capabilities",
+                                 method: "PUT", body: capabilities)
+    }
+
+    /// Read only artifacts whose exact provider root is tied to this original
+    /// channel/Bot's completed source Inbox. Never use a provider download URL.
+    func sourceHostedArtifacts(channelID: String, botID: String) async throws -> [SourceHostedArtifact] {
+        let response: SourceHostedArtifactEnvelope = try await request(
+            "api/delivery/conversations/" + checkedID(channelID) + "/artifacts",
+            method: "GET", queryItems: [URLQueryItem(name: "agentId", value: checkedID(botID))])
+        guard response.artifacts.count <= 200,
+              Set(response.artifacts.map(\.id)).count == response.artifacts.count,
+              response.artifacts.allSatisfy({ $0.sizeBytes >= 0 && $0.sizeBytes <= 8 * 1024 * 1024 })
+        else { throw SourceAPIError.invalidResponse }
+        return response.artifacts
+    }
+    func downloadSourceHostedArtifact(channelID: String, botID: String,
+                                      artifact: SourceHostedArtifact) async throws -> URL {
+        let route = "api/delivery/conversations/" + checkedID(channelID) +
+            "/artifacts/" + checkedID(artifact.id) + "/content"
+        guard var url = URLComponents(url: endpoint.baseURL.appendingPathComponent(route),
+                                      resolvingAgainstBaseURL: false) else { throw SourceAPIError.invalidInput }
+        url.queryItems = [URLQueryItem(name: "agentId", value: checkedID(botID))]
+        guard let requestURL = url.url else { throw SourceAPIError.invalidInput }
+        var request = URLRequest(url: requestURL, timeoutInterval: 30)
+        request.httpMethod = "GET"
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
+        if let sessionCookie { request.setValue(sessionCookie, forHTTPHeaderField: "Cookie") }
+        let data: Data
+        let response: URLResponse
+        do { (data, response) = try await session.data(for: request) }
+        catch { throw SourceAPIError.unavailable }
+        guard let http = response as? HTTPURLResponse,
+              http.statusCode == 200, data.count <= 8 * 1024 * 1024,
+              data.count == artifact.sizeBytes,
+              http.value(forHTTPHeaderField: "Content-Type")?.hasPrefix("application/octet-stream") == true
+        else { throw SourceAPIError.invalidResponse }
+        let safeName = String(artifact.filename.replacingOccurrences(
+            of: "[^A-Za-z0-9._-]", with: "_", options: .regularExpression).prefix(140))
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let destination = folder.appendingPathComponent(safeName.isEmpty ? "artifact" : safeName)
+        try data.write(to: destination, options: .atomic)
+        return destination
     }
 
     /// A connection is real only when the ORIGINAL plugin broker/vault reports

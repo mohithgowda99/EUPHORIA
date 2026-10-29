@@ -123,6 +123,7 @@ export type RoutineSummary = {
    * and the sweep both derive from the expression itself.
    */
   schedule: string;
+  cron: string;
   timezone: string;
   enabled: boolean;
   executionBackend: "source" | "provisioning" | "managed" | "sync_unknown";
@@ -660,6 +661,7 @@ export function createRoutineStore(database: Database): RoutineStore {
           agentId: routine.agentId,
           instruction: routine.instruction,
           schedule: describeCron(routine.cron),
+          cron: routine.cron,
           timezone: routine.timezone,
           enabled: routine.enabled,
           executionBackend: routine.executionBackend,

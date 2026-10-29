@@ -385,7 +385,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
   if(!await authorised(scope))return c.json({error:'Access revoked during provider read'},403);
   if(content.bytes.length!==owned.sizeBytes)
    return c.json({error:'Hosted artifact bytes differ from immutable provider metadata'},502);
-  return new Response(content.bytes,{
+  return new Response(new Uint8Array(content.bytes),{
    status:200,headers:{'Content-Type':'application/octet-stream',
     'Content-Disposition':'attachment; filename="'+attachmentName(owned.filename)+'"',
     'X-Content-Type-Options':'nosniff','Cache-Control':'private, no-store',

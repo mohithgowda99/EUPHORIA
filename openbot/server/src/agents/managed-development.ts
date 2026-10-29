@@ -29,7 +29,7 @@ import {createManagedTaskAdapter} from './managed-task-adapter';
 import {createManagedHostedCapabilities,parseHostedCapabilities,hostedDefinition,DENIED_HOSTED_CAPABILITIES} from './managed-hosted-capabilities';
 import {projectHostedArtifact,attachmentName} from './managed-hosted-artifacts';
 import {assertCurrentRootForCancellation} from './managed-hosted-cancel';
-import {browserEnvironment,parsePublicBrowserHosts,pendingPublicOrigin,isPendingAuth} from './managed-hosted-browser';
+import {browserEnvironment,parsePublicBrowserHosts,pendingPublicOrigin} from './managed-hosted-browser';
 import {managedSourceSkillContext} from './managed-source-skills';
 import {grantedHostedSkillReferences,parseHostedSkillMappings,type HostedSkillMapping} from './managed-hosted-skills';
 import {canManageAgent} from './profile-policy';

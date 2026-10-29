@@ -31,6 +31,7 @@ function trustedPublicOrigin(urlString:string, origins:readonly string[]):boolea
         const approved=new URL(origin);
         return approved.protocol==="https:"&&!approved.username&&!approved.password&&
           !approved.search&&!approved.hash&&!approved.port&&
+          (approved.pathname==="/"||approved.pathname==="")&&
           approved.origin===u.origin;
       }catch{return false;}
     });
@@ -49,6 +50,8 @@ export async function selectNativeReadOnlyMCP(
     if(tools.length>=4)break;
     if(!/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(server.id)||
       !trustedPublicOrigin(server.url,allowedOrigins)||server.hasCredential||
+      (server.authScheme!==null&&server.authScheme!=="NO_AUTH")||
+      server.accountMode!==null||server.sharedVendorConnected||
       server.lastError||!server.toolsRefreshedAt)continue;
     const reads=(server.tools as ToolRecord[]).filter(t=>
       t.serverId===server.id&&t.ref===server.id+"/"+t.name&&

@@ -27,6 +27,16 @@ final class SourceFixtureComparisonTests: XCTestCase {
         return engine
     }
 
+    func testLayoutCatalogBuildsThroughPinnedNativeEngine() throws {
+        let document=try fixture("a2ui-layout-v09.json")
+        let engine=try processor(document)
+        XCTAssertNotNil(engine.model.getSurface(document.surfaceId))
+        let vm=SurfaceViewModel(surface:SurfaceModel(id:document.surfaceId,catalog:basicCatalog))
+        XCTAssertTrue(vm.processMessages(try A2UIProjectionBridge.messages(from:document)).isEmpty)
+        XCTAssertEqual(vm.componentTree?.id,"root")
+        XCTAssertEqual(vm.componentTree?.children.count,4)
+    }
+
     func testNestedTripSharedBindingAndDraftRestoration() throws {
         var document = try fixture("a2ui-nested-trip-v09.json")
         let model = try processor(document).model.getSurface(document.surfaceId)

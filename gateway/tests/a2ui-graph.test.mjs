@@ -34,7 +34,7 @@ for(const [name,change] of [
  ['catalog',d=>d.catalogId='https://attacker.test/catalog'],['cycle',d=>d.components[0].children.push('root')],
  ['reuse',d=>d.components[0].children.push('title')],['orphan',d=>d.components.push({id:'orphan',component:'Text',text:'hidden'})],
  ['function',d=>d.components.find(c=>c.id==='submit').action={functionCall:{name:'delete'}}],
- ['bounds',d=>d.dataModel.trip.destination='😀'.repeat(1001)],['props',d=>d.components[0].align='center'],
+ ['bounds',d=>d.dataModel.trip.destination='😀'.repeat(1001)],['props',d=>d.components[0].align='teleport'],
  ['unbound',d=>d.components.find(c=>c.id==='field').value={path:'/missing'}],['prototype',d=>d.dataModel=JSON.parse('{"__proto__":{}}')],
  ['bad initial choice',d=>{const q=doc('deployment');Object.assign(d,q);const c=d.components.find(c=>c.component==='ChoicePicker');let m=d.dataModel;const parts=c.value.path.slice(1).split('/');for(const k of parts.slice(0,-1))m=m[k];m[parts.at(-1)]=['forged'];}],
 ])test(`graph safely refuses ${name}`,()=>{const d=doc();change(d);assert.throws(()=>normalizeRenderInput(packet(d)));});

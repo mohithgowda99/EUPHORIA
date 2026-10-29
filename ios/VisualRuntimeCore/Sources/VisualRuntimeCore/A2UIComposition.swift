@@ -113,11 +113,16 @@ public struct A2UIDocument: Codable, Equatable, Sendable {
             guard depth <= 24, let n = byID[id], !stack.contains(id) else { throw A2UIError.invalidTree }
             if visited.contains(id) { throw A2UIError.invalidTree }
             guard Self.safeKey(id) else { throw A2UIError.invalidTree }
-            let allowed: Set<String> = ["Column", "Row", "Card", "Text", "Button", "TextField", "CheckBox", "ChoicePicker"]
+            let allowed: Set<String> = ["Column", "Row", "Card", "Text", "Button", "TextField", "CheckBox", "ChoicePicker", "List", "Tabs", "Modal", "Divider", "Icon"]
             guard allowed.contains(n.component) else { throw A2UIError.unsupportedComponent(n.component) }
             let keys: Set<String>
             switch n.component {
-            case "Column","Row": keys = ["children"] // unsupported alignment is rejected, not ignored
+            case "Column","Row": keys = ["children","align","justify"]
+            case "List": keys = ["children","align","direction"]
+            case "Tabs": keys = ["tabs"]
+            case "Modal": keys = ["trigger","content"]
+            case "Divider": keys = ["axis"]
+            case "Icon": keys = ["name"]
             case "Card": keys = ["child"]
             case "Button": keys = ["child","action","variant"]
             case "Text": keys = ["text","variant"]
@@ -133,11 +138,33 @@ public struct A2UIDocument: Codable, Equatable, Sendable {
                 if n.component == "Button" && !["primary","borderless"].contains(variant) { throw A2UIError.invalidTree }
                 if n.component == "ChoicePicker" && !["mutuallyExclusive","multipleSelection"].contains(variant) { throw A2UIError.invalidTree }
             }
+            for (property, choices) in [
+                ("align",["start","center","end","stretch"]),
+                ("justify",["start","center","end","spaceBetween","spaceAround","spaceEvenly","stretch"]),
+                ("direction",["vertical","horizontal"]),("axis",["horizontal","vertical"])
+            ] {
+                if let raw=n.properties[property] {
+                    guard let value=raw.text, choices.contains(value) else {throw A2UIError.invalidTree}
+                }
+            }
             stack.insert(id)
             switch n.component {
-            case "Column","Row":
+            case "Column","Row","List":
                 guard case .array(let children)? = n.properties["children"], children.count <= 40 else { throw A2UIError.invalidTree }
                 for child in children { guard let name = child.text else { throw A2UIError.invalidTree }; try visit(name,depth:depth+1) }
+            case "Tabs":
+                guard case .array(let tabs)?=n.properties["tabs"],!tabs.isEmpty,tabs.count<=20 else {throw A2UIError.invalidTree}
+                for tab in tabs {
+                    guard let obj=tab.object,Set(obj.keys)==Set(["title","child"]),let child=obj["child"]?.text else {throw A2UIError.invalidTree}
+                    try require(.string,obj["title"]); try visit(child,depth:depth+1)
+                }
+            case "Modal":
+                guard let trigger=n.properties["trigger"]?.text,let content=n.properties["content"]?.text else {throw A2UIError.invalidTree}
+                try visit(trigger,depth:depth+1); try visit(content,depth:depth+1)
+            case "Icon":
+                try require(.string,n.properties["name"])
+                guard let raw=n.properties["name"],let name=try resolve(raw).text,
+                      name.range(of:"^[A-Za-z][A-Za-z0-9_]{0,63}$",options:.regularExpression) != nil else {throw A2UIError.invalidData}
             case "Card","Button":
                 guard let child = n.properties["child"]?.text else { throw A2UIError.invalidTree }
                 try visit(child,depth:depth+1)

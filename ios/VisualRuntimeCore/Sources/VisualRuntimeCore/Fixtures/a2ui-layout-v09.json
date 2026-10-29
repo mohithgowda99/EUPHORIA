@@ -1,0 +1,131 @@
+{
+  "version": "v0.9",
+  "surfaceId": "research_layout",
+  "catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json",
+  "revision": 0,
+  "components": [
+    {
+      "id": "root",
+      "component": "Column",
+      "children": [
+        "heading",
+        "summary",
+        "tabs",
+        "modal"
+      ],
+      "align": "stretch",
+      "justify": "start"
+    },
+    {
+      "id": "heading",
+      "component": "Text",
+      "text": {
+        "path": "/heading"
+      },
+      "variant": "h2"
+    },
+    {
+      "id": "summary",
+      "component": "Row",
+      "children": [
+        "icon",
+        "rule",
+        "status"
+      ],
+      "align": "center",
+      "justify": "spaceBetween"
+    },
+    {
+      "id": "icon",
+      "component": "Icon",
+      "name": "info"
+    },
+    {
+      "id": "rule",
+      "component": "Divider",
+      "axis": "vertical"
+    },
+    {
+      "id": "status",
+      "component": "Text",
+      "text": "Two sources"
+    },
+    {
+      "id": "tabs",
+      "component": "Tabs",
+      "tabs": [
+        {
+          "title": "Overview",
+          "child": "list"
+        },
+        {
+          "title": {
+            "path": "/detailTitle"
+          },
+          "child": "details"
+        }
+      ]
+    },
+    {
+      "id": "list",
+      "component": "List",
+      "direction": "vertical",
+      "align": "stretch",
+      "children": [
+        "first",
+        "second"
+      ]
+    },
+    {
+      "id": "first",
+      "component": "Card",
+      "child": "firstText"
+    },
+    {
+      "id": "firstText",
+      "component": "Text",
+      "text": "Primary evidence"
+    },
+    {
+      "id": "second",
+      "component": "Text",
+      "text": "Supporting evidence"
+    },
+    {
+      "id": "details",
+      "component": "Text",
+      "text": "Expanded details"
+    },
+    {
+      "id": "modal",
+      "component": "Modal",
+      "trigger": "open",
+      "content": "modalContent"
+    },
+    {
+      "id": "open",
+      "component": "Button",
+      "child": "openLabel",
+      "action": {
+        "event": {
+          "name": "inspect_evidence"
+        }
+      }
+    },
+    {
+      "id": "modalContent",
+      "component": "Text",
+      "text": "Evidence context"
+    },
+    {
+      "id": "openLabel",
+      "component": "Text",
+      "text": "Inspect evidence"
+    }
+  ],
+  "dataModel": {
+    "heading": "Research brief",
+    "detailTitle": "Evidence"
+  },
+  "localEdits": {}
+}

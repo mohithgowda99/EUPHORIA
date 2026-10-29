@@ -39,7 +39,16 @@ export function validateGraph(d){
   const c=nodes.get(id);if(depth>24||!c||seen.has(id))bad();seen.add(id);
   const base=['id','component'];
   switch(c.component){
-   case 'Column':case 'Row':shape(c,[...base,'children']);if(!Array.isArray(c.children)||c.children.length>40)bad();for(const child of c.children){if(!safe(child))bad();visit(child,depth+1);}break;
+   case 'Column':case 'Row':case 'List':
+    shape(c,[...base,'children'],c.component==='List'?['direction','align']:['justify','align']);
+    if(c.align!==undefined&&!['start','center','end','stretch'].includes(c.align)||c.justify!==undefined&&!['start','center','end','spaceBetween','spaceAround','spaceEvenly','stretch'].includes(c.justify)||c.direction!==undefined&&!['vertical','horizontal'].includes(c.direction))bad();
+    if(!Array.isArray(c.children)||c.children.length>40)bad();for(const child of c.children){if(!safe(child))bad();visit(child,depth+1);}break;
+   case 'Tabs':
+    shape(c,[...base,'tabs']);if(!Array.isArray(c.tabs)||!c.tabs.length||c.tabs.length>20)bad();
+    for(const tab of c.tabs){shape(tab,['title','child']);typed(tab.title,'string');if(!safe(tab.child))bad();visit(tab.child,depth+1);}break;
+   case 'Modal':shape(c,[...base,'trigger','content']);if(!safe(c.trigger)||!safe(c.content))bad();visit(c.trigger,depth+1);visit(c.content,depth+1);break;
+   case 'Divider':shape(c,base,['axis']);if(c.axis!==undefined&&!['horizontal','vertical'].includes(c.axis))bad();break;
+   case 'Icon':shape(c,[...base,'name']);typed(c.name,'string');if(!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(resolve(c.name,d.dataModel)))bad();break;
    case 'Card':shape(c,[...base,'child']);visit(c.child,depth+1);break;
    case 'Text':shape(c,[...base,'text'],['variant']);typed(c.text,'string');if(c.variant!==undefined&&!['h1','h2','h3','h4','h5','caption','body'].includes(c.variant))bad();break;
    case 'TextField':shape(c,[...base,'label'],['value']);typed(c.label,'string');typed(c.value,'string',true);break;

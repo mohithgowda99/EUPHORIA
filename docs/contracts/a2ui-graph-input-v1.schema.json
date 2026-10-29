@@ -95,6 +95,25 @@
                                 "type": "string",
                                 "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
                               }
+                            },
+                            "align": {
+                              "enum": [
+                                "start",
+                                "center",
+                                "end",
+                                "stretch"
+                              ]
+                            },
+                            "justify": {
+                              "enum": [
+                                "start",
+                                "center",
+                                "end",
+                                "spaceBetween",
+                                "spaceAround",
+                                "spaceEvenly",
+                                "stretch"
+                              ]
                             }
                           }
                         },
@@ -121,6 +140,25 @@
                                 "type": "string",
                                 "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
                               }
+                            },
+                            "align": {
+                              "enum": [
+                                "start",
+                                "center",
+                                "end",
+                                "stretch"
+                              ]
+                            },
+                            "justify": {
+                              "enum": [
+                                "start",
+                                "center",
+                                "end",
+                                "spaceBetween",
+                                "spaceAround",
+                                "spaceEvenly",
+                                "stretch"
+                              ]
                             }
                           }
                         },
@@ -527,6 +565,195 @@
                                   }
                                 }
                               }
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "component",
+                            "children"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "component": {
+                              "const": "List"
+                            },
+                            "children": {
+                              "type": "array",
+                              "maxItems": 40,
+                              "items": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                              }
+                            },
+                            "align": {
+                              "enum": [
+                                "start",
+                                "center",
+                                "end",
+                                "stretch"
+                              ]
+                            },
+                            "direction": {
+                              "enum": [
+                                "vertical",
+                                "horizontal"
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "component",
+                            "tabs"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "component": {
+                              "const": "Tabs"
+                            },
+                            "tabs": {
+                              "type": "array",
+                              "minItems": 1,
+                              "maxItems": 20,
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "title",
+                                  "child"
+                                ],
+                                "properties": {
+                                  "title": {
+                                    "oneOf": [
+                                      {
+                                        "type": "string",
+                                        "maxLength": 2000
+                                      },
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "required": [
+                                          "path"
+                                        ],
+                                        "properties": {
+                                          "path": {
+                                            "type": "string",
+                                            "maxLength": 256,
+                                            "pattern": "^/"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "child": {
+                                    "type": "string",
+                                    "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "component",
+                            "trigger",
+                            "content"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "component": {
+                              "const": "Modal"
+                            },
+                            "trigger": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "content": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "component"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "component": {
+                              "const": "Divider"
+                            },
+                            "axis": {
+                              "enum": [
+                                "horizontal",
+                                "vertical"
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "id",
+                            "component",
+                            "name"
+                          ],
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+                            },
+                            "component": {
+                              "const": "Icon"
+                            },
+                            "name": {
+                              "oneOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 2000
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "path"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^/"
+                                    }
+                                  }
+                                }
+                              ]
                             }
                           }
                         }

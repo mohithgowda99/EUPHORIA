@@ -29,6 +29,7 @@ import {createManagedTaskAdapter} from './managed-task-adapter';
 import {createMemoryStore} from '../memory/store';
 import {createMemoryRoutes} from '../memory/routes';
 import {managedMemoryContext} from './managed-memory-context';
+import {MANAGED_CONNECTED_MCP_TOOL,managedMCPCall,authorizeManagedMCP,approvedWriteDecision,mcpWritePreview,type OriginalPluginBridge} from './managed-connected-mcp';
 import {resolveManagedSourceBot} from './managed-source-definition';
 import {createManagedSessionLinkStore} from './managed-session-links';
 import {createManagedInboxTurnStore} from './managed-inbox-turns';
@@ -47,7 +48,7 @@ import {argumentFingerprint} from '../../../../gateway/provider-arguments.mjs';
 // @ts-expect-error stable shared native prompt prefix
 import {RENDER_INSTRUCTIONS} from '../../../../gateway/render-prompt.mjs';
 
-export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string}) {
+export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string;plugins?:OriginalPluginBridge}) {
  if(input.token.length<32)throw Error('Development token must contain at least32 characters');
  const {database,provider}=input;
  await initializeDevActorUser(database,true);
@@ -76,7 +77,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
    const approvedMemory=managedMemoryContext(await memory.list(scope.ownerUserId),scope.agentId);
    await channels.recordActivity(actor,scope.channelId,{text:scope.text,agentId:null,at:new Date()},{id:'delivery-input:'+scope.runId});
    await submitManagedSourceInput({scope:{ownerUserId:scope.ownerUserId,channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId},
-    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL]},links,turns,provider});
+    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[])]},links,turns,provider});
    return {replyText:'',pending:true};
   }});
  const app=new Hono<{Variables:AppVariables}>();
@@ -196,6 +197,31 @@ export async function createManagedDevelopment(input:{database:Database;provider
   if(calls.length!==1||calls[0].type!=='function_call')throw Error('Unsupported managed tool');
   const call=calls[0];const args=typeof call.arguments==='string'?JSON.parse(call.arguments):call.arguments;
   argumentFingerprint(args); // Bound size/depth before rendering.
+  if(call.name==='euphoria_connected_mcp'){
+   if(!input.plugins)throw Error('MCP access is not configured in this product assembly');
+   const exact=managedMCPCall(call);
+   if(exact.turn_id!==current.receipt.rootTurnId)throw Error('MCP turn root mismatch');
+   const granted=await authorizeManagedMCP(input.plugins,botId,exact.arguments);
+   if(granted.effect==='write'){
+    const preview=mcpWritePreview(granted.input.ref,granted.input.args);
+    const payload={actorId:owner,botId,threadId:scope.threadId,runId:current.inbox.id,
+     channelId,mode:'completed_question' as const,
+     question:'Allow this Bot to perform the specified connector write once?',
+     why:preview,
+     managed:{kind:'connector_write',sessionID:session.id,call:exact,scope}};
+    await queue.offer({kind:'person.question',key:exact.call_id,payload});
+    const [saved]=await database.select({payload:workItems.payload}).from(workItems)
+     .where(and(eq(workItems.kind,'person.question'),eq(workItems.key,exact.call_id))).limit(1);
+    if(!saved||stable(saved.payload)!==stable(payload))throw Error('MCP approval identity collision');
+   }else{
+    const payload={sessionID:session.id,scope,call:exact};
+    await queue.offer({kind:'managed.connector-read',key:exact.call_id,payload});
+    const [saved]=await database.select({payload:workItems.payload}).from(workItems)
+     .where(and(eq(workItems.kind,'managed.connector-read'),eq(workItems.key,exact.call_id))).limit(1);
+    if(!saved||stable(saved.payload)!==stable(payload))throw Error('MCP read identity collision');
+   }
+   return{surface:null};
+  }
   if(call.name==='euphoria_ask_person'){
    const savedCall=parseManagedQuestionCall(call);
    if(savedCall.turn_id!==current.receipt.rootTurnId)throw Error('Question root correlation mismatch');
@@ -329,6 +355,35 @@ export async function createManagedDevelopment(input:{database:Database;provider
   // A second process may claim this only after the first lease expires.
   // If the first process crashed after HTTP POST, attempts>1 cannot be
   // replayed, even with the same provider idempotency key.
+  // Source-bound read-only MCP calls. The original PluginStore enforces grants,
+  // credential access and audits the outcome. A reclaimed claim after an
+  // ambiguous provider acknowledgement is NOT executed a second time.
+  if(input.plugins)for(const item of await queue.claim({kind:'managed.connector-read',owner:'managed-connector-read',
+    leaseMs:60000,limit:10,maxAttempts:100})){
+   try{
+    if(item.attempts!==1)throw Error('Previous connector read dispatch is uncertain');
+    const payload=item.payload as unknown as {sessionID:string;scope:DeliveryScope;call:unknown};
+    if(!await authorised(payload.scope))throw Error('MCP Bot or channel revoked');
+    const call=managedMCPCall(payload.call);
+    const fresh=await provider.retrieveSession(payload.sessionID);
+    const current=(fresh.required_actions??[]).find((v:any)=>v.call_id===call.call_id&&v.turn_id===call.turn_id);
+    if(fresh.id!==payload.sessionID||!current||stable(current)!==stable(call))
+      throw Error('Provider connector call is no longer pending or has changed');
+    const granted=await authorizeManagedMCP(input.plugins,payload.scope.agentId,call.arguments);
+    if(granted.effect!=='read')throw Error('Connector effect changed; write not permitted in read path');
+    const result=await input.plugins.callTool({ref:granted.input.ref,args:granted.input.args,
+      botId:payload.scope.agentId,actorId:payload.scope.ownerUserId});
+    await provider.submitToolResult(payload.sessionID,{turnID:call.turn_id,callID:call.call_id,
+      name:call.name,output:{text:result.text,isError:result.isError}},
+      'managed_connector_read_'+item.key,{expectedArguments:call.arguments});
+    if(!await queue.finish({kind:item.kind,key:item.key,owner:'managed-connector-read'}))
+      throw Error('Connector read lease lost after provider acknowledgement');
+   }catch{
+    await database.update(workItems).set({attempts:100,
+      lastError:'Connector outcome uncertain, revoked or provider action expired; no automatic replay'})
+     .where(and(eq(workItems.kind,item.kind),eq(workItems.key,item.key)));
+   }
+  }
   for(const item of await queue.claim({kind:'person.response',owner:'managed-person-response',
     leaseMs:60000,limit:10,maxAttempts:100})){
    try{
@@ -339,21 +394,45 @@ export async function createManagedDevelopment(input:{database:Database;provider
     if(!question?.finishedAt||typeof received.response!=='string'||!received.response.trim())
       throw Error('Source decision receipt missing');
     const raw=question.payload as {actorId?:string;botId?:string;channelId?:string;threadId?:string;managed?:unknown};
-    const correlation=parseManagedCorrelation(raw.managed);
-    if(received.ownerUserId!==raw.actorId||raw.actorId!==correlation.scope.ownerUserId||
-      raw.botId!==correlation.scope.agentId||raw.channelId!==correlation.scope.channelId||
-      raw.threadId!==correlation.scope.threadId||!await authorised(correlation.scope))
+    const connector=raw.managed&&typeof raw.managed==='object'&&
+      'kind' in raw.managed&&(raw.managed as {kind?:unknown}).kind==='connector_write';
+    const correlation=connector?null:parseManagedCorrelation(raw.managed);
+    const scope=connector?(raw.managed as {scope:DeliveryScope}).scope:correlation!.scope;
+    if(received.ownerUserId!==raw.actorId||raw.actorId!==scope.ownerUserId||
+      raw.botId!==scope.agentId||raw.channelId!==scope.channelId||
+      raw.threadId!==scope.threadId||!await authorised(scope))
       throw Error('Source person answer no longer authorized');
-    const fresh=await provider.retrieveSession(correlation.sessionID);
-    if(fresh.id!==correlation.sessionID)throw Error('Provider session identity mismatch');
-    const pending=pendingManagedQuestion(fresh.required_actions??[],correlation);
-    if(pending!=='pending')throw Error(pending==='closed'?
-      'Provider question closed; human answer saved, authorized new continuation required':
-      'Provider question changed; human answer saved, no tool result submitted');
-    await provider.submitToolResult(correlation.sessionID,{
-      turnID:correlation.call.turn_id,callID:correlation.call.call_id,
-      name:correlation.call.name,output:{answer:received.response}
-    },'person_answer_'+item.key,{expectedArguments:correlation.call.arguments});
+    if(connector){
+      if(!input.plugins)throw Error('Original connector store unavailable');
+      const source=raw.managed as {sessionID:string;call:unknown;scope:DeliveryScope};
+      const call=managedMCPCall(source.call);
+      const fresh=await provider.retrieveSession(source.sessionID);
+      const current=(fresh.required_actions??[]).find((v:any)=>v.call_id===call.call_id&&v.turn_id===call.turn_id);
+      if(fresh.id!==source.sessionID||!current||stable(current)!==stable(call))
+       throw Error('Provider connector approval expired or changed');
+      const decision=approvedWriteDecision(received.response);
+      let result:{text:string;isError:boolean};
+      if(decision==='deny')result={text:'User refused this write. No connector effect executed.',isError:true};
+      else{
+       const grant=await authorizeManagedMCP(input.plugins,scope.agentId,call.arguments);
+       if(grant.effect!=='write')throw Error('Connector grant or effect changed after approval');
+       result=await input.plugins.callTool({ref:grant.input.ref,args:grant.input.args,
+        botId:scope.agentId,actorId:scope.ownerUserId});
+      }
+      await provider.submitToolResult(source.sessionID,{turnID:call.turn_id,callID:call.call_id,
+       name:call.name,output:result},'person_connector_'+item.key,{expectedArguments:call.arguments});
+    }else{
+      const fresh=await provider.retrieveSession(correlation!.sessionID);
+      if(fresh.id!==correlation!.sessionID)throw Error('Provider session identity mismatch');
+      const pending=pendingManagedQuestion(fresh.required_actions??[],correlation!);
+      if(pending!=='pending')throw Error(pending==='closed'?
+        'Provider question closed; human answer saved, authorized new continuation required':
+        'Provider question changed; human answer saved, no tool result submitted');
+      await provider.submitToolResult(correlation!.sessionID,{
+        turnID:correlation!.call.turn_id,callID:correlation!.call.call_id,
+        name:correlation!.call.name,output:{answer:received.response}
+      },'person_answer_'+item.key,{expectedArguments:correlation!.call.arguments});
+    }
     if(!await queue.finish({kind:item.kind,key:item.key,owner:'managed-person-response'}))
       throw Error('Person answer lease lost after submission');
    }catch(error){

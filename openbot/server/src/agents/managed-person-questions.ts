@@ -59,7 +59,7 @@ export function parseManagedCorrelation(input:unknown):ManagedQuestionCorrelatio
       .every(v=>typeof v==="string" && v.length>0))
     throw new Error("Invalid managed question ownership");
   return {sessionID:input.sessionID,call:parseManagedQuestionCall(input.call),
-    scope:scope as ManagedQuestionCorrelation["scope"]};
+    scope:{ownerUserId:scope.ownerUserId as string,channelId:scope.channelId as string,agentId:scope.agentId as string,threadId:scope.threadId as string}};
 }
 /** A retrieved required_action, never a historical item, proves a call is live. */
 export function pendingManagedQuestion(actions:unknown, correlation:ManagedQuestionCorrelation):

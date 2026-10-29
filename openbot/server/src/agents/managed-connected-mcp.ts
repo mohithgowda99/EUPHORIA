@@ -150,7 +150,10 @@ export async function managedMCPInventory(
     .slice(0, 16)
     .map((t) => {
       const entry = advertised.get(t.ref);
-      if (!entry) throw Error("Advertised tool disappeared during an owner-scoped grant read");
+      if (!entry)
+        throw Error(
+          "Advertised tool disappeared during an owner-scoped grant read",
+        );
       return {
         ref: t.ref,
         effect: entry.effect,

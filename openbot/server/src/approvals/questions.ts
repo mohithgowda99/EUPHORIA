@@ -65,11 +65,17 @@ export function listedQuestion(row: {
         why: value.data.why,
         channelId: value.data.channelId ?? null,
         approvalKind:
-          row.payload && typeof row.payload === "object" &&
+          row.payload &&
+          typeof row.payload === "object" &&
           "managed" in row.payload
-            ? (["connector_write", "automation_schedule"].includes(
-                String((row.payload as {managed?:{kind?:unknown}}).managed?.kind)
-              ) ? (row.payload as {managed?:{kind?:string}}).managed?.kind : null)
+            ? ["connector_write", "automation_schedule"].includes(
+                String(
+                  (row.payload as { managed?: { kind?: unknown } }).managed
+                    ?.kind,
+                ),
+              )
+              ? (row.payload as { managed?: { kind?: string } }).managed?.kind
+              : null
             : null,
         createdAt: row.createdAt,
       }

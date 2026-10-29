@@ -48,7 +48,7 @@ import {
   parseManagedScheduleCall,
   parseManagedScheduleProposal,
   scheduleProposalPreview,
-  scheduleProposalNonce
+  scheduleProposalNonce,
 } from "./managed-schedule-proposal";
 import {
   createManagedHostedCapabilities,
@@ -483,11 +483,12 @@ export async function createManagedDevelopment(input: {
       )
       .limit(1);
     if (
-      savedQuestion?.payload &&
-      typeof savedQuestion.payload === "object" &&
-      (savedQuestion.payload as { managed?: { kind?: string } }).managed
-        ?.kind === "connector_write" ||
-      (savedQuestion?.payload as { managed?: { kind?: string } })?.managed?.kind === "automation_schedule"
+      (savedQuestion?.payload &&
+        typeof savedQuestion.payload === "object" &&
+        (savedQuestion.payload as { managed?: { kind?: string } }).managed
+          ?.kind === "connector_write") ||
+      (savedQuestion?.payload as { managed?: { kind?: string } })?.managed
+        ?.kind === "automation_schedule"
     ) {
       try {
         approvedWriteDecision((body as { response: string }).response);
@@ -2182,33 +2183,45 @@ export async function createManagedDevelopment(input: {
         throw Error("Schedule proposal root correlation mismatch");
       const preview = scheduleProposalPreview(savedCall.arguments);
       const payload = {
-        actorId: owner, botId, threadId: scope.threadId,
-        channelId, runId: current.inbox.id,
+        actorId: owner,
+        botId,
+        threadId: scope.threadId,
+        channelId,
+        runId: current.inbox.id,
         mode: "completed_question" as const,
         question: "Authorize creating this exact Bot schedule once?",
         why: preview,
         managed: {
-          kind: "automation_schedule", sessionID: session.id,
-          scope, call: savedCall
-        }
+          kind: "automation_schedule",
+          sessionID: session.id,
+          scope,
+          call: savedCall,
+        },
       };
       await queue.offer({
         kind: "person.question",
         key: savedCall.call_id,
-        payload
+        payload,
       });
-      const [saved] = await database.select({payload:workItems.payload})
-        .from(workItems).where(and(
-          eq(workItems.kind,"person.question"),
-          eq(workItems.key,savedCall.call_id)
-        )).limit(1);
-      if(!saved || stable(saved.payload)!==stable(payload))
+      const [saved] = await database
+        .select({ payload: workItems.payload })
+        .from(workItems)
+        .where(
+          and(
+            eq(workItems.kind, "person.question"),
+            eq(workItems.key, savedCall.call_id),
+          ),
+        )
+        .limit(1);
+      if (!saved || stable(saved.payload) !== stable(payload))
         throw Error("Schedule proposal approval identity collision");
-      await router.notify(scope,{
-        id:savedCall.call_id,kind:"approval",requestId:savedCall.call_id,
-        text:"Bot requests explicit schedule creation approval: "+preview
+      await router.notify(scope, {
+        id: savedCall.call_id,
+        kind: "approval",
+        requestId: savedCall.call_id,
+        text: "Bot requests explicit schedule creation approval: " + preview,
       });
-      return {surface:null};
+      return { surface: null };
     }
     if (call.name !== "euphoria_render_surface")
       throw Error("Unsupported managed tool");
@@ -2797,16 +2810,22 @@ export async function createManagedDevelopment(input: {
           threadId?: string;
           managed?: unknown;
         };
-        const kind = raw.managed && typeof raw.managed === "object" &&
+        const kind =
+          raw.managed &&
+          typeof raw.managed === "object" &&
           "kind" in raw.managed
-          ? (raw.managed as {kind?:unknown}).kind : null;
+            ? (raw.managed as { kind?: unknown }).kind
+            : null;
         const connector = kind === "connector_write";
         const scheduleApproval = kind === "automation_schedule";
-        const correlation = connector || scheduleApproval ? null :
-          parseManagedCorrelation(raw.managed);
-        const scope = connector || scheduleApproval
-          ? (raw.managed as {scope:DeliveryScope}).scope
-          : correlation!.scope;
+        const correlation =
+          connector || scheduleApproval
+            ? null
+            : parseManagedCorrelation(raw.managed);
+        const scope =
+          connector || scheduleApproval
+            ? (raw.managed as { scope: DeliveryScope }).scope
+            : correlation!.scope;
         if (
           received.ownerUserId !== raw.actorId ||
           raw.actorId !== scope.ownerUserId ||
@@ -2818,43 +2837,69 @@ export async function createManagedDevelopment(input: {
           throw Error("Source person answer no longer authorized");
         if (scheduleApproval) {
           const proposal = raw.managed as {
-            sessionID:string;scope:DeliveryScope;call:unknown
+            sessionID: string;
+            scope: DeliveryScope;
+            call: unknown;
           };
           const savedCall = parseManagedScheduleCall(proposal.call);
           const fresh = await provider.retrieveSession(proposal.sessionID);
-          const pendingCall = (fresh.required_actions??[]).find(
-            (v:unknown)=>!!v&&typeof v==="object"&&
-              (v as {call_id?:string}).call_id===savedCall.call_id &&
-              (v as {turn_id?:string}).turn_id===savedCall.turn_id
+          const pendingCall = (fresh.required_actions ?? []).find(
+            (v: unknown) =>
+              !!v &&
+              typeof v === "object" &&
+              (v as { call_id?: string }).call_id === savedCall.call_id &&
+              (v as { turn_id?: string }).turn_id === savedCall.turn_id,
           );
-          if(fresh.id!==proposal.sessionID||!pendingCall||
-             stable(parseManagedScheduleCall(pendingCall))!==stable(savedCall))
+          if (
+            fresh.id !== proposal.sessionID ||
+            !pendingCall ||
+            stable(parseManagedScheduleCall(pendingCall)) !== stable(savedCall)
+          )
             throw Error("Provider schedule proposal expired or changed");
-          const decision=approvedWriteDecision(received.response);
-          let output:{accepted:boolean;text:string;routineId?:string}={
-            accepted:false,text:"Human refused schedule creation; no provider schedule was submitted."
-          };
-          if(decision==="allow"){
-            const details=parseManagedScheduleProposal(savedCall.arguments);
-            const created=await managedRoutines.createApprovedSchedule(scope.ownerUserId,{
-              channelId:scope.channelId,
-              agentId:scope.agentId,
-              instruction:details.instruction,
-              requestId:scheduleProposalNonce(savedCall.call_id),
-              ...(details.schedule_type==="once"
-                ?{runAt:details.run_at!}
-                :{cron:details.cron!,timezone:details.timezone!})
-            });
-            if(created.state!=="managed")
-              throw Error("Schedule creation was previously reserved or uncertain; no automatic replay");
-            output={accepted:true,routineId:created.routineId,
-              text:"User approved exactly this schedule. Source RoutineStore saved its cloud mapping."};
+          const decision = approvedWriteDecision(received.response);
+          let output: { accepted: boolean; text: string; routineId?: string } =
+            {
+              accepted: false,
+              text: "Human refused schedule creation; no provider schedule was submitted.",
+            };
+          if (decision === "allow") {
+            const details = parseManagedScheduleProposal(savedCall.arguments);
+            const created = await managedRoutines.createApprovedSchedule(
+              scope.ownerUserId,
+              {
+                channelId: scope.channelId,
+                agentId: scope.agentId,
+                instruction: details.instruction,
+                requestId: scheduleProposalNonce(savedCall.call_id),
+                ...(details.schedule_type === "once"
+                  ? { runAt: details.run_at! }
+                  : { cron: details.cron!, timezone: details.timezone! }),
+              },
+            );
+            if (created.state !== "managed")
+              throw Error(
+                "Schedule creation was previously reserved or uncertain; no automatic replay",
+              );
+            output = {
+              accepted: true,
+              routineId: created.routineId,
+              text: "User approved exactly this schedule. Source RoutineStore saved its cloud mapping.",
+            };
           }
-          await provider.submitToolResult(proposal.sessionID,{
-            turnID:savedCall.turn_id,callID:savedCall.call_id,
-            name:savedCall.name,output
-          },"person_schedule_"+item.key,
-            {expectedArguments:(pendingCall as {arguments:unknown}).arguments});
+          await provider.submitToolResult(
+            proposal.sessionID,
+            {
+              turnID: savedCall.turn_id,
+              callID: savedCall.call_id,
+              name: savedCall.name,
+              output,
+            },
+            "person_schedule_" + item.key,
+            {
+              expectedArguments: (pendingCall as { arguments: unknown })
+                .arguments,
+            },
+          );
         } else if (connector) {
           if (!input.plugins)
             throw Error("Original connector store unavailable");

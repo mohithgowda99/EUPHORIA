@@ -1,17 +1,22 @@
-# EUPHORIA — checkpoint 29 October 2026
+# EUPHORIA — 29 October 2026 phase-one core continuation
 
-Branch: **codex/managed-native-execution**, based on `bb855c9`; main unchanged. User requested commit/push and a complete handoff because usage limits are nearly exhausted.
+**Working branch:** `feature/phase1-core-continuation-20261029`, forked from `fix/native-completed-choice-lifecycle` at `98c71ddbc3187e4d22f47409a2a674b3a4cd7e7f`. The laptop branch `codex/managed-native-execution` at `7f94d2e61eb3226dee3fffc8490b94a61ac34527`, other branches and `main` were not rewritten.
 
-**Start here:** [managed native handoff](agents/2026-10-29-managed-native-handoff.md). It includes architecture, exact changes, tests, live failures, measured tokens, local setup, blockers and ordered next steps.
+## Implemented in this continuation
 
-Implemented: original-source loopback development backend with managed execution; source-owned exact Inbox/root correlation; durable native response queue; completed output/visual projection on existing source receipts (migration0070); prompt v3, explicit Luna low reasoning/verbosity; source-styled native Chat and Ocean orb; honest failed/uncertain/waiting states; incoming native build fixes.
+- Adopted the 10 descendant commits containing source-backed completed-choice receipts and native read-only presentation by branching from the reviewed fix head. Their Mac validation remains open.
+- Changed `managed_agent_inbox_turns.completed_output` to the source's Bun-safe JSONB type. Added additive migration 0071 to normalize preexisting JSONB strings to JSON objects without dropping a conversation, plus a disposable-Postgres regression test.
+- A queued native decision is rechecked against its **exact** currently required provider function call. A closed action does not receive a fabricated result or automatic new model turn. The accepted original work item remains saved with an explicit recoverable error surfaced to SwiftUI, and the recovery display is linked to the latest original Inbox/root/session. Added closed-call and backward-compatible native decoding regression tests.
+- Removed the hardcoded workout-choice example from the managed render-correction prompt. An invalid generated surface still receives at most one source-owned correction; this is not full A2UI support.
 
-Verified: gateway177 tests; source33 tests/127 assertions; fresh PostgreSQL development5 tests/41 assertions; Swift core76; latest Debug/Release/ATS and iOS XCTest39/39, zero failed/skipped. See handoff for commands/evidence and review limitations.
+**Evidence boundary:** These are committed source changes, **not a completed or verified feature**. This container has no checked-out repository, Bun, PostgreSQL, macOS or Xcode, and shell access to GitHub is DNS-blocked. The connector writes and fetches remote source, but cannot run these suites. **No tests were run against this new branch, no migrations applied, no OpenAI inference invoked, and no iOS builds or deployments performed.** Older historical counts are recorded in `docs/agents/2026-10-29-managed-native-handoff.md`, never attributed to this continuation.
 
-Live: one source-linked Luna session. Initial native submission was rejected because deployed API rejects documented spend_control. User then allowed one minimal uncapped journey. First UI invalid; second diagnostic choice ended before response; final natural request + actual native **Leg day** selection produced a matching three-exercise answer, one saved response job and completed source projection. Full successful native typing-to-relaunch usability remains unproven. No further paid tests authorized by this checkpoint.
+## Still incomplete and must not be represented as delivered
 
-**Not complete:** full OpenDuet parity/visual fidelity; durable long human waits; final polish relaunch proof; final independent re-review; production source-index cutover; all original service routes/tool permissions; deployment/login/APNs/integrations. Source index.ts still uses CopilotKit Intelligence. Development assembly is not a replacement production server.
+1. Original `person.question`, approval policy, source-authoritative decision and managed continuation joined end-to-end, including hours-late answers, expired-action **new authorized turn** fallback, cancellation and multiple device/tenant proofs.
+2. Production `openbot/server/src/index.ts` managed cutover, real Better Auth for the managed routes, hosted HTTPS, background replica reconciliation, APNs and production deployment.
+3. Source Tasks, Bot skills/grants, user connections, MCP reads/writes with pre-effect approvals, memory, tool audit and native management fully wired to managed execution.
+4. Compatible `BBC6BAE9/a2ui-swift` adopted into the shipping renderer, full protocol/streaming/dynamic collections/conformance and real provider UI end-to-end.
+5. Account-specific `spend_control` compatibility. The previous live API rejected the documented parameter. No new uncapped paid calls are permitted without separate authorization.
 
-Uncapped backend stopped. Local Postgres/Colima remain running. Secrets stay in ignored gateway/.env, never in app or handoff.
-
-**Next:** read handoff, perform final re-review and native selected-result reopening proof, then close durable human-interaction lifecycle using original source questions/reply mechanisms before adding breadth.
+**Next gate:** On a separate Mac worktree fetch this branch, backup the real source database, verify migration 0071 only on a disposable clone, run all offline suites, then continue the four workstreams from `docs/agents/EUPHORIA_PHASE1_CORE_BUILD_HANDOFF.md`. Keep the actual `euphoria_live` database and past provider receipts intact. No main merge.

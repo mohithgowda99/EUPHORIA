@@ -512,6 +512,13 @@
       "when": 1793313600000,
       "tag": "0072_managed_bot_hosted_capabilities",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1793320000000,
+      "tag": "0073_managed_hosted_browser",
+      "breakpoints": true
     }
   ]
 }

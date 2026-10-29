@@ -291,6 +291,20 @@ export class AgentsClient {
     }
   }
 
+  /** Delegated workers already belong to the OpenAI session. This read does
+   * not create another source Bot, task queue or agent execution manager.
+   */
+  async listSubagents(sessionID,{after,limit=50,order='desc',signal}={}) {
+    if(!Number.isInteger(limit)||limit<1||limit>100||!['asc','desc'].includes(order))
+      throw Error('Invalid managed subagent page');
+    const query=new URLSearchParams({order,limit:String(limit)});
+    if(after!==undefined)query.set('after',identifier(after));
+    const result=await this.#request('GET','/'+identifier(sessionID)+'/subagents?'+query,undefined,undefined,signal);
+    if(!Array.isArray(result?.data)||result.data.length>limit)
+      throw Error('Invalid subagent listing');
+    return result;
+  }
+
   async openEventStream(sessionID,{signal}={}) {
     identifier(sessionID);
     const controller=new AbortController();

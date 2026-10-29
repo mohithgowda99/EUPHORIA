@@ -11,12 +11,16 @@ import {
   agents,
   channels,
   intelligenceChannelMappings,
-  routineRuns,
-  routines,
   managedAgentSessionLinks,
   managedRoutineInvocations,
+  routineRuns,
+  routines,
   users,
 } from "../src/db/schema";
+import {
+  createManagedRoutineBridge,
+  type ManagedAutomationProvider,
+} from "../src/routines/managed-routine-bridge";
 import {
   createRoutineStore,
   MAX_ENABLED_ROUTINES,
@@ -25,10 +29,6 @@ import {
   RoutineNotFoundError,
   RoutineRefusedError,
 } from "../src/routines/store";
-import {
-  createManagedRoutineBridge,
-  type ManagedAutomationProvider,
-} from "../src/routines/managed-routine-bridge";
 import { TEST_POOL, testDatabaseUrl } from "./support/database";
 
 const databaseUrl = testDatabaseUrl();
@@ -1429,6 +1429,7 @@ describe("approved managed schedule offline reservation and recovery", () => {
     });
     return {
       bridge,
+      provider,
       owner,
       agentId,
       channel,
@@ -1441,6 +1442,35 @@ describe("approved managed schedule offline reservation and recovery", () => {
       },
     };
   }
+  test("cutover refuses an old still-open source run without creating paid work", async () => {
+    const f = await managedFixture(async () => ({ id: "auto_never" }));
+    const routine = await store.create({
+      ownerUserId: f.owner.id,
+      agentId: f.agentId,
+      channelId: f.channel.id,
+      instruction: "Keep source execution exclusive.",
+      cron: DAILY,
+    });
+    const { runId } = await store.insertRun(routine.id);
+    await database
+      .update(routineRuns)
+      .set({ startedAt: new Date(Date.now() - 60 * 60_000) })
+      .where(eq(routineRuns.id, runId));
+    await expect(
+      f.bridge.migrate(f.owner.id, routine.id, "old_open_run"),
+    ).rejects.toBeInstanceOf(RoutineRefusedError);
+    expect(f.calls).toBe(0);
+    const [saved] = await database
+      .select()
+      .from(routines)
+      .where(eq(routines.id, routine.id));
+    expect(saved.executionBackend).toBe("source");
+    const [run] = await database
+      .select()
+      .from(routineRuns)
+      .where(eq(routineRuns.id, runId));
+    expect(run.status).toBeNull();
+  });
   test("simultaneous original-owner approvals create only one provider recurring schedule", async () => {
     const fixture = await managedFixture(async () => ({
       id: "auto_" + randomUUID().replaceAll("-", ""),
@@ -1458,13 +1488,188 @@ describe("approved managed schedule offline reservation and recovery", () => {
       fixture.bridge.createApprovedSchedule(fixture.owner.id, param),
     ]);
     expect(fixture.calls).toBe(1);
-    expect([a.state, b.state].sort()).toEqual(["managed", "unverified"]);
+    expect([a.state, b.state]).toContain("managed");
+    expect(
+      [a.state, b.state].every(
+        (state) => state === "managed" || state === "unverified",
+      ),
+    ).toBe(true);
     const rows = await store.listFor(fixture.owner.id);
     expect(rows).toHaveLength(1);
     expect(rows[0].executionBackend).toBe("managed");
     expect(
       (await store.dueRoutines(100)).some((x) => x.id === rows[0].id),
     ).toBe(false);
+  });
+  test("in-flight manual invocation excludes concurrent pause without losing its durable receipt", async () => {
+    const autoID = "auto_" + randomUUID().replaceAll("-", "");
+    const f = await managedFixture(async () => ({ id: autoID }));
+    const created = await f.bridge.createApprovedSchedule(f.owner.id, {
+      channelId: f.channel.id,
+      agentId: f.agentId,
+      instruction: "Manual concurrency fixture",
+      requestId: "manual_" + randomUUID().replaceAll("-", "").slice(0, 20),
+      cron: DAILY,
+      timezone: "UTC",
+    });
+    let entered!: () => void,
+      release!: () => void,
+      pauses = 0;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    f.provider.invokeAutomation = async () => {
+      entered();
+      await gate;
+      return {
+        id: "inv_" + randomUUID().replaceAll("-", ""),
+        session_id: f.sessionID,
+        status: "queued",
+      };
+    };
+    f.provider.pauseAutomation = async () => {
+      pauses++;
+      return {};
+    };
+    const pending = f.bridge.manual(
+      f.owner.id,
+      created.routineId,
+      "manual_request",
+    );
+    try {
+      await started;
+      await expect(
+        f.bridge.change(
+          f.owner.id,
+          created.routineId,
+          "pause",
+          "pause_request",
+        ),
+      ).rejects.toBeInstanceOf(RoutineRefusedError);
+      expect(pauses).toBe(0);
+      const [receipt] = await database
+        .select()
+        .from(managedRoutineInvocations)
+        .where(eq(managedRoutineInvocations.routineId, created.routineId));
+      expect(receipt.deliveryStatus).toBe("unknown");
+    } finally {
+      release();
+      await pending;
+    }
+  });
+  test("unknown manual write remains frozen without replay or latest-invocation guessing", async () => {
+    const f = await managedFixture(async () => ({
+      id: "auto_" + randomUUID().replaceAll("-", ""),
+    }));
+    const created = await f.bridge.createApprovedSchedule(f.owner.id, {
+      channelId: f.channel.id,
+      agentId: f.agentId,
+      instruction: "Unknown manual fixture",
+      requestId: "unknown_" + randomUUID().replaceAll("-", "").slice(0, 20),
+      cron: DAILY,
+      timezone: "UTC",
+    });
+    f.provider.retrieveAutomation = async (id) => ({
+      id,
+      status: "active",
+      target: { session_id: f.sessionID },
+    });
+    let calls = 0;
+    f.provider.invokeAutomation = async () => {
+      calls++;
+      throw Error("Lost invocation acknowledgement");
+    };
+    await expect(
+      f.bridge.manual(f.owner.id, created.routineId, "manual_unknown"),
+    ).rejects.toThrow();
+    await expect(
+      f.bridge.manual(f.owner.id, created.routineId, "manual_unknown"),
+    ).rejects.toBeInstanceOf(RoutineRefusedError);
+    const repair = await f.bridge.repair(f.owner.id, created.routineId);
+    expect(repair.reconciled).toBe(false);
+    expect(calls).toBe(1);
+    const [saved] = await database
+      .select()
+      .from(routines)
+      .where(eq(routines.id, created.routineId));
+    expect(saved.executionBackend).toBe("sync_unknown");
+  });
+  test("manual receipt repair uses exact invocation identity and never claims agent completion", async () => {
+    const autoID = "auto_" + randomUUID().replaceAll("-", "");
+    const f = await managedFixture(async () => ({ id: autoID }));
+    const created = await f.bridge.createApprovedSchedule(f.owner.id, {
+      channelId: f.channel.id,
+      agentId: f.agentId,
+      instruction: "Known receipt fixture",
+      requestId: "known_" + randomUUID().replaceAll("-", "").slice(0, 20),
+      cron: DAILY,
+      timezone: "UTC",
+    });
+    const invocationID = "inv_" + randomUUID().replaceAll("-", "");
+    f.provider.retrieveAutomation = async (id) => ({
+      id,
+      status: "active",
+      target: { session_id: f.sessionID },
+    });
+    f.provider.invokeAutomation = async () => ({
+      id: invocationID,
+      session_id: f.sessionID,
+      status: "queued",
+    });
+    await f.bridge.manual(f.owner.id, created.routineId, "manual_known");
+    const [receipt] = await database
+      .select()
+      .from(managedRoutineInvocations)
+      .where(eq(managedRoutineInvocations.routineId, created.routineId));
+    // Simulate a crash after saving the provider receipt but before settling the routine.
+    await database
+      .update(routines)
+      .set({
+        executionBackend: "sync_unknown",
+        providerSyncOperation: "manual",
+        providerSyncKey: receipt.receiptKey,
+      })
+      .where(eq(routines.id, created.routineId));
+    f.provider.retrieveAutomationInvocation = async (auto, inv) => {
+      expect(auto).toBe(autoID);
+      expect(inv).toBe(invocationID);
+      return {
+        id: invocationID,
+        automation_id: autoID,
+        session_id: f.sessionID,
+        status: "completed",
+        source: { type: "manual" },
+      };
+    };
+    const repair = await f.bridge.repair(f.owner.id, created.routineId);
+    expect(repair.reconciled).toBe(true);
+    const [recovered] = await database
+      .select()
+      .from(managedRoutineInvocations)
+      .where(eq(managedRoutineInvocations.receiptKey, receipt.receiptKey));
+    expect(recovered.executionStatus).toBe("unverified");
+    expect(recovered.rootTurnId).toBeNull();
+    expect(recovered.deliveryStatus).toBe("queued");
+  });
+  test("settled approved creation recovers its exact source mapping without a second provider write", async () => {
+    const autoID = "auto_" + randomUUID().replaceAll("-", "");
+    const f = await managedFixture(async () => ({ id: autoID }));
+    const params = {
+      channelId: f.channel.id,
+      agentId: f.agentId,
+      instruction: "Approved digest",
+      requestId: "settled_" + randomUUID().replaceAll("-", "").slice(0, 20),
+      cron: DAILY,
+      timezone: "UTC",
+    };
+    const first = await f.bridge.createApprovedSchedule(f.owner.id, params);
+    const recovered = await f.bridge.createApprovedSchedule(f.owner.id, params);
+    expect(recovered).toEqual(first);
+    expect(recovered.state).toBe("managed");
+    expect(f.calls).toBe(1);
   });
   test("unknown provider POST remains frozen and cannot automatically replay", async () => {
     const f = await managedFixture(async () => {

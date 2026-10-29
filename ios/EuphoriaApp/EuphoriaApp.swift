@@ -7,6 +7,22 @@ import UserNotifications
 /// OpenDuet DeliveryStore. No provider key, team secret or token is compiled
 /// into the app. Simulator push support does not prove device delivery.
 final class EuphoriaPushDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
+    private static var registrationTask: Task<Void,Never>?
+    private static var forgettingAccount = false
+
+    @MainActor
+    static func forgetAccount(using client:OpenDuetSourceAPI) async throws {
+        guard !forgettingAccount else {throw SourceAPIError.unavailable}
+        forgettingAccount = true
+        defer {forgettingAccount = false}
+        // Finish existing registration before the authenticated revocation.
+        // Callbacks arriving during sign-out cannot register the old account again.
+        await registrationTask?.value
+        try await SavedOpenDuetAccount.forget(client:client,deviceID:stableDeviceID())
+        UIApplication.shared.unregisterForRemoteNotifications()
+        UserDefaults.standard.set("This device was disconnected from account notifications.",forKey:statusKey)
+    }
+
     private static let deviceIDKey = "euphoria.apns.device-id"
     static let statusKey = "euphoria.apns.registration-status"
 
@@ -42,9 +58,13 @@ final class EuphoriaPushDelegate: NSObject, UIApplicationDelegate, @preconcurren
             UserDefaults.standard.set("Unexpected APNs token length.", forKey: Self.statusKey)
             return
         }
+        guard !Self.forgettingAccount else {return}
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         let deviceID = Self.stableDeviceID()
-        Task {
+        let previous = Self.registrationTask
+        Self.registrationTask = Task { @MainActor in
+            await previous?.value
+            guard !Self.forgettingAccount else {return}
             do {
                 let client = try SavedOpenDuetAccount.client()
                 try await client.registerNativePush(token: token, deviceID: deviceID)

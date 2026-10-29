@@ -130,7 +130,7 @@ struct SourceConnectionsView: View {
             note = "Complete the consent process in your browser, then return and refresh. A redirect alone does not confirm a connection."
             error = nil
         } catch {
-            error = "This connection cannot start an OAuth flow here. It may require administrator setup or a credential form supported by the source service."
+            self.error = "This connection cannot start an OAuth flow here. It may require administrator setup or a credential form supported by the source service."
         }
     }
 
@@ -149,7 +149,7 @@ struct SourceConnectionsView: View {
                 note = "The source ledger no longer lists this account. Review any Bot grants and active sessions."
             }
         } catch {
-            error = "Disconnection outcome is uncertain. Refresh the source ledger before repeating this action."
+            self.error = "Disconnection outcome is uncertain. Refresh the source ledger before repeating this action."
         }
     }
 }

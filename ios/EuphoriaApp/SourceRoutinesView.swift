@@ -266,7 +266,7 @@ struct SourceRoutinesView: View {
             error = result.state == "managed" ? nil :
                 (result.reason ?? "One-time provider creation remains unverified.")
         } catch {
-            error = "One-time scheduling requires verified spend limits and an authorized managed Bot session. Provider outcome might be uncertain."
+            self.error = "One-time scheduling requires verified spend limits and an authorized managed Bot session. Provider outcome might be uncertain."
         }
     }
     private func beginEdit(_ routine: SourceRoutine) {
@@ -299,7 +299,7 @@ struct SourceRoutinesView: View {
         do {
             runs[id] = try await client.sourceRoutineRuns(id: id)
             error = nil
-        } catch { error = "The original run history could not be loaded." }
+        } catch { self.error = "The original run history could not be loaded." }
     }
     private func inspect(_ id: String) async {
         guard !busy, let client else { return }
@@ -308,7 +308,7 @@ struct SourceRoutinesView: View {
         do {
             remote[id] = try await client.managedRoutineState(id: id)
             error = nil
-        } catch { error = "Provider receipt history is unavailable." }
+        } catch { self.error = "Provider receipt history is unavailable." }
     }
     private func repair(_ id: String) async {
         guard !busy, let client else { return }
@@ -321,7 +321,7 @@ struct SourceRoutinesView: View {
             sweep = page.sweep
             error = outcome.reconciled ? nil : (outcome.reason ?? "Provider state is still uncertain.")
         } catch {
-            error = "Provider repair could not be verified. Source scheduling remains held."
+            self.error = "Provider repair could not be verified. Source scheduling remains held."
         }
     }
     private func reconcile(_ id: String) async {
@@ -333,7 +333,7 @@ struct SourceRoutinesView: View {
             remote[id] = try await client.managedRoutineState(id: id)
             runs[id] = try await client.sourceRoutineRuns(id: id)
             error = nil
-        } catch { error = "Reconciliation is incomplete. Do not retry uncertain provider writes." }
+        } catch { self.error = "Reconciliation is incomplete. Do not retry uncertain provider writes." }
     }
     private func perform(_ routine: SourceRoutine, operation: String) async {
         guard !busy, let client else { return }
@@ -378,7 +378,7 @@ struct SourceRoutinesView: View {
             sweep = page.sweep
             error = nil
         } catch {
-            error = "Edit is blocked or uncertain. Reconcile the source routine before editing again."
+            self.error = "Edit is blocked or uncertain. Reconcile the source routine before editing again."
         }
     }
 }

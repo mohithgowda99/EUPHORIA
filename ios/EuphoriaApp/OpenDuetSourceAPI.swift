@@ -661,6 +661,14 @@ private struct SourceMemoryReviewPatch: Encodable { let reviewState: String }
 
 /// One authenticated account boundary for every original OpenDuet product tab.
 enum SavedOpenDuetAccount {
+    /// Preserve authentication until the original owner has revoked this device.
+    /// An offline or uncertain DELETE must not claim that private push delivery stopped.
+    static func forget(client: OpenDuetSourceAPI, deviceID: UUID,
+                       clearCredentials: (URL)->Void = { SourceSessionKeychain.clear(origin:$0) }) async throws {
+        try await client.unregisterNativePush(deviceID:deviceID)
+        clearCredentials(client.endpoint.baseURL)
+    }
+
     static func client() throws -> OpenDuetSourceAPI {
         #if DEBUG
         // Explicit local development configuration; provider credentials never enter iOS.
@@ -1057,11 +1065,11 @@ struct OpenDuetSourceAPI: Sendable {
     }
     func downloadSourceHostedArtifact(channelID: String, botID: String,
                                       artifact: SourceHostedArtifact) async throws -> URL {
-        let route = "api/delivery/conversations/" + checkedID(channelID) +
-            "/artifacts/" + checkedID(artifact.id) + "/content"
+        let route = "api/delivery/conversations/" + (try checkedID(channelID)) +
+            "/artifacts/" + (try checkedID(artifact.id)) + "/content"
         guard var url = URLComponents(url: endpoint.baseURL.appendingPathComponent(route),
                                       resolvingAgainstBaseURL: false) else { throw SourceAPIError.invalidInput }
-        url.queryItems = [URLQueryItem(name: "agentId", value: checkedID(botID))]
+        url.queryItems = [URLQueryItem(name: "agentId", value: try checkedID(botID))]
         guard let requestURL = url.url else { throw SourceAPIError.invalidInput }
         var request = URLRequest(url: requestURL, timeoutInterval: 30)
         request.httpMethod = "GET"

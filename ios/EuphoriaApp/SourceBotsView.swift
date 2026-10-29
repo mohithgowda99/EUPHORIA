@@ -90,8 +90,9 @@ struct SourceBotsView: View {
                 Section {
                     LabeledContent("Signed in", value: user.name ?? user.email)
                     Button("Forget sign-in on this device", role: .destructive) {
-                        forgetThisDevice()
+                        Task {await forgetThisDevice()}
                     }
+                    .disabled(loading)
                 }
                 Section("Your Bots") {
                     ForEach(bots) { bot in
@@ -263,10 +264,17 @@ struct SourceBotsView: View {
         }
     }
 
-    private func forgetThisDevice() {
-        if let currentEndpoint { SourceSessionKeychain.clear(origin: currentEndpoint.baseURL) }
-        client = nil; user = nil; bots = []; builtInAvailable = false
-        errorMessage = "The saved login was cleared on this iPhone. Remote account sessions may remain active until revoked in EUPHORIA."
+    private func forgetThisDevice() async {
+        guard !loading,let signedInClient=client else {return}
+        loading = true
+        defer {loading = false}
+        do {
+            try await EuphoriaPushDelegate.forgetAccount(using:signedInClient)
+            client = nil; user = nil; bots = []; builtInAvailable = false
+            errorMessage = "Notifications were disconnected and the saved sign-in was cleared on this iPhone. Other remote account sessions remain active."
+        } catch {
+            errorMessage = "Could not confirm notification revocation. Your sign-in was retained; reconnect and try again before switching accounts."
+        }
     }
 }
 

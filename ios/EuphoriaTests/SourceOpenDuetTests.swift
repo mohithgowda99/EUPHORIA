@@ -265,6 +265,27 @@ final class SourceOpenDuetTests: XCTestCase, @unchecked Sendable {
         XCTAssertNoThrow(try surface.validate())
     }
 
+    func testSignOutRevokesOwnedPushRegistrationBeforeForgettingCredentials() async throws {
+        let api=try client(),deviceID=UUID(),cookie="better-auth.session_token=test"
+        let probe=SourceForgetProbe(),observed=SourceRequestBox()
+        SourceTestProtocol.box.set { req in
+            observed.record(req)
+            XCTAssertTrue(probe.origins.isEmpty,"Credentials must still be available during authenticated revocation")
+            return (200,Data("{}".utf8))
+        }
+        try await SavedOpenDuetAccount.forget(client:api,deviceID:deviceID,clearCredentials:probe.record)
+        XCTAssertEqual(observed.last?.httpMethod,"DELETE")
+        XCTAssertEqual(observed.last?.url?.path,"/api/delivery/devices/"+deviceID.uuidString.lowercased())
+        XCTAssertEqual(observed.last?.value(forHTTPHeaderField:"Cookie"),cookie)
+        XCTAssertEqual(probe.origins,[api.endpoint.baseURL])
+    }
+    func testOfflineSignOutPreservesCredentialsAndDoesNotClaimRevocation() async throws {
+        let api=try client(),probe=SourceForgetProbe()
+        SourceTestProtocol.box.set {_ in (503,Data("{}".utf8))}
+        do {try await SavedOpenDuetAccount.forget(client:api,deviceID:UUID(),clearCredentials:probe.record);XCTFail("Unconfirmed device revocation must not silently sign out")}
+        catch {XCTAssertTrue(probe.origins.isEmpty)}
+    }
+
     private func client() throws -> OpenDuetSourceAPI {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [SourceTestProtocol.self]
@@ -319,4 +340,11 @@ private final class SourceTestProtocol: URLProtocol, @unchecked Sendable {
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}
+}
+
+private final class SourceForgetProbe: @unchecked Sendable {
+    private let lock=NSLock()
+    private var values:[URL]=[]
+    var origins:[URL] {lock.lock();defer {lock.unlock()};return values}
+    func record(_ origin:URL) {lock.lock();defer {lock.unlock()};values.append(origin)}
 }

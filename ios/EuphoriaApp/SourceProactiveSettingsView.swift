@@ -95,7 +95,7 @@ struct SourceProactiveSettingsView: View {
             client = source
             error = nil
         } catch {
-            error = "Original research preferences are unavailable. Check your signed-in source deployment."
+            self.error = "Original research preferences are unavailable. Check your signed-in source deployment."
         }
     }
 
@@ -110,7 +110,7 @@ struct SourceProactiveSettingsView: View {
             settings = try await client.sourceProactiveSettings().settings
             error = nil
         } catch {
-            error = "Preference not saved. The Bot or channel may be unauthorized, or a setting already exists."
+            self.error = "Preference not saved. The Bot or channel may be unauthorized, or a setting already exists."
         }
     }
 
@@ -124,7 +124,7 @@ struct SourceProactiveSettingsView: View {
             settings = try await client.sourceProactiveSettings().settings
             error = nil
         } catch {
-            error = "Could not confirm the original setting was disabled."
+            self.error = "Could not confirm the original setting was disabled."
         }
     }
 
@@ -137,7 +137,7 @@ struct SourceProactiveSettingsView: View {
             settings = try await client.sourceProactiveSettings().settings
             error = nil
         } catch {
-            error = "Cannot confirm the preference was deleted. Refresh before retrying."
+            self.error = "Cannot confirm the preference was deleted. Refresh before retrying."
         }
     }
 }

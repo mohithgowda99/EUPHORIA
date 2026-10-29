@@ -1,5 +1,5 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import {
   managedAgentSessionLinks,
@@ -7,12 +7,12 @@ import {
   routineRuns,
   routines,
 } from "../db/schema";
-import { nextOccurrence } from "./schedule";
 import {
-  inspectAutomationDelivery,
   advanceInvocationCursor,
+  inspectAutomationDelivery,
   mergeDeliveryStatus,
 } from "./managed-automation-identity";
+import { nextOccurrence } from "./schedule";
 import { RoutineNotFoundError, RoutineRefusedError } from "./store";
 
 /** Explicit bridge, not a new scheduler. Existing source RoutineStore and
@@ -183,13 +183,7 @@ export function createManagedRoutineBridge(input: {
         const [active] = await tx
           .select({ id: routineRuns.id })
           .from(routineRuns)
-          .where(
-            and(
-              eq(routineRuns.routineId, id),
-              isNull(routineRuns.status),
-              sql`${routineRuns.startedAt} > now() - interval '10 minutes'`,
-            ),
-          )
+          .where(and(eq(routineRuns.routineId, id), isNull(routineRuns.status)))
           .limit(1);
         if (active)
           throw new RoutineRefusedError(
@@ -364,7 +358,6 @@ export function createManagedRoutineBridge(input: {
       throw new RoutineRefusedError(
         "Start an authorized managed Bot conversation first.",
       );
-    await input.assertSpendingBoundary();
     // The request's permanent source ID also deduplicates simultaneous
     // human approval responses and unknown provider POST outcomes.
     const digest = createHash("sha256")
@@ -373,6 +366,7 @@ export function createManagedRoutineBridge(input: {
     const id =
       (once ? "routine_once_" : "routine_approved_") + digest.slice(0, 32);
     const key = keyFor(id, "create", requestId);
+    let settledAutomationID: string | null = null;
     const reserved = await db.transaction(async (tx) => {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext(${"routine-cap-" + owner}))`,
@@ -395,8 +389,18 @@ export function createManagedRoutineBridge(input: {
           throw new RoutineRefusedError(
             "Schedule request ID was already reserved for different instructions",
           );
+        if (previous.providerSessionId !== link.providerSessionId)
+          throw new RoutineRefusedError(
+            "The approved request belongs to a different managed session; reconcile it first",
+          );
+        if (
+          previous.executionBackend === "managed" &&
+          previous.providerAutomationId
+        )
+          settledAutomationID = previous.providerAutomationId;
         return false;
       }
+      await input.assertSpendingBoundary();
       const [count] = await tx
         .select({ total: sql<number>`count(*)::int` })
         .from(routines)
@@ -425,6 +429,12 @@ export function createManagedRoutineBridge(input: {
       });
       return true;
     });
+    if (!reserved && settledAutomationID)
+      return {
+        routineId: id,
+        state: "managed" as const,
+        automationId: settledAutomationID,
+      };
     if (!reserved)
       return {
         routineId: id,
@@ -609,6 +619,12 @@ export function createManagedRoutineBridge(input: {
     const key = keyFor(id, "manual", nonce);
     const runID = "routine_run_" + crypto.randomUUID();
     const reserved = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${"routine-run-" + id}))`,
+      );
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${"managed-routine:" + id},0))`,
+      );
       const [fresh] = await tx
         .select({
           executionBackend: routines.executionBackend,
@@ -643,6 +659,18 @@ export function createManagedRoutineBridge(input: {
         deliveryStatus: "unknown",
         executionStatus: "unverified",
       });
+      // Persist exclusion before the external write. Pause/delete use this same
+      // source row and cannot claim it until this operation settles or is repaired.
+      await tx
+        .update(routines)
+        .set({
+          executionBackend: "sync_unknown",
+          providerSyncOperation: "manual",
+          providerSyncKey: key,
+          providerSyncAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(routines.id, id), eq(routines.ownerUserId, owner)));
       return true;
     });
     if (!reserved) return { accepted: false, receiptKey: key, uncertain: true }; // never replay.
@@ -650,6 +678,13 @@ export function createManagedRoutineBridge(input: {
       row.providerAutomationId,
       key,
     );
+    if (
+      response.session_id != null &&
+      response.session_id !== row.providerSessionId
+    )
+      throw new RoutineRefusedError(
+        "Manual invocation belongs to a different provider session; retain uncertain receipt",
+      );
     if (!response.id || !validID(response.id))
       throw new Error("Manual invocation outcome unknown; inspect provider");
     await db
@@ -661,6 +696,7 @@ export function createManagedRoutineBridge(input: {
         updatedAt: new Date(),
       })
       .where(eq(managedRoutineInvocations.receiptKey, key));
+    await settle(owner, id, key, {});
     return { accepted: true, receiptKey: key, invocationId: response.id };
   }
   /** Provider invocations report DELIVERY only. The published API has no
@@ -901,6 +937,41 @@ export function createManagedRoutineBridge(input: {
     }
     if (!row.providerAutomationId)
       return { reconciled: false, reason: "Provider automation ID missing" };
+    if (op === "manual") {
+      const [receipt] = await db
+        .select()
+        .from(managedRoutineInvocations)
+        .where(
+          and(
+            eq(managedRoutineInvocations.receiptKey, key),
+            eq(managedRoutineInvocations.routineId, id),
+          ),
+        )
+        .limit(1);
+      if (!receipt?.providerInvocationId)
+        return {
+          reconciled: false,
+          reason:
+            "Manual invocation identity is unknown; never replay or guess from recent deliveries",
+        };
+      const evidence = inspectAutomationDelivery(
+        await provider.retrieveAutomationInvocation(
+          row.providerAutomationId,
+          receipt.providerInvocationId,
+        ),
+        row.providerAutomationId,
+        sessionID,
+      );
+      if (
+        evidence.id !== receipt.providerInvocationId ||
+        evidence.source !== "manual"
+      )
+        throw new RoutineRefusedError(
+          "Manual invocation receipt changed identity",
+        );
+      await settle(owner, id, key, {});
+      return { reconciled: true, operation: op };
+    }
     if (op === "delete") {
       try {
         await provider.retrieveAutomation(row.providerAutomationId);

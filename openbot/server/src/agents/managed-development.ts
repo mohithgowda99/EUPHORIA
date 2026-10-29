@@ -29,6 +29,7 @@ import {createManagedTaskAdapter} from './managed-task-adapter';
 import {createManagedHostedCapabilities,parseHostedCapabilities,hostedDefinition,DENIED_HOSTED_CAPABILITIES} from './managed-hosted-capabilities';
 import {projectHostedArtifact,attachmentName} from './managed-hosted-artifacts';
 import {assertCurrentRootForCancellation} from './managed-hosted-cancel';
+import {managedSourceSkillContext} from './managed-source-skills';
 import {canManageAgent} from './profile-policy';
 import {createMemoryStore} from '../memory/store';
 import {createMemoryRoutes} from '../memory/routes';
@@ -99,9 +100,10 @@ export async function createManagedDevelopment(input:{database:Database;provider
      "\\n\\nFor independent, useful parallel work you may delegate to provider-managed subagents within the configured bound. Subagents are not separate EUPHORIA Bots or authorized to gain new source permissions. Do not report their work as finished before the main root turn actually verifies it.":'';
    const nativeMCP=input.plugins?await selectNativeReadOnlyMCP(input.plugins,scope.agentId,input.nativeReadOnlyMCPOrigins??[]):{tools:[],nativeRefs:[]};
    const connectedInventory=input.plugins?await managedMCPInventory(input.plugins,scope.agentId,nativeMCP.nativeRefs):'';
+   const grantedSkills=input.plugins?await managedSourceSkillContext(input.plugins,scope.agentId):'';
    await channels.recordActivity(actor,scope.channelId,{text:scope.text,agentId:null,at:new Date()},{id:'delivery-input:'+scope.runId});
    await submitManagedSourceInput({scope:{ownerUserId:scope.ownerUserId,channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId},
-    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory+connectedInventory+hostedGuidance+delegationGuidance,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[]),
+    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory+connectedInventory+grantedSkills+hostedGuidance+delegationGuidance,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[]),
        ...(input.allowWebSearch&&caps.webSearch?[{type:'web_search',mode:'live',context_size:'low'}]:[]),...nativeMCP.tools],
        ...managedHosted},links,turns,provider});
    return {replyText:'',pending:true};

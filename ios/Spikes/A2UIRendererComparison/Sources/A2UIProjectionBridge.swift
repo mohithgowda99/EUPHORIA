@@ -1,6 +1,8 @@
 import Foundation
 import A2UISwiftCore
+#if canImport(VisualRuntimeCore)
 import VisualRuntimeCore
+#endif
 
 /// SPIKE ONLY. Converts an already validated EUPHORIA A2UIDocument snapshot
 /// into standard A2UI v0.9 messages, without translating away standard props.

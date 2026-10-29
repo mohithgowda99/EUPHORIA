@@ -5,6 +5,7 @@
 **Implementation branch:** `feature/final-phase1-engineering-20261029`.
 **Protected baseline:** `feature/phase1-core-e2e-convergence-20261029` at `78f746d2b3f4f3c57861853109bff0290132edca`.
 **Latest implementation SHA before this handoff:** `f81bfa24668915d6b7f50e67b78d1672e587a919`.
+**Verified full source/backend CI with all current code modules:** `44d9065b3ed695f808841efe14e1aa3a7400505e`, https://github.com/mohithgowda99/EUPHORIA/actions/runs/40819545709 (completed successfully; this does NOT include Xcode/real-provider/production validation).
 **Exact final branch HEAD SHA:** execute `git rev-parse HEAD` after fetch; handoff commit itself has its own later SHA. Do not confuse a pre-handoff source commit with branch HEAD.
 
 This document is intentionally an accurate engineering transfer, **not an assertion that the mission's Definition of Done was achieved**. The user explicitly requires code, a production provider cutover, autonomy, full native A2UI, tests and a handoff. Work below is what was actually implemented and verified in this environment, with honest remaining gates.
@@ -120,7 +121,7 @@ https://github.com/mohithgowda99/EUPHORIA/actions/runs/40818824984
 - Source unit tests including native MCP manifest: 8 passed, 0 failed.
 - Gateway regression suite including Automations/spending compatibility: **185 passed, 0 failed**.
 
-**Important:** later commits (native connection UX, MCP grant UX, selective root fix, docs) postdate the above green run. Read the current branch HEAD and exact run ID before reporting whole-branch success. The branch CI checks TypeScript and gateway, NOT iOS Swift, real provider, deployment or full native A2UI. No live provider verification was performed this turn.
+**Current code after the changes above also passed full Linux backend CI:** https://github.com/mohithgowda99/EUPHORIA/actions/runs/40819545709, head `44d9065b3ed695f808841efe14e1aa3a7400505e`; full workflow completed successfully. The branch CI checks TypeScript, isolated source integrations and gateway, NOT iOS Swift, real provider, deployment or full native A2UI. No live provider verification was performed this turn. Read newer runs if further code is committed.
 
 Repro commands:
 ```bash

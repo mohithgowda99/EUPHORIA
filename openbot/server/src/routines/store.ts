@@ -100,6 +100,8 @@ export type Routine = {
   cron: string;
   timezone: string;
   enabled: boolean;
+  executionBackend: "source" | "provisioning" | "managed" | "sync_unknown";
+  providerAutomationId: string | null;
   nextRunAt: Date;
   lastRunAt: Date | null;
   createdAt: Date;
@@ -123,6 +125,8 @@ export type RoutineSummary = {
   schedule: string;
   timezone: string;
   enabled: boolean;
+  executionBackend: "source" | "provisioning" | "managed" | "sync_unknown";
+  providerAutomationId: string | null;
   nextRunAt: Date;
   channelId: string;
   /** The target channel's name, or null when the row is gone entirely rather than soft-deleted. */
@@ -289,6 +293,8 @@ function toRoutine(row: RoutineRow): Routine {
     cron: row.cron,
     timezone: row.timezone,
     enabled: row.enabled,
+    executionBackend: row.executionBackend,
+    providerAutomationId: row.providerAutomationId,
     nextRunAt: row.nextRunAt,
     lastRunAt: row.lastRunAt,
     createdAt: row.createdAt,
@@ -488,6 +494,8 @@ export function createRoutineStore(database: Database): RoutineStore {
     patch: RoutinePatch,
   ): Promise<Routine> {
     const existing = await loadOwned(ownerUserId, id);
+    if (existing.executionBackend !== "source")
+      throw new RoutineRefusedError("Managed routine changes require provider synchronization; use the managed routine controls.");
 
     const values: Partial<typeof routines.$inferInsert> = {
       updatedAt: new Date(),
@@ -654,6 +662,8 @@ export function createRoutineStore(database: Database): RoutineStore {
           schedule: describeCron(routine.cron),
           timezone: routine.timezone,
           enabled: routine.enabled,
+          executionBackend: routine.executionBackend,
+          providerAutomationId: routine.providerAutomationId,
           nextRunAt: routine.nextRunAt,
           channelId: routine.channelId,
           channelName,
@@ -667,13 +677,15 @@ export function createRoutineStore(database: Database): RoutineStore {
       // Hard, unlike a channel: nothing reads a routine that was deleted, and its runs cascade.
       const deleted = await database
         .delete(routines)
-        .where(and(eq(routines.id, id), eq(routines.ownerUserId, ownerUserId)))
+        .where(and(eq(routines.id, id), eq(routines.ownerUserId, ownerUserId), eq(routines.executionBackend, "source")))
         .returning({ id: routines.id });
       if (deleted.length === 0) throw new RoutineNotFoundError();
     },
 
     async startManualRun(ownerUserId, id) {
       const routine = await loadOwned(ownerUserId, id);
+      if (routine.executionBackend !== "source")
+        throw new RoutineRefusedError("Managed routines use the provider invocation workflow.");
       if (!routine.enabled)
         throw new RoutineRefusedError(
           "This routine is paused, and paused routines never run. Switch it on first.",
@@ -758,6 +770,7 @@ export function createRoutineStore(database: Database): RoutineStore {
         .where(
           and(
             eq(routines.enabled, true),
+            eq(routines.executionBackend, "source"),
             // The comparison Postgres makes against its own clock. A replica's `Date.now()` here
             // would decide what is due from a clock the row was never written by.
             lte(routines.nextRunAt, sql`now()`),
@@ -808,7 +821,7 @@ export function createRoutineStore(database: Database): RoutineStore {
       const moved = await database
         .update(routines)
         .set({ nextRunAt: next, lastRunAt: from, updatedAt: sql`now()` })
-        .where(and(eq(routines.id, id), eq(routines.nextRunAt, from)))
+        .where(and(eq(routines.id, id), eq(routines.executionBackend, "source"), eq(routines.nextRunAt, from)))
         .returning({ id: routines.id });
       return moved.length > 0;
     },
@@ -839,23 +852,24 @@ export function createRoutineStore(database: Database): RoutineStore {
           channelId: routines.channelId,
           instruction: routines.instruction,
           enabled: routines.enabled,
+          executionBackend: routines.executionBackend,
         })
         .from(routineRuns)
         .innerJoin(routines, eq(routines.id, routineRuns.routineId))
         .where(eq(routineRuns.id, runId))
         .limit(1);
-      return row ?? null;
+      return row ? {...row, enabled:row.enabled && row.executionBackend === "source"} : null;
     },
 
     async routineForFiring(id) {
       // A single select, not owner-scoped — the sweep's read, like `dueRoutines`. A routine id here
       // comes from a work item's own payload, not from a person, so there is no owner to check.
       const [row] = await database
-        .select({ id: routines.id, enabled: routines.enabled })
+        .select({ id: routines.id, enabled: routines.enabled, executionBackend: routines.executionBackend })
         .from(routines)
         .where(eq(routines.id, id))
         .limit(1);
-      return row ?? null;
+      return row ? {id:row.id, enabled:row.enabled && row.executionBackend==="source"} : null;
     },
 
     async finishRun(runId, status, error, waiting) {

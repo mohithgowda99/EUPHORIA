@@ -168,7 +168,7 @@ export function createRoutineRoutes(
           return c.json(
             await managed.change(
               c.var.actor.id,
-              c.req.param("id"),
+              c.req.param("id") ?? "",
               operation,
               body.requestId as string,
             ),

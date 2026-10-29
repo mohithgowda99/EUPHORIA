@@ -1,0 +1,132 @@
+{
+  "date": "2026-10-29",
+  "source_branch": "feature/phase1-section1-openai-completion-20261029",
+  "original_sha": "a3e92acf50408f8b82c171dcf3fa7a09b9ae9cac",
+  "validated_code_sha": "f88c31e20f9be3e4b5d87e089c573690fe428b86",
+  "validation_branch": "validate/section1-openai-20261029",
+  "environment": {
+    "xcode": "27.0 (27A266a)",
+    "swift": "6.4 (swiftlang-6.4.0.34.1)",
+    "bun": "1.4.3",
+    "node": "26.4.0",
+    "postgres": "pgvector/pgvector:pg17",
+    "simulator": "iOS 27.0, iPhone 18 Pro Max",
+    "ui_simulator_id": "83C185E1-4E7C-423F-805E-CE86B8614158"
+  },
+  "paid_api_requests": 0,
+  "live_provider": "NOT RUN - compatible enforceable budget unavailable",
+  "checks": {
+    "gateway": {
+      "exit": 0,
+      "local_log": "/private/tmp/euphoria-section1-evidence/gateway-final-authorized.log",
+      "passed": 196,
+      "failed": 0
+    },
+    "source_types": {
+      "exit": 0,
+      "local_log": "/private/tmp/euphoria-section1-evidence/source-types-acceptance.log"
+    },
+    "test_type_baseline": {
+      "exit": 0,
+      "local_log": "/private/tmp/euphoria-section1-evidence/test-types-acceptance.log",
+      "new_errors": 0,
+      "known_errors": 231
+    },
+    "swift_core": {
+      "exit": 0,
+      "local_log": "/private/tmp/euphoria-section1-evidence/swift-core-final.log",
+      "passed": 76,
+      "failed": 0
+    },
+    "a2ui_comparison": {
+      "exit": 0,
+      "local_log": "/private/tmp/euphoria-section1-evidence/swift-a2ui-final.log",
+      "passed": 6,
+      "failed": 0
+    },
+    "ios": {
+      "exit": 0,
+      "local_log": "/private/tmp/euphoria-section1-evidence/xcode-final-verified.log",
+      "totalTestCount": 40,
+      "passedTests": 40,
+      "failedTests": 0,
+      "skippedTests": 0
+    },
+    "migration_metadata": {
+      "exit": 0,
+      "local_log": "/private/tmp/euphoria-section1-evidence/migration-metadata-final.log"
+    },
+    "cross_process_lock": {
+      "exit": 0,
+      "local_log": "/private/tmp/euphoria-section1-evidence/lock-acceptance.log"
+    },
+    "full_server": {
+      "exit": 1,
+      "local_log": "/private/tmp/euphoria-section1-evidence/server-acceptance.log",
+      "files": 456,
+      "shards": 9,
+      "passed": 6426,
+      "failed": 8,
+      "skipped": 19
+    },
+    "source_repairs": {
+      "exit": 0,
+      "local_log": "/private/tmp/euphoria-section1-evidence/repair-unit-final.log"
+    },
+    "calendar_adapters": {
+      "exit": 0,
+      "local_log": "/private/tmp/euphoria-section1-evidence/calendar-adapters-final.log"
+    },
+    "database_questions": {
+      "exit": 0,
+      "passed": 3,
+      "failed": 0
+    },
+    "database_tasks": {
+      "exit": 0,
+      "passed": 1,
+      "failed": 0
+    },
+    "database_mcp": {
+      "exit": 0,
+      "passed": 2,
+      "failed": 0
+    },
+    "database_jsonb": {
+      "exit": 0,
+      "passed": 1,
+      "failed": 0
+    },
+    "database_hosted": {
+      "exit": 0,
+      "passed": 1,
+      "failed": 0
+    },
+    "database_cancel": {
+      "exit": 0,
+      "passed": 1,
+      "failed": 0
+    },
+    "database_browser": {
+      "exit": 0,
+      "passed": 1,
+      "failed": 0
+    },
+    "database_development": {
+      "exit": 0,
+      "passed": 5,
+      "failed": 0
+    },
+    "offline_harness": {
+      "status": "PASS",
+      "evidence": "Committed harness started on isolated loopback port; unauthenticated session request refused with HTTP 401",
+      "paid_requests": 0
+    }
+  },
+  "notes": [
+    "Counts overlap across suites; do not sum them as unique tests.",
+    "Raw logs/xcresults remain local and are not committed.",
+    "Full-server failure evidence is preserved.",
+    "Native UI screenshots use deterministic offline provider fixtures."
+  ]
+}

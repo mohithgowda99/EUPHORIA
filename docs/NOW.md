@@ -1,79 +1,19 @@
-# EUPHORIA | Section 1 OpenAI-first implementation checkpoint | 2026-10-29
+# EUPHORIA — independent Section 1 validation, 29 October 2026
 
-**Current branch:** `feature/phase1-section1-openai-completion-20261029`
+Branch: `validate/section1-openai-20261029`, based on target `a3e92acf50408f8b82c171dcf3fa7a09b9ae9cac`. Validated product code: `f88c31e20f9be3e4b5d87e089c573690fe428b86`; later report commits contain evidence and the offline acceptance harness.
 
-The four Section 1 engineering workstreams are implemented in source code for the
-**constrained** release, reusing OpenAI managed sessions, sandbox, read-only public
-browser, provider-managed delegation, native tool approvals, skill references,
-provider artifacts and environment file inventory. Original OpenDuet handles
-only the product's identity, consent, connector grants, source Inbox and
-durable no-replay receipts. No second agent runner or vault has been built.
+**Release HOLD; phase one is not complete.** See [validation handoff](agents/EUPHORIA_SECTION1_VALIDATION_HANDOFF.md) and [machine-readable results](agents/validation/section1-20261029/results.json).
 
-The public browser is restricted to operator-approved documentation origins
-and each origin requires a native per-request user decision. Computer-based
-writes/account sign-in remain disabled; consequential writes use the original
-source-authorized MCP bridge instead. Direct subagent artifacts lacking a
-provable original root are not exposed; root publishes final delegated files.
+Repaired native compilation/A2UI integration, gateway parse failure, source typing/tests, stale date fixture, migration snapshots/future timestamps, a cross-process capability revocation race, Debug account consistency and misleading cancellation copy. No main merge, production data change, deployment or paid inference.
 
-**No device build, live provider acceptance or paid inference was performed here.**
-Production Better Auth cutover still excluded; no merge to main.
-Previous `spend_control` incompatibility remains an explicit live-budget blocker.
-Read `docs/agents/EUPHORIA_SECTION1_OPENAI_COMPLETION_HANDOFF.md`
-before laptop verification. Section 2 is not implemented in this branch.
+Executed: gateway **196/196**; Swift core **76/76**; A2UI comparison **6/6**; Debug/Release builds and **40/40 iOS XCTest**; all source typechecks; test type gate **0 new / 231 known errors**; eight isolated managed database suites **15/15** plus cross-process regression **1/1**; migration metadata **11/11**. Fresh databases migrated through 0073; defaults/constraints and idempotent rerun checked.
 
----
+Full documented server sweep remains **FAIL: 6,426 pass / 8 fail / 19 skip, 456 files**. Six managed cases pass when isolated but fail in shared fixture data; one Mastra standalone dependency failure and one roster-order failure remain. Counts overlap; targeted checks are not a substitute for the full gate.
 
-# EUPHORIA | Section 1 implementation continuation | 2026-10-29
+Actual empty-Simulator checks passed for native choice submission/completion/reopening, source-authorized artifact download/QuickLook, and stop request with terminal fixture outcome. Bots' DEBUG account path was repaired. OAuth, live connectors, real browser/subagents/upload and physical-device/APNs acceptance are unverified. Screenshots and an explicitly offline harness are in the handoff.
 
-**New branch:** `feature/phase1-section1-lifecycle-20261029`, based on
-`feature/phase1-hosted-tools-files-delegation-20261029`.
+Current official Agents API docs specify capability directories, not Responses-style hosted skill attachments. Invalid attachments now fail before provider calls; hosted installation remains blocked. Current session schema has no `spend_control`; required-cap rejection remains, without an uncapped fallback. Origin browser approval does not enforce approval of individual actions. These gaps prevent live/release certification.
 
-Source-code additions: exact source-root stop-run workflow (native and server),
-no-replay cancellation receipts, session/grant advisory locking,
-original-source bounded Skill instructions, operator-pinned hosted Skill references,
-and native QuickLook previews. New offline source/gateway regression fixtures and CI
-gates are committed, but no tests or device builds were executed during this continuation.
+Section 2 advanced to `ed8025a280c6a93332a641630d3cd2412e45818a` and was not merged. Its 0074/0075 require upgrade/reach testing against both old and corrected Section 1 journal histories. Existing databases' journal stamps were not rewritten.
 
-**Do not claim Section 1 full E2E completion.** Browser/computer writes remain
-blocked by the lack of action-by-action approval enforcement; provider vault
-secrets and uncorrelated delegated artifacts remain blocked. Production cutover
-is still excluded. See `docs/agents/EUPHORIA_SECTION1_LIFECYCLE_CLOSEOUT.md`.
-Section 2 has not started.
-
----
-
-# EUPHORIA | Phase 1 engineering checkpoint | 2026-10-29
-
-Current implementation branch: `feature/final-phase1-engineering-20261029`, based on convergence `78f746d2b3f4f3c57861853109bff0290132edca`. Main and earlier source branches have not been modified or merged.
-
-## What actually exists
-
-- Original OpenDuet source product stores for Bots, Channels, Tasks, Delivery Inbox, approved Memory, PluginStore grants, person questions/answers, and approvals.
-- A **loopback-only managed development** assembly using the OpenAI Agents API, original source provider/session/root correlation, retained provider replies, source task adapter, durable questions, expired-call recovery, native historical generated views, and source-backed controlled MCP calls.
-- Added direct OpenAI-hosted **read-only MCP** only for current exact per-Bot grants to operator-allowlisted, anonymous, public HTTPS origins. Anything credentialed, brokered, destructive or writing stays on original source executor and its approval checks. An existing remote managed MCP session is not proven immediately revocable, so this feature is opt-in and **not production approved**.
-- Optional native OpenAI web search tool in managed development configuration.
-- Agents API Automations transport methods in the existing gateway client; this is **not yet** source RoutineStore reconciliation, owner attribution, notifications, or completed scheduled work.
-- Native iOS Connections list, server discovery, verified-source OAuth initiation and explicit disconnect with source reread; broker credential-field input is still unsupported in native UI.
-- Native per-Bot connected tool permission toggles using the original grant/revoke endpoints (admin authorization remains server-owned), with original Skills permission management preserved.
-- Selectively restored the continuation branch's exact-root recovery filter and its exclusion of schema-repair work from human decision warnings.
-- A clearer refusal when deployed API rejects `spend_control`: no automatic uncapped retry.
-
-## Verified evidence
-
-GitHub CI https://github.com/mohithgowda99/EUPHORIA/actions/runs/40818824984 passed TypeScript typecheck, disposable PostgreSQL questions/Tasks/MCP/JSONB integration fixtures, native MCP unit fixtures, and gateway suite (**185 passed, 0 failed**) at commit `f21980cf43c9859a466a8fd34824aff957f99993`.
-
-**Tests on later commits must be identified from the new head's CI run**, not inherited from that earlier passing commit. SwiftUI changes and A2UI rendering have not been compiled with Xcode in this execution environment. No further paid OpenAI provider calls were authorized.
-
-## Still missing, no completion claim
-
-**Production cutover NOT DONE.** `openbot/server/src/index.ts` still composes CopilotKit Intelligence for headless, responsibility, approval and runtime execution. `managed-development.ts` still uses fixed `DEV_ACTOR`, a loopback token and refuses production launch. This cannot be safely exposed as the public Better Auth multi-user service by toggling a flag.
-
-**Autonomy NOT DONE.** Managed automation transport has no original owner/Bot/Routine-to-provider mapping, webhook verification, invocation-to-turn reconciliation, notifications, safe source cron retirement, or verified deployed hosted service.
-
-**Native A2UI NOT DONE.** The pinned upstream Swift renderer is used for supported surfaces; full 0.9 catalog parity, streaming incremental updates, values/drafts/revisions, source-authorized action roundtrips, generated artifact sandbox and physical-device testing remain unverified.
-
-**Managed capability scope NOT DONE.** Full hosted computer, sandbox and files flows, managed skills/vault use, direct credentialed MCP with product approval enforcement, native task artifacts and memory retrieval, cost quotas, user-facing resume/cancel/retry need production integration and test.
-
-## Next engineering step
-
-Refactor the existing source production `index.ts` composition to install a **single per-user authenticated managed execution seam** in place of all CopilotKit Intelligence runners (rather than mounting the dev assembly), then preserve the original source Inbox/WorkQueue/approvals. Only after production multiuser isolation passes should source routines be migrated to managed automations and push enabled. See `docs/agents/EUPHORIA_FINAL_PHASE1_IMPLEMENTATION_HANDOFF.md` for exact laptop validation, open gaps and rollback.
+**Next:** repair/reproduce full-suite isolation, dependency and ordering failures on an isolated integration branch, retaining these focused fixes; then close the budget and live acceptance gates.

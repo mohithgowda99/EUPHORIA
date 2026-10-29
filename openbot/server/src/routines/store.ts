@@ -100,8 +100,8 @@ export type Routine = {
   cron: string;
   timezone: string;
   enabled: boolean;
-  executionBackend: "source" | "provisioning" | "managed" | "sync_unknown";
-  providerAutomationId: string | null;
+  executionBackend?: "source" | "provisioning" | "managed" | "sync_unknown";
+  providerAutomationId?: string | null;
   nextRunAt: Date;
   lastRunAt: Date | null;
   createdAt: Date;
@@ -123,11 +123,11 @@ export type RoutineSummary = {
    * and the sweep both derive from the expression itself.
    */
   schedule: string;
-  cron: string;
+  cron?: string;
   timezone: string;
   enabled: boolean;
-  executionBackend: "source" | "provisioning" | "managed" | "sync_unknown";
-  providerAutomationId: string | null;
+  executionBackend?: "source" | "provisioning" | "managed" | "sync_unknown";
+  providerAutomationId?: string | null;
   nextRunAt: Date;
   channelId: string;
   /** The target channel's name, or null when the row is gone entirely rather than soft-deleted. */

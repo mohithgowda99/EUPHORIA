@@ -25,6 +25,7 @@ import {createWorkQueue} from '../work/queue';
 import {repeatAfterEach} from '../work/loop';
 import {createApprovalQuestions} from '../approvals/questions';
 import {MANAGED_ASK_PERSON_TOOL,parseManagedQuestionCall,parseManagedQuestion,parseManagedCorrelation,pendingManagedQuestion} from './managed-person-questions';
+import {createManagedTaskAdapter} from './managed-task-adapter';
 import {resolveManagedSourceBot} from './managed-source-definition';
 import {createManagedSessionLinkStore} from './managed-session-links';
 import {createManagedInboxTurnStore} from './managed-inbox-turns';
@@ -104,6 +105,24 @@ export async function createManagedDevelopment(input:{database:Database;provider
   try{return c.json(await questions.respond(c.var.actor.id,c.req.param('id'),(body as {response:string}).response),202);}
   catch{return c.json({error:'Question already answered, missing or unauthorized'},409);}
  });
+ const managedTasks=createManagedTaskAdapter({
+  database,channels,delivery:store,requireUser,
+  actorFor:async owner=>{
+   if(owner!==actor.id)throw Error('Development actor unavailable');
+   return actor;
+  },
+  scopeFor,
+  authorizeBot:async(owner,botID)=>{
+   if(owner!==actor.id)throw Error('Managed Bot owner unavailable');
+   await resolveManagedSourceBot({
+    actor,botId:botID,profiles,registered,model,
+    roleMessage:agentStandingMessage,
+   });
+  },
+ });
+ app.route('/api/openduet/tasks',managedTasks.routes);
+ app.route('/api/openduet/tasks',managedTasks.extras);
+ app.route('/api/proactive/suggestions',managedTasks.suggestions);
  app.route('/api/agents',createAgentRoutes(profiles,requireUser,false,undefined,undefined,undefined,true));
  app.route('/api/channels',createChannelRoutes(channels,requireUser));
  app.route('/api/delivery',createDeliveryRoutes({store,router,requireUser,scopeFor,

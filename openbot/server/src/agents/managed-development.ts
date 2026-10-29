@@ -152,7 +152,9 @@ export async function createManagedDevelopment(input:{database:Database;provider
  }
  app.get(visualPath,requireUser,async c=>{
   const result=await pendingVisual(c.var.actor.id,c.req.param('id')??'',c.req.query('agentId')??'');
-  const [latest]=await database.select({state:deliveryInbox.state,error:deliveryInbox.error}).from(deliveryInbox)
+  const [latest]=await database.select({state:deliveryInbox.state,error:deliveryInbox.error,
+    rootTurnID:managedAgentInboxTurns.rootTurnId,providerSessionID:managedAgentInboxTurns.providerSessionId})
+   .from(deliveryInbox).leftJoin(managedAgentInboxTurns,eq(deliveryInbox.id,managedAgentInboxTurns.inboxId))
    .where(and(eq(deliveryInbox.ownerUserId,c.var.actor.id),eq(deliveryInbox.channelId,c.req.param('id')??''),eq(deliveryInbox.agentId,c.req.query('agentId')??'')))
    .orderBy(desc(deliveryInbox.createdAt)).limit(1);
   const saved=await database.select({inboxID:deliveryInbox.id,output:managedAgentInboxTurns.completedOutput}).from(deliveryInbox)
@@ -164,6 +166,8 @@ export async function createManagedDevelopment(input:{database:Database;provider
   const [unresolved]=await database.select({error:workItems.lastError}).from(workItems)
    .where(and(eq(workItems.kind,'managed.native-response'),isNull(workItems.finishedAt),
     eq(workItems.attempts,100),
+    sql`${workItems.payload}->'call'->>'turn_id' = ${latest?.rootTurnID??''}`,
+    sql`${workItems.payload}->>'sessionID' = ${latest?.providerSessionID??''}`,
     sql`${workItems.payload}->'scope'->>'ownerUserId' = ${c.var.actor.id}`,
     sql`${workItems.payload}->'scope'->>'channelId' = ${c.req.param('id')??''}`,
     sql`${workItems.payload}->'scope'->>'agentId' = ${c.req.query('agentId')??''}`))

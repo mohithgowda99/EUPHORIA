@@ -1,4 +1,5 @@
 import SwiftUI
+import CryptoKit
 import A2UISwiftCore
 import A2UISwiftUI
 
@@ -44,6 +45,6 @@ struct EuphoriaNativeA2UIEngineView: View {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let bytes = (try? encoder.encode(document)) ?? Data()
-        return document.surfaceId + ":" + bytes.base64EncodedString()
+        return document.surfaceId + ":" + SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
     }
 }

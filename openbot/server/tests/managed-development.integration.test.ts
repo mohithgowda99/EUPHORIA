@@ -126,7 +126,7 @@ test.skipIf(!address)('invalid native generation receives at most one durable co
   async retrieveSession(){return{id:sessionID,status:'requires_action',required_actions:[call()]};},
   async retrieveTurn(){return{id:rootID,session_id:sessionID,subagent_id:null,status:'in_progress'};},
   async listTurnItems(){return{data:[],has_more:false};},
-  async rejectToolCall(_session:unknown,input:{error:string}){expect(input.error).toContain('no user decision');rejects++;corrected=true;},
+  async rejectToolCall(_session:unknown,input:{error:string}){expect(input.error).toContain('no user decision');expect(input.error).not.toContain('Choose a workout day');rejects++;corrected=true;},
  };
  const token='development-test-only-12345678901234567890';
  try{

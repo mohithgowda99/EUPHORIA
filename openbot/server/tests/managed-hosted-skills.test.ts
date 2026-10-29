@@ -1,8 +1,7 @@
 import {test,expect} from "bun:test";
 import {parseHostedSkillMappings,grantedHostedSkillReferences} from "../src/agents/managed-hosted-skills";
 
-const adapter=(skills:unknown[])=>({async listForAgent(){return{skills,tools:[]};}})
- as unknown as Parameters<typeof grantedHostedSkillReferences>[0];
+const adapter=(skills:unknown[])=>({async listForAgent(){return{skills,tools:[]};}}) as unknown as Parameters<typeof grantedHostedSkillReferences>[0];
 
 test("hosted skill mappings require immutable numeric versions and exact skill id",()=>{
  const accepted=parseHostedSkillMappings({

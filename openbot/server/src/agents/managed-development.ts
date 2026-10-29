@@ -34,7 +34,7 @@ import {createPluginRoutes} from '../plugins/routes';
 import {createCredentialStore} from '../credentials';
 import {createAuditStore} from '../audit';
 import {createPolicyStore,DEFAULT_ACTION_POLICY} from '../computer/policy-store';
-import {MANAGED_CONNECTED_MCP_TOOL,managedMCPCall,authorizeManagedMCP,approvedWriteDecision,mcpWritePreview,type OriginalPluginBridge} from './managed-connected-mcp';
+import {MANAGED_CONNECTED_MCP_TOOL,managedMCPCall,authorizeManagedMCP,approvedWriteDecision,mcpWritePreview,managedMCPInventory,type OriginalPluginBridge} from './managed-connected-mcp';
 import {resolveManagedSourceBot} from './managed-source-definition';
 import {createManagedSessionLinkStore} from './managed-session-links';
 import {createManagedInboxTurnStore} from './managed-inbox-turns';
@@ -80,9 +80,10 @@ export async function createManagedDevelopment(input:{database:Database;provider
    if(!await authorised(scope))throw Error('Source access revoked');
    const resolved=await resolveManagedSourceBot({actor,botId:scope.agentId,profiles,registered,model:input.model,roleMessage:standingRoleMessage});
    const approvedMemory=managedMemoryContext(await memory.list(scope.ownerUserId),scope.agentId);
+   const connectedInventory=input.plugins?await managedMCPInventory(input.plugins,scope.agentId):'';
    await channels.recordActivity(actor,scope.channelId,{text:scope.text,agentId:null,at:new Date()},{id:'delivery-input:'+scope.runId});
    await submitManagedSourceInput({scope:{ownerUserId:scope.ownerUserId,channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId},
-    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[])]},links,turns,provider});
+    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory+connectedInventory,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[])]},links,turns,provider});
    return {replyText:'',pending:true};
   }});
  const app=new Hono<{Variables:AppVariables}>();

@@ -189,7 +189,7 @@ export function createRoutineRoutes(
           await managed.edit(
             c.var.actor.id,
             c.req.param("id"),
-            patch as { instruction?: string; cron?: string; timezone?: string },
+            patch as { instruction?: string; cron?: string; timezone?: string; runAt?:number },
             body.requestId as string,
           ),
           202,

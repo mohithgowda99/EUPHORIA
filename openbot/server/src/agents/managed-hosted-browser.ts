@@ -46,7 +46,7 @@ export function pendingPublicOrigin(
     const item = raw as Record<string, unknown>;
     if (item.type !== "computer_use_approval_request") continue;
     const request = item.request as Record<string, unknown> | undefined;
-    if (!request || request.type !== "browser_origin_access") continue;
+    if (request?.type !== "browser_origin_access") continue;
     if (
       typeof item.request_id !== "string" ||
       !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(item.request_id) ||

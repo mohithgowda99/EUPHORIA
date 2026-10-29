@@ -184,3 +184,29 @@ export const routineRuns = pgTable(
     index("routine_runs_by_routine_idx").on(table.routineId, table.startedAt),
   ],
 );
+
+
+/** Small provider-to-original-run identity receipt. Original routine_runs remains
+ * the run ledger; this table NEVER authorizes an execution or stores output. */
+export const managedRoutineInvocations = pgTable("managed_routine_invocations", {
+  receiptKey: text("receipt_key").primaryKey(),
+  routineId: text("routine_id").notNull()
+    .references(() => routines.id, {onDelete:"cascade"}),
+  providerInvocationId: text("provider_invocation_id").unique(),
+  providerSessionId: text("provider_session_id"),
+  rootTurnId: text("root_turn_id"),
+  originalRunId: text("original_run_id").references(() => routineRuns.id, {onDelete:"set null"}),
+  deliveryStatus: text("delivery_status").notNull().default("unknown"),
+  executionStatus: text("execution_status").notNull().default("unverified"),
+  source: text("source").$type<"schedule" | "run_now">().notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, table => [index("managed_routine_invocations_routine_idx").on(table.routineId,table.createdAt)]);
+
+/** Exact signed webhooks only. No stored webhook payloads and no event replay. */
+export const managedRoutineWebhookReceipts = pgTable("managed_routine_webhook_receipts", {
+  webhookId: text("webhook_id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  eventType: text("event_type").notNull(),
+  receivedAt: createdAt(),
+});

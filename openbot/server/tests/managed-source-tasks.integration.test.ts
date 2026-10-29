@@ -165,6 +165,45 @@ test.skipIf(!url)(
           (item: { title: string }) => item.title === "Next action",
         ),
       ).toBe(true);
+
+      // The ORIGINAL ProactiveStore accepts owner-authorized settings drafts,
+      // but must never activate recurring managed inference without a hard cap.
+      const draftInput={
+        agentId:bot.id,channelId:created.channelId,
+        focus:"Track read-only updates",intervalMinutes:240,enabled:false
+      };
+      const denied=await app2.app.request("/api/proactive/settings",{
+        method:"POST",headers,body:JSON.stringify({...draftInput,enabled:true})
+      });
+      expect(denied.status).toBe(409);
+      const draft=await app2.app.request("/api/proactive/settings",{
+        method:"POST",headers,body:JSON.stringify(draftInput)
+      });
+      expect(draft.status).toBe(201);
+      const draftID=(await draft.json()).setting.id;
+      expect((await app2.app.request("/api/proactive/settings",{
+        method:"POST",headers,body:JSON.stringify(draftInput)
+      })).status).toBe(409);
+      const listed=await app2.app.request("/api/proactive/settings",{headers});
+      const prefs=await listed.json();
+      expect(prefs.autonomousExecution).toBe("blocked_until_verified_execution_and_budget");
+      expect(prefs.settings).toHaveLength(1);
+      expect(prefs.settings[0].enabled).toBe(false);
+      expect((await app2.app.request("/api/proactive/settings/"+draftID,{
+        method:"PATCH",headers,body:JSON.stringify({enabled:true})
+      })).status).toBe(409);
+      const updated=await app2.app.request("/api/proactive/settings/"+draftID,{
+        method:"PATCH",headers,body:JSON.stringify({focus:"Only read-only highlights",enabled:false})
+      });
+      expect(updated.status).toBe(200);
+      expect((await updated.json()).setting.enabled).toBe(false);
+      expect((await app2.app.request("/api/proactive/settings",{
+        headers:{cookie:"wrong"}
+      })).status).toBe(401);
+      expect((await app2.app.request("/api/proactive/settings/"+draftID,{
+        method:"DELETE",headers
+      })).status).toBe(204);
+
       expect(
         (
           await app2.app.request("/api/openduet/tasks", {

@@ -50,9 +50,9 @@ for(const expires of [false,true])test.skipIf(!url)(
  };
  const token="managed-question-fixture-test-token-12345678901234";
  try{
-  const first=await createManagedDevelopment({database:db,provider,token,model:"fixture"});
+  const first=await createManagedDevelopment({database:db,provider:provider as unknown as Parameters<typeof createManagedDevelopment>[0]["provider"],token,model:"fixture"});
   const bot=await first.profiles.create(actor,{name:"Question Bot",title:"Assistant",
-   roleDescription:"Ask before writing",systemPrompt:"Ask before writing",visibility:"private"});
+   roleDescription:"Ask before writing",visibility:"private"});
   const channel=await first.channels.create(actor,[bot.id]);
   const headers={cookie:"euphoria-development="+token,"content-type":"application/json"};
   const target="/api/delivery/conversations/"+channel.id;

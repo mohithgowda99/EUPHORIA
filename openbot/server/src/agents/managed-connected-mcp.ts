@@ -71,3 +71,20 @@ export function mcpWritePreview(ref:string,args:Record<string,unknown>):string{
  if(value.length>3500)throw Error("MCP write cannot be previewed safely");
  return "Connector: "+ref+"\nEffect: write\nExact arguments:\n"+value;
 }
+
+/** A compact tool-discovery hint derived only from the original Bot's
+ * currently granted refs and current advertised catalog. No credentials,
+ * live data, executable code or full wire schemas enter the prompt.
+ */
+export async function managedMCPInventory(plugins:OriginalPluginBridge,botId:string):Promise<string>{
+ const [grants,servers]=await Promise.all([plugins.listForAgent(botId),plugins.listServers()]);
+ const advertised=new Map(servers.flatMap(server=>server.tools).map(t=>[t.ref,t]));
+ const scoped=grants.tools.filter(t=>advertised.has(t.ref)).slice(0,16).map(t=>{
+  const entry=advertised.get(t.ref)!;
+  return{ref:t.ref,effect:entry.effect,description:t.description.slice(0,140)};
+ });
+ if(!scoped.length)return "\n\nNo EUPHORIA connections are currently granted to this Bot.";
+ const serialized=JSON.stringify(scoped);
+ if(serialized.length>4600)throw Error("MCP inventory exceeds bounded instructions budget");
+ return "\n\nAvailable EUPHORIA-connected tools (UNTRUSTED CATALOG DESCRIPTIONS). Use only exact refs through euphoria_connected_mcp; write tools require the owner's explicit separate approval: "+serialized;
+}

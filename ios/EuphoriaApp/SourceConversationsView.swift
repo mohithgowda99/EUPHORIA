@@ -391,7 +391,14 @@ struct SourceConversationDetailView: View {
             if selectedBotID.isEmpty { selectedBotID = conversation.agentIds.first ?? "" }
             await reload()
         }
-        .onChange(of: selectedBotID) { _, _ in Task { await reload() } }
+        .onChange(of: selectedBotID) { _, _ in
+            hostedArtifacts = []
+            subagents = []
+            if let previous = exportedArtifact?.url { try? FileManager.default.removeItem(at: previous) }
+            exportedArtifact = nil
+            inputUploadNotice = nil
+            Task { await reload() }
+        }
         .task(id: scenePhase == .active ? selectedBotID : "") {
             // The original server runs the Bot independently; the iPhone only
             // observes its saved channel history. Stop network reads when the
@@ -477,6 +484,10 @@ struct SourceConversationDetailView: View {
             } catch SourceAPIError.rejected(404) { /* Existing deployments may not expose managed visuals. */ }
             catch { awaitingAgent = false; self.error = "The interactive response could not be verified. Refresh to check it." }
         } catch {
+            hostedArtifacts = []
+            subagents = []
+            if let previous = exportedArtifact?.url { try? FileManager.default.removeItem(at: previous) }
+            exportedArtifact = nil
             self.error = "The original conversation could not be read. Your saved outgoing intent has not been replayed."
         }
     }

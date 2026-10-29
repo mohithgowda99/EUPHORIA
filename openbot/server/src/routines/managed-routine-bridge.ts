@@ -198,6 +198,17 @@ export function createManagedRoutineBridge(input:{
     const key="provider_"+item.id;
     const runID="routine_run_"+item.id;
     const source=item.source?.type==="manual"?"run_now":"schedule";
+    // An ambiguous manual POST can have reached OpenAI, but we have no
+    // upstream id to associate with its exact original run. Do not create
+    // a SECOND original run by mistaking it for an independent invocation.
+    if(source==="run_now"){
+      const [unknown]=await db.select({key:managedRoutineInvocations.receiptKey})
+        .from(managedRoutineInvocations).where(and(
+          eq(managedRoutineInvocations.routineId,id),
+          eq(managedRoutineInvocations.source,"run_now"),
+          isNull(managedRoutineInvocations.providerInvocationId))).limit(1);
+      if(unknown){unverified++;continue;}
+    }
     // Unique receipt & source run are inserted together; across restarts a
     // provider invocation can never produce two original runs.
     await db.transaction(async tx=>{

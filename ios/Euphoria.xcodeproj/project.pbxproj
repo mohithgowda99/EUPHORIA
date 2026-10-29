@@ -10,7 +10,7 @@
         A2F000000000000000000004 /* A2UISwiftCore in Frameworks */ = {isa = PBXBuildFile; productRef = A2F000000000000000000002 /* A2UISwiftCore */; };
         A2F000000000000000000005 /* A2UISwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = A2F000000000000000000003 /* A2UISwiftUI */; };
         A2F000000000000000000007 /* EuphoriaNativeA2UIEngineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F000000000000000000006 /* EuphoriaNativeA2UIEngineView.swift */; };
-        A2F000000000000000000009 /* A2UIProjectionBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F000000000000000000008 /* A2UIProjectionBridge.swift */; }
+        A2F000000000000000000009 /* A2UIProjectionBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F000000000000000000008 /* A2UIProjectionBridge.swift */; };
         0000000000000000000000FB /* SourceConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000FA /* SourceConnectionsView.swift */; };
         0000000000000000000000FD /* SourceProactiveSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000FC /* SourceProactiveSettingsView.swift */; };
         0000000000000000000000F9 /* SourceBotPermissionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000F8 /* SourceBotPermissionsView.swift */; };

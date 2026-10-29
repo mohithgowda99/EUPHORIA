@@ -227,7 +227,9 @@ export const managedRoutineWebhookReceipts = pgTable(
     webhookId: text("webhook_id").primaryKey(),
     sessionId: text("session_id").notNull(),
     eventType: text("event_type").notNull(),
-    receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
     /** A signed event is not a verified turn. Resume its bounded owner-scoped scan after restart. */
     routineCursor: text("routine_cursor"),
     inspectedAt: timestamp("inspected_at", { withTimezone: true }),

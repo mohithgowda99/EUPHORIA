@@ -52,7 +52,7 @@ test('read invocation delivery independently from agent task result',async()=>{
  const listing=await client.listAutomationInvocations('auto_1');
  assert.equal(listing.data[0].status,'completed');
  assert.equal(sent[0].method,'GET');
- assert.equal(sent[0].url,'https://api.openai.com/v1/agents/automations/auto_1/invocations');
+ assert.equal(sent[0].url,'https://api.openai.com/v1/agents/automations/auto_1/invocations?limit=50');
 });
 test('pause and resume preserve submission keys; remote outage never replays automatically',async()=>{
  const {client,sent}=fixture(async()=>Response.json({id:'auto_1'}));
@@ -65,4 +65,50 @@ test('pause and resume preserve submission keys; remote outage never replays aut
  await assert.rejects(failing.client.pauseAutomation('auto_1','do_not_replay'),
   error=>error.outcomeUnknown===true);
  assert.equal(failing.sent.length,1);
+});
+
+test('list, get, edit, manual invoke and retrieve invocation use correct provider paths',async()=>{
+ const {client,sent}=fixture(async request=>{
+  if(request.url.includes('/invocations/ainv_7'))return Response.json({id:'ainv_7',session_id:'sess_1',status:'completed'});
+  if(request.method==='GET'&&request.url.includes('?'))return Response.json({data:[]});
+  return Response.json({id:'auto_1'});
+ });
+ await client.listAutomations({sessionID:'sess_1',limit:10});
+ await client.retrieveAutomation('auto_1');
+ await client.updateAutomation('auto_1',{expression:'0 8 * * MON-FRI',timezone:'Asia/Kolkata'},'edit-1');
+ await client.invokeAutomation('auto_1','run-once');
+ const invocation=await client.retrieveAutomationInvocation('auto_1','ainv_7');
+ assert.equal(invocation.session_id,'sess_1');
+ assert.equal(sent[0].url,'https://api.openai.com/v1/agents/automations?limit=10&session_id=sess_1');
+ assert.equal(sent[1].url,'https://api.openai.com/v1/agents/automations/auto_1');
+ assert.equal(sent[2].method,'POST');
+ assert.equal(sent[2].body.expression,'0 8 * * MON-FRI');
+ assert.equal(sent[3].url,'https://api.openai.com/v1/agents/automations/auto_1/invocations');
+ assert.equal(sent[3].headers['Idempotency-Key'],'run-once');
+});
+test('reject unsafe target, weak cron, malformed updates and bad pagination before wire',async()=>{
+ const {client,sent}=fixture();
+ const source={name:'Bounded',instructions:'Summarize',sessionID:'sess_1',timezone:'UTC'};
+ for(const expression of ['*/5 * * * *','0,10 * * * *','15-30 * * * *','0 * * * * *'])
+  await assert.rejects(client.createAutomation({...source,expression},'reject'));
+ await assert.rejects(client.createAutomation({...source,expression:'0 8 * * *',
+  target:{type:'existing_session',session_id:'sess_2',instructions:'a',credentials:'secret'}},'reject'));
+ await assert.rejects(client.updateAutomation('auto_1',{instructions:'update only'},'reject'));
+ await assert.rejects(client.listAutomations({limit:999}));
+ await assert.rejects(client.retrieveAutomationInvocation('auto_1','../evil'));
+ assert.equal(sent.length,0);
+});
+test('new-session input is validated without accepting arbitrary agent tools',async()=>{
+ const {client,sent}=fixture();
+ await client.createAutomation({name:'Independent',runAt:Math.floor(Date.now()/1000)+3600,
+   target:{type:'new_session',agent_id:'agent_1',input:[{role:'user',content:'Prepare brief'}]}},'new-session');
+ assert.equal(sent[0].body.target.type,'new_session');
+ await assert.rejects(client.createAutomation({name:'Bad',runAt:Math.floor(Date.now()/1000)+3600,
+   target:{type:'new_session',agent_id:'agent_1',input:[{role:'system',content:'bypass'}]}},'bad-session'));
+ assert.equal(sent.length,1);
+});
+test('unknown manual invocation outcome is not retried',async()=>{
+ const {client,sent}=fixture(async()=>{throw Error('lost provider reply')});
+ await assert.rejects(client.invokeAutomation('auto_1','manual-once'),e=>e.outcomeUnknown===true);
+ assert.equal(sent.length,1);
 });

@@ -467,6 +467,40 @@ export async function createManagedDevelopment(input:{database:Database;provider
   if(!await authorised(scope))return c.json({error:'Source Bot access revoked'},403);
   return c.json({subagents});
  });
+ // Read the provider's coordinator work for precisely ONE original source
+ // Inbox root. No second agent journal or fabricated percent-progress field.
+ app.get('/api/delivery/conversations/:id/delegation-activity',requireUser,async c=>{
+  const owner=c.var.actor.id,channelID=c.req.param('id'),botID=c.req.query('agentId')??'';
+  const scope=await scopeFor(owner,channelID,botID);
+  if(!scope)return c.json({error:'Bot unavailable'},403);
+  const link=await links.read({ownerUserId:owner,channelId:channelID,
+   botId:botID,threadId:scope.threadId});
+  if(!link?.providerSessionId)return c.json({rootTurnId:null,events:[],complete:false});
+  const [latest]=await database.select({inbox:deliveryInbox,receipt:managedAgentInboxTurns})
+   .from(deliveryInbox)
+   .innerJoin(managedAgentInboxTurns,eq(deliveryInbox.id,managedAgentInboxTurns.inboxId))
+   .where(and(eq(deliveryInbox.ownerUserId,owner),eq(deliveryInbox.channelId,channelID),
+    eq(deliveryInbox.agentId,botID),eq(deliveryInbox.threadId,scope.threadId)))
+   .orderBy(desc(deliveryInbox.createdAt)).limit(1);
+  if(!latest?.receipt?.rootTurnId||
+     latest.receipt.providerSessionId!==link.providerSessionId)
+   return c.json({rootTurnId:null,events:[],complete:false});
+  const root=await provider.retrieveTurn(link.providerSessionId,latest.receipt.rootTurnId);
+  if(root.id!==latest.receipt.rootTurnId||root.session_id!==link.providerSessionId||
+     root.subagent_id!==null)return c.json({error:'Invalid delegated root identity'},409);
+  const items=await readTurnItems(link.providerSessionId,latest.receipt.rootTurnId);
+  const types=new Set(['create_subagent_call','send_subagent_input_call',
+   'wait_for_subagents_call','interrupt_subagent_call']);
+  const events=items.filter(x=>x&&types.has(x.type)&&
+    x.turn_id===latest.receipt.rootTurnId).slice(-50).map(x=>({
+     id:typeof x.id==='string'?x.id:null,type:x.type,
+     status:typeof x.status==='string'?x.status:null
+   }));
+  if(!await authorised(scope))return c.json({error:'Original access revoked'},403);
+  return c.json({rootTurnId:root.id,events,sourceState:latest.inbox.state,
+    providerStatus:root.status,
+    complete:latest.inbox.state==='sent'&&root.status==='completed'});
+ });
  // Artifacts are read from provider, but source identity and root turn are
  // verified against original Inbox first. No provider URL or credential leaves
  // this endpoint; unsupported provider artifact shapes are not exposed.

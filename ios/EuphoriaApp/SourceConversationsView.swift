@@ -152,6 +152,7 @@ struct SourceConversationDetailView: View {
     @State private var lastSendAccepted = false
     @State private var visual: VisualState?
     @State private var awaitingAgent = false
+    @State private var needsHumanAnswer = false
     @State private var visualCompleted = false
     @State private var completedVisuals: [SourceCompletedVisual] = []
 
@@ -161,7 +162,7 @@ struct SourceConversationDetailView: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @FocusState private var composing: Bool
-    private var waitingForHuman: Bool { visual != nil && visual?.requiresDisplayReceipt == false && visual?.pending.isEmpty == true }
+    private var waitingForHuman: Bool { needsHumanAnswer || (visual != nil && visual?.requiresDisplayReceipt == false && visual?.pending.isEmpty == true) }
     private var surfaceColor: Color { colorScheme == .dark ? Color(red: 17/255, green: 17/255, blue: 19/255) : Color(red: 246/255, green: 246/255, blue: 248/255) }
     private var userColor: Color { colorScheme == .dark ? Color(red: 47/255, green: 40/255, blue: 69/255) : Color(red: 231/255, green: 227/255, blue: 247/255) }
     private var botColor: Color { colorScheme == .dark ? Color(red: 38/255, green: 38/255, blue: 43/255) : Color(red: 236/255, green: 236/255, blue: 240/255) }
@@ -171,7 +172,12 @@ struct SourceConversationDetailView: View {
             VStack(spacing: 0) {
                 SourceDuetPresence(working: awaitingAgent && !waitingForHuman, drafting: !draft.isEmpty, blocked: error != nil)
                     .frame(width: 68, height: 68)
-                if waitingForHuman { Text("Your choice").font(.subheadline).foregroundStyle(.secondary) }
+                if needsHumanAnswer {
+                    NavigationLink("Answer your Bot in Approvals") { SourceApprovalsView() }
+                        .font(.subheadline)
+                } else if waitingForHuman {
+                    Text("Your choice").font(.subheadline).foregroundStyle(.secondary)
+                }
                 else if awaitingAgent { Text("Thinking…").font(.subheadline).foregroundStyle(.secondary) }
             }
             .padding(.bottom, 8)
@@ -326,6 +332,7 @@ struct SourceConversationDetailView: View {
             do {
                 let response = try await client.sourceVisual(channelID: conversation.id, agentID: selectedBotID)
                 completedVisuals = response.completedSurfaces ?? []
+                needsHumanAnswer = response.pendingQuestion == true
                 visualCompleted = response.completed == true
                 if response.deliveryState == "failed" || response.deliveryError != nil {
                     awaitingAgent = false
@@ -337,6 +344,8 @@ struct SourceConversationDetailView: View {
                     awaitingAgent = true
                 } else if response.deliveryState == "sent" { awaitingAgent = false; lastSendAccepted = false }
                 if response.submissionUncertain == true { self.error = "Your saved response awaits verification; automatic retry is disabled." }
+                if let required = response.decisionRecoveryRequired { self.error = required; awaitingAgent = false }
+                if needsHumanAnswer { awaitingAgent = false }
                 if let surface = response.surface {
                     if visual?.surface.surfaceID != surface.surfaceID {
                         visual = try VisualSnapshotRepository(context: context).load(surfaceID: surface.surfaceID)

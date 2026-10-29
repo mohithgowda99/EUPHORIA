@@ -54,7 +54,7 @@ test.skipIf(!dbUrl)("source owner controls hosted tool grants before session res
   expect((await service.app.request(endpoint,{headers})).status).toBe(200);
   expect((await service.app.request(endpoint,{method:"PUT",headers,
    body:JSON.stringify({...good,maxConcurrentSubagents:20})})).status).toBe(400);
-  expect((await service.app.request(endpoint)).status).toBe(403);
+  expect((await service.app.request(endpoint)).status).toBe(401);
   const path="/api/delivery/conversations/"+channel.id;
   const submit=await service.app.request(path+"/messages",{method:"POST",headers,
    body:JSON.stringify({agentId:bot.id,text:"Analyze this task",externalId:crypto.randomUUID()})});

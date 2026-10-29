@@ -1,7 +1,6 @@
 import {Hono, type MiddlewareHandler} from "hono";
 import {z} from "zod";
-import {and,eq,desc,sql} from "drizzle-orm";
-import {randomUUID} from "node:crypto";
+import {and,eq,sql} from "drizzle-orm";
 import type {Database} from "../db/client";
 import type {AgentActor} from "../agents/profile-types";
 import type {ChannelStore} from "../channels/routes";

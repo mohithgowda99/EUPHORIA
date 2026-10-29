@@ -45,10 +45,10 @@ test.skipIf(!dbUrl)("source owner controls hosted tool grants before session res
   expect(initial.status).toBe(200);
   const initialBody=await initial.json();
   expect(initialBody.capabilities).toEqual({
-    sandbox:false,delegation:false,maxConcurrentSubagents:1,webSearch:false
+    sandbox:false,delegation:false,maxConcurrentSubagents:1,webSearch:false,browser:false
   });
   expect(initialBody.locked).toBe(false);
-  const good={sandbox:true,delegation:true,maxConcurrentSubagents:2,webSearch:true};
+  const good={sandbox:true,delegation:true,maxConcurrentSubagents:2,webSearch:true,browser:false};
   expect((await service.app.request(endpoint,{method:"PUT",headers,
    body:JSON.stringify(good)})).status).toBe(200);
   expect((await service.app.request(endpoint,{headers})).status).toBe(200);

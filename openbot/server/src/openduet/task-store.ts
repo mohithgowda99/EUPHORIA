@@ -16,6 +16,7 @@ import {
 import type { Database } from "../db/client";
 import {
   approvalRequests,
+  deliveryInbox,
   channels,
   intelligenceChannelMappings,
   workItems,
@@ -556,6 +557,24 @@ export function createTaskStore(
       if (!taskId || !state.get(taskId)?.answeredQuestionIds.has(question.key))
         mark(channelId, "needsInput");
     }
+    // Managed Agents task executions use the ORIGINAL delivery inbox, not the
+    // legacy proactive.task runner. Read its authenticated source receipt
+    // rather than fabricating a proactive work item or a second task status.
+    // Other original task types retain their existing execution semantics.
+    const managedDeliveries = await database.select({
+      channelId: deliveryInbox.channelId,
+      state: deliveryInbox.state,
+      error: deliveryInbox.error,
+      createdAt: deliveryInbox.createdAt,
+    }).from(deliveryInbox).where(and(
+      eq(deliveryInbox.ownerUserId, owner),
+      eq(deliveryInbox.source, "native"),
+      eq(deliveryInbox.realm, "managed-task"),
+      inArray(deliveryInbox.channelId, channelIds),
+    )).orderBy(desc(deliveryInbox.createdAt));
+    const latestManaged = new Map<string, (typeof managedDeliveries)[number]>();
+    for (const receipt of managedDeliveries)
+      if (!latestManaged.has(receipt.channelId)) latestManaged.set(receipt.channelId,receipt);
     const at = now().getTime();
     for (const row of rows) {
       const entry = state.get(row.id);
@@ -563,6 +582,20 @@ export function createTaskStore(
       // Any queued/live turn takes priority, including one whose older insert committed late.
       const turn = unfinished.get(row.id) ?? latestOutcome.get(row.id);
       entry.turnInput = turn?.input ?? null;
+      if (!turn && latestManaged.has(row.channelId)) {
+        const managed = latestManaged.get(row.channelId)!;
+        if (managed.createdAt > (entry.resolvedAt ?? new Date(0)))
+          entry.resolvedAt = null;
+        if (managed.state === "queued" || managed.state === "running" ||
+            managed.state === "accepted") entry.working = true;
+        else if (managed.state === "failed" || managed.state === "unknown") {
+          entry.failure = plainFailure(managed.error);
+          entry.failedAt = managed.createdAt;
+        }
+        // A sent source Inbox means the correlated managed turn completed;
+        // question/approval state above still has priority over readiness.
+        continue;
+      }
       if (!turn) {
         /*
          * Opened, and its turn not queued yet: the moment between the two writes that start a task.

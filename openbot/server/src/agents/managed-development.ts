@@ -567,6 +567,48 @@ export async function createManagedDevelopment(input:{database:Database;provider
    return c.json({error:'Hosted file submission outcome unconfirmed; do not retry with a new ID'},503);
   }
  });
+ // A lost upload HTTP receipt is NOT permission to retry. Query OpenAI's own
+ // environment file index and compare original immutable path and size. The
+ // index does not contain content hashes, so presence is not called success.
+ app.get('/api/delivery/conversations/:id/hosted-uploads/:uploadId',requireUser,async c=>{
+  const owner=c.var.actor.id,channelID=c.req.param('id'),botID=c.req.query('agentId')??'';
+  const uploadID=c.req.param('uploadId');
+  if(!/^[A-Za-z0-9_-]{10,96}$/.test(uploadID))return c.json({error:'Invalid upload identity'},400);
+  const scope=await scopeFor(owner,channelID,botID);
+  if(!scope)return c.json({error:'Source Bot access revoked'},403);
+  const [receipt]=await database.select().from(workItems).where(and(
+    eq(workItems.kind,'managed.hosted-upload'),eq(workItems.key,uploadID))).limit(1);
+  const saved=receipt?.payload as {ownerUserId?:string;channelId?:string;botId?:string;
+   threadId?:string;environmentID?:string;sessionID?:string;path?:string;bytes?:number}|undefined;
+  if(!saved||saved.ownerUserId!==owner||saved.channelId!==channelID||
+     saved.botId!==botID||saved.threadId!==scope.threadId)
+   return c.json({error:'Source upload not found'},404);
+  if(receipt.finishedAt)return c.json({status:'confirmed',path:saved.path,bytes:saved.bytes});
+  const link=await links.read({ownerUserId:owner,channelId:channelID,
+    botId:botID,threadId:scope.threadId});
+  if(!link?.providerSessionId||link.providerSessionId!==saved.sessionID||
+    !saved.environmentID||!saved.path)return c.json({status:'unknown',reason:'Source identity changed'});
+  const session=await provider.retrieveSession(saved.sessionID);
+  if(session.id!==saved.sessionID||session.environment?.id!==saved.environmentID)
+   return c.json({status:'unknown',reason:'Environment identity changed'});
+  let page:string|undefined;
+  for(let i=0;i<10;i++){
+   const listed=await provider.listEnvironmentFiles(saved.environmentID,{limit:100,page,path:'/workspace'});
+   const matches=(listed.data as unknown[]).filter(v=>
+    !!v&&typeof v==='object'&&(v as any).environment_id===saved.environmentID&&
+    (v as any).path===saved.path&&(v as any).size_bytes===saved.bytes);
+   if(matches.length){
+    if(!await authorised(scope))return c.json({error:'Original source grant revoked'},403);
+    return c.json({status:'present_unverified',path:saved.path,bytes:saved.bytes,
+      reason:'Provider path and size match, but no content checksum is available'});
+   }
+   if(!listed.has_more)break;
+   if(typeof listed.next!=='string'||listed.next===page)
+    return c.json({status:'unknown',reason:'Provider file page cursor invalid'});
+   page=listed.next;
+  }
+  return c.json({status:'unknown',reason:'Provider file inventory did not establish upload'});
+ });
  app.get('/api/delivery/conversations/:id/artifacts',requireUser,async c=>{
   const channelID=c.req.param('id'),botID=c.req.query('agentId')??'';
   const found=await sourceArtifacts(c.var.actor.id,channelID,botID);

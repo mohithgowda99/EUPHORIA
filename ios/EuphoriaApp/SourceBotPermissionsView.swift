@@ -9,6 +9,7 @@ struct SourceBotPermissionsView: View {
     @State private var catalogue: [SourceSkill] = []
     @State private var availableTools: [SourcePluginTool] = []
     @State private var grants: SourceBotGrants?
+    @State private var hosted: SourceHostedCapabilitiesResponse?
     @State private var busy = false
     @State private var error: String?
 
@@ -38,6 +39,35 @@ struct SourceBotPermissionsView: View {
                 if catalogue.isEmpty && !busy && error == nil {
                     Text("No skills available to this account.").foregroundStyle(.secondary)
                 }
+            }
+            Section("Hosted compute & delegation") {
+                Text("Optional OpenAI-hosted compute. The sandbox has no network access, and delegated subagents inherit only this Bot's approved tools. Hosted execution can incur API charges.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Hosted sandbox", isOn: Binding(
+                    get: { hosted?.capabilities.sandbox ?? false },
+                    set: { value in Task { await updateHosted(sandbox: value) } }
+                ))
+                .disabled(busy || hosted == nil || hosted?.locked == true)
+                Toggle("Subagent delegation", isOn: Binding(
+                    get: { hosted?.capabilities.delegation ?? false },
+                    set: { value in Task { await updateHosted(delegation: value) } }
+                ))
+                .disabled(busy || hosted == nil || hosted?.locked == true)
+                if hosted?.capabilities.delegation == true {
+                    Picker("Max concurrent subagents", selection: Binding(
+                        get: { hosted?.capabilities.maxConcurrentSubagents ?? 1 },
+                        set: { value in Task { await updateHosted(maxSubagents: value) } }
+                    )) {
+                        ForEach(1...3, id: \.self) { n in Text(String(n)).tag(n) }
+                    }
+                    .disabled(busy || hosted?.locked == true)
+                }
+                if hosted?.locked == true {
+                    Text("This Bot already has a hosted session. Provider tools are fixed for that session, so these permissions are locked. Configure a new Bot for a different capability set.")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+                Text("This setting does not enable unrestricted internet, shell access to your phone, connected credentials, or remote tool execution without the separate source policies.")
+                    .font(.caption2).foregroundStyle(.secondary)
             }
             Section("MCP tool permissions") {
                 Text("EUPHORIA's server verifies administrator rights, each Bot grant and the current source policy. A granted write still requires its separate approval.")
@@ -79,8 +109,10 @@ struct SourceBotPermissionsView: View {
             async let results = client.sourceSkills()
             async let owned = client.sourceBotGrants(botID: botID)
             async let servers = client.availableSourceConnections()
+            async let configured = client.sourceHostedCapabilities(botID: botID)
             catalogue = try await results
             grants = try await owned
+            hosted = try? await configured
             let discovered = try await servers
             availableTools = discovered.flatMap(\.tools)
                 .filter { !$0.ref.isEmpty }
@@ -89,7 +121,27 @@ struct SourceBotPermissionsView: View {
         } catch {
             self.error = "Bot tools and skills cannot be verified. The previous grant state will not be assumed current."
             grants = nil
+            hosted = nil
             availableTools = []
+        }
+    }
+    private func updateHosted(sandbox: Bool? = nil, delegation: Bool? = nil,
+                              maxSubagents: Int? = nil) async {
+        guard !busy, let previous = hosted, !previous.locked else { return }
+        busy = true
+        defer { busy = false }
+        let delegate = delegation ?? previous.capabilities.delegation
+        let wanted = SourceHostedCapabilities(
+            sandbox: sandbox ?? previous.capabilities.sandbox,
+            delegation: delegate,
+            maxConcurrentSubagents: delegate ? (maxSubagents ?? previous.capabilities.maxConcurrentSubagents) : 1)
+        do {
+            _ = try await client.updateSourceHostedCapabilities(botID: botID, capabilities: wanted)
+            hosted = try await client.sourceHostedCapabilities(botID: botID)
+            self.error = nil
+        } catch {
+            hosted = nil
+            self.error = "Hosted permission change could not be confirmed. Refresh the source state. Existing managed sessions cannot be reconfigured."
         }
     }
     private func setMCPGrant(_ ref: String, _ enabled: Bool) async {

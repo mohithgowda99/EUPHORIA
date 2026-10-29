@@ -34,6 +34,7 @@ import {createPluginRoutes} from '../plugins/routes';
 import {createCredentialStore} from '../credentials';
 import {createAuditStore} from '../audit';
 import {createPolicyStore,DEFAULT_ACTION_POLICY} from '../computer/policy-store';
+import {selectNativeReadOnlyMCP} from './managed-native-mcp';
 import {MANAGED_CONNECTED_MCP_TOOL,managedMCPCall,authorizeManagedMCP,approvedWriteDecision,mcpWritePreview,managedMCPInventory,type OriginalPluginBridge} from './managed-connected-mcp';
 import {resolveManagedSourceBot} from './managed-source-definition';
 import {createManagedSessionLinkStore} from './managed-session-links';
@@ -53,7 +54,7 @@ import {argumentFingerprint} from '../../../../gateway/provider-arguments.mjs';
 // @ts-expect-error stable shared native prompt prefix
 import {RENDER_INSTRUCTIONS} from '../../../../gateway/render-prompt.mjs';
 
-export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string;plugins?:PluginStore}) {
+export async function createManagedDevelopment(input:{database:Database;provider:AgentsClient;token:string;model:string;plugins?:PluginStore;nativeReadOnlyMCPOrigins?:readonly string[];allowWebSearch?:boolean}) {
  if(input.token.length<32)throw Error('Development token must contain at least32 characters');
  const {database,provider}=input;
  await initializeDevActorUser(database,true);
@@ -80,10 +81,12 @@ export async function createManagedDevelopment(input:{database:Database;provider
    if(!await authorised(scope))throw Error('Source access revoked');
    const resolved=await resolveManagedSourceBot({actor,botId:scope.agentId,profiles,registered,model:input.model,roleMessage:standingRoleMessage});
    const approvedMemory=managedMemoryContext(await memory.list(scope.ownerUserId),scope.agentId);
-   const connectedInventory=input.plugins?await managedMCPInventory(input.plugins,scope.agentId):'';
+   const nativeMCP=input.plugins?await selectNativeReadOnlyMCP(input.plugins,scope.agentId,input.nativeReadOnlyMCPOrigins??[]):{tools:[],nativeRefs:[]};
+   const connectedInventory=input.plugins?await managedMCPInventory(input.plugins,scope.agentId,nativeMCP.nativeRefs):'';
    await channels.recordActivity(actor,scope.channelId,{text:scope.text,agentId:null,at:new Date()},{id:'delivery-input:'+scope.runId});
    await submitManagedSourceInput({scope:{ownerUserId:scope.ownerUserId,channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId},
-    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory+connectedInventory,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[])]},links,turns,provider});
+    runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory+connectedInventory,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[]),
+       ...(input.allowWebSearch?[{type:'web_search',mode:'live',context_size:'low'}]:[]),...nativeMCP.tools]},links,turns,provider});
    return {replyText:'',pending:true};
   }});
  const app=new Hono<{Variables:AppVariables}>();
@@ -260,7 +263,8 @@ export async function createManagedDevelopment(input:{database:Database;provider
    if(!input.plugins)throw Error('MCP access is not configured in this product assembly');
    const exact=managedMCPCall(call);
    if(exact.turn_id!==current.receipt.rootTurnId)throw Error('MCP turn root mismatch');
-   const granted=await authorizeManagedMCP(input.plugins,botId,exact.arguments);
+   const native=await selectNativeReadOnlyMCP(input.plugins,botId,input.nativeReadOnlyMCPOrigins??[]);
+   const granted=await authorizeManagedMCP(input.plugins,botId,exact.arguments,native.nativeRefs);
    if(granted.effect==='write'){
     const preview=mcpWritePreview(granted.input.ref,granted.input.args);
     const payload={actorId:owner,botId,threadId:scope.threadId,runId:current.inbox.id,
@@ -428,7 +432,8 @@ export async function createManagedDevelopment(input:{database:Database;provider
     const current=(fresh.required_actions??[]).find((v:any)=>v.call_id===call.call_id&&v.turn_id===call.turn_id);
     if(fresh.id!==payload.sessionID||!current||(current.name!==call.name||stable(typeof current.arguments==='string'?JSON.parse(current.arguments):current.arguments)!==stable(typeof call.arguments==='string'?JSON.parse(call.arguments):call.arguments)))
       throw Error('Provider connector call is no longer pending or has changed');
-    const granted=await authorizeManagedMCP(input.plugins,payload.scope.agentId,call.arguments);
+    const native=await selectNativeReadOnlyMCP(input.plugins,payload.scope.agentId,input.nativeReadOnlyMCPOrigins??[]);
+    const granted=await authorizeManagedMCP(input.plugins,payload.scope.agentId,call.arguments,native.nativeRefs);
     if(granted.effect!=='read')throw Error('Connector effect changed; write not permitted in read path');
     const result=await input.plugins.callTool({ref:granted.input.ref,args:granted.input.args,
       botId:payload.scope.agentId,actorId:payload.scope.ownerUserId});
@@ -580,7 +585,9 @@ if(import.meta.main){
  }
  const source=await createManagedDevelopment({
    database,provider,token:EUPHORIA_DEV_TOKEN,model:process.env.EUPHORIA_MODEL??'gpt-6-luna',
-   plugins
+   plugins,
+   nativeReadOnlyMCPOrigins:(process.env.EUPHORIA_NATIVE_READ_MCP_ORIGINS??'').split(',').map(s=>s.trim()).filter(Boolean),
+   allowWebSearch:process.env.EUPHORIA_MANAGED_WEB_SEARCH==='1'
  });
  const server=Bun.serve({hostname:'127.0.0.1',port:8788,fetch:source.app.fetch});
  const worker=repeatAfterEach(async()=>{try{await source.tick();}catch{console.error('Managed source work awaits recovery');}},1000);

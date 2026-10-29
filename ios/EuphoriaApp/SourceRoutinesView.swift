@@ -16,6 +16,9 @@ struct SourceRoutinesView: View {
     @State private var draftInstruction = ""
     @State private var draftCron = ""
     @State private var draftZone = ""
+    @State private var oneTimeTemplateID: String?
+    @State private var oneTimeInstruction = ""
+    @State private var oneTimeAt = Date().addingTimeInterval(7200)
 
     var body: some View {
         List {
@@ -106,6 +109,8 @@ struct SourceRoutinesView: View {
                         }
                         .buttonStyle(.bordered)
                         .disabled(busy)
+                        Button("Schedule one time with this Bot") { beginOneTime(routine) }
+                            .disabled(busy)
                         HStack {
                             Button("View run history") { Task { await loadRuns(routine.id) } }
                             if routine.executionBackend == "managed" {
@@ -173,6 +178,39 @@ struct SourceRoutinesView: View {
             Text("Future cloud invocations stop after confirmation. In-flight work may continue.")
         }
         .sheet(isPresented: Binding(
+            get: { oneTimeTemplateID != nil },
+            set: { if !$0 { oneTimeTemplateID = nil } }
+        )) {
+            NavigationStack {
+                Form {
+                    Section("One-time instruction") {
+                        TextEditor(text: $oneTimeInstruction).frame(minHeight: 100)
+                    }
+                    Section("Cloud schedule") {
+                        DatePicker("Run once", selection: $oneTimeAt,
+                            in: Date().addingTimeInterval(16 * 60)...,
+                            displayedComponents: [.date, .hourAndMinute])
+                    }
+                    Text("This is a single provider-managed wakeup, not a repeating local timer. It requires an enforceable OpenAI spending boundary, an authorized managed Bot session and source confirmation. A delivered invocation does not prove completed work.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .navigationTitle("Schedule once")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { oneTimeTemplateID = nil }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Create") {
+                            if let id = oneTimeTemplateID {
+                                Task { await createOneTime(from: id) }
+                            }
+                        }
+                        .disabled(busy || oneTimeInstruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: Binding(
             get: { editID != nil },
             set: { if !$0 { editID = nil } }
         )) {
@@ -205,6 +243,30 @@ struct SourceRoutinesView: View {
         case "managed": return "OpenAI managed"
         case "provisioning", "sync_unknown": return "Reconciliation required"
         default: return "Original source"
+        }
+    }
+    private func beginOneTime(_ routine: SourceRoutine) {
+        oneTimeInstruction = routine.instruction
+        oneTimeAt = Date().addingTimeInterval(7200)
+        oneTimeTemplateID = routine.id
+    }
+    private func createOneTime(from id: String) async {
+        guard !busy, let client, let routine = routines.first(where: { $0.id == id })
+        else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            let result = try await client.createManagedOnce(
+                agentId: routine.agentId, channelId: routine.channel.id,
+                instruction: oneTimeInstruction, at: oneTimeAt, requestId: UUID())
+            oneTimeTemplateID = nil
+            let page = try await client.sourceRoutines()
+            routines = page.routines
+            sweep = page.sweep
+            error = result.state == "managed" ? nil :
+                (result.reason ?? "One-time provider creation remains unverified.")
+        } catch {
+            error = "One-time scheduling requires verified spend limits and an authorized managed Bot session. Provider outcome might be uncertain."
         }
     }
     private func beginEdit(_ routine: SourceRoutine) {

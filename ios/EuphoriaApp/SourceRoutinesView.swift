@@ -11,6 +11,7 @@ struct SourceRoutinesView: View {
     @State private var busy = false
     @State private var error: String?
     @State private var selectedDelete: String?
+    @State private var selectedMigration: String?
     @State private var editID: String?
     @State private var draftInstruction = ""
     @State private var draftCron = ""
@@ -93,6 +94,9 @@ struct SourceRoutinesView: View {
                                     Task { await perform(routine, operation: routine.enabled ? "sourcePause" : "sourceResume") }
                                 }
                                 Button("Run now") { Task { await perform(routine, operation: "run") } }
+                                if routine.enabled {
+                                    Button("Switch to OpenAI Automations") { selectedMigration = routine.id }
+                                }
                             }
                         }
                         .buttonStyle(.bordered)
@@ -133,6 +137,21 @@ struct SourceRoutinesView: View {
         .navigationTitle("Routines")
         .refreshable { await refresh() }
         .task { await refresh() }
+        .confirmationDialog("Move this routine to OpenAI Automations?", isPresented: Binding(
+            get: { selectedMigration != nil },
+            set: { if !$0 { selectedMigration = nil } }
+        ), titleVisibility: .visible) {
+            Button("Switch scheduling provider") {
+                if let id = selectedMigration,
+                   let routine = routines.first(where: { $0.id == id }) {
+                    Task { await perform(routine, operation: "migrate") }
+                }
+                selectedMigration = nil
+            }
+            Button("Cancel", role: .cancel) { selectedMigration = nil }
+        } message: {
+            Text("This requires an enforceable cloud spending cap. The original routine stops firing before migration; uncertain transitions require repair.")
+        }
         .confirmationDialog("Delete this managed routine?", isPresented: Binding(
             get: { selectedDelete != nil },
             set: { if !$0 { selectedDelete = nil } }

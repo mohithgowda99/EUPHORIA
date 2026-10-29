@@ -3,7 +3,6 @@ import type {Database} from "../db/client";
 import {managedAgentSessionLinks,managedRoutineInvocations,routineRuns,routines} from "../db/schema";
 import {nextOccurrence} from "./schedule";
 import {RoutineNotFoundError,RoutineRefusedError} from "./store";
-import {managedTurnOutcome} from "../agents/managed-source-outcome";
 
 /** Explicit bridge, not a new scheduler. Existing source RoutineStore and
  * routine_runs remain authoritative. The cloud creates invocations. */
@@ -11,6 +10,7 @@ export type ManagedAutomationProvider={
   createAutomation(input:{name:string;sessionID:string;instructions:string;expression:string;timezone:string},
     key:string):Promise<{id?:string}>;
   retrieveAutomation(id:string):Promise<{id?:string;status?:string;target?:{session_id?:string}}>;
+  retrieveAutomationInvocation(automationID:string,invocationID:string):Promise<unknown>;
   listAutomations(options?:{sessionID?:string;after?:string;limit?:number}):Promise<{data:unknown[];has_more?:boolean;last_id?:string}>;
   updateAutomation(id:string,patch:Record<string,unknown>,key:string):Promise<unknown>;
   pauseAutomation(id:string,key:string):Promise<unknown>;
@@ -185,97 +185,107 @@ export function createManagedRoutineBridge(input:{
     updatedAt:new Date()}).where(eq(managedRoutineInvocations.receiptKey,key));
   return {accepted:true,receiptKey:key,invocationId:response.id};
  }
+ /** Provider invocations report DELIVERY only. The published API has no
+  * invocation-to-root-turn key, and session turns can be unrelated to a
+  * schedule. This ledger MUST NOT infer execution success or output.
+  * Recover every page using a durable cursor and reread pending receipts. */
  async function sync(owner:string,id:string) {
-  const {row,scope}=await owned(owner,id);
-  if(!row.providerAutomationId||!["managed","sync_unknown"].includes(row.executionBackend))
-    return {inspected:0,unverified:0};
-  const page=await provider.listAutomationInvocations(row.providerAutomationId,{limit:30});
+  const {row,sessionID}=await owned(owner,id);
+  if(!row.providerAutomationId||row.executionBackend!=="managed")
+   return {inspected:0,unverified:0,reason:"No active managed provider mapping"};
+  const automationID=row.providerAutomationId;
+  const cursor=row.providerInvocationCursor??undefined;
+  const page=await provider.listAutomationInvocations(automationID,{
+   limit:30,...(cursor?{after:cursor}:{})
+  });
+  if(!page||!Array.isArray(page.data)||page.data.length>30)
+   throw new Error("Invalid provider invocation page");
   let inspected=0,unverified=0;
-  for(const raw of page.data.slice(0,30)) {
-    if(!raw||typeof raw!=="object")continue;
-    const item=raw as {id?:string;status?:string;session_id?:string|null;turn_id?:string|null;
-      source?:{type?:string}};
-    if(!item.id||!validID(item.id))continue;
-    const key="provider_"+item.id;
-    const runID="routine_run_"+item.id;
-    const source=item.source?.type==="manual"?"run_now":"schedule";
-    // An ambiguous manual POST can have reached OpenAI, but we have no
-    // upstream id to associate with its exact original run. Do not create
-    // a SECOND original run by mistaking it for an independent invocation.
-    if(source==="run_now"){
-      const [unknown]=await db.select({key:managedRoutineInvocations.receiptKey})
-        .from(managedRoutineInvocations).where(and(
-          eq(managedRoutineInvocations.routineId,id),
-          eq(managedRoutineInvocations.source,"run_now"),
-          isNull(managedRoutineInvocations.providerInvocationId))).limit(1);
-      if(unknown){unverified++;continue;}
-    }
-    // Unique receipt & source run are inserted together; across restarts a
-    // provider invocation can never produce two original runs.
+  async function observe(raw:unknown) {
+   if(!raw||typeof raw!=="object")throw new Error("Invalid provider invocation");
+   const item=raw as {id?:string;automation_id?:string;session_id?:string|null;
+    status?:string;source?:{type?:string};skip_reason?:string|null;turn_id?:string};
+   if(!item.id||!validID(item.id)||item.automation_id!==automationID)
+    throw new Error("Provider automation/invocation identity mismatch");
+   if(!["queued","completed","failed","skipped"].includes(item.status??""))
+    throw new Error("Unknown provider invocation delivery state");
+   if(item.session_id && item.session_id!==sessionID)
+    throw new Error("Automation delivered into an unapproved source session");
+   const manual=item.source?.type==="manual";
+   if(!manual && item.source?.type!=="automation")
+    throw new Error("Unknown provider invocation source");
+   const [existing]=await db.select().from(managedRoutineInvocations).where(
+    eq(managedRoutineInvocations.providerInvocationId,item.id)).limit(1);
+   if(existing && existing.routineId!==id)
+    throw new Error("Invocation receipt belongs to another source routine");
+   if(manual&&!existing){
+    // No API field binds an ambiguous manual POST to its source reservation.
+    // It is unsafe to invent another run or guess which reservation owns it.
+    unverified++;return;
+   }
+   const receiptKey=existing?.receiptKey??"provider_"+item.id;
+   const runID=existing?.originalRunId??"routine_run_"+item.id;
+   if(!existing){
     await db.transaction(async tx=>{
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"provider-invocation:"+item.id},0))`);
-      const [previous]=await tx.select({key:managedRoutineInvocations.receiptKey})
-        .from(managedRoutineInvocations)
-        .where(eq(managedRoutineInvocations.providerInvocationId,item.id)).limit(1);
-      if(!previous){
-        await tx.insert(routineRuns).values({id:runID,routineId:id,source});
-        await tx.insert(managedRoutineInvocations).values({
-          receiptKey:key,routineId:id,providerInvocationId:item.id,
-          providerSessionId:item.session_id??null,deliveryStatus:item.status??"unknown",
-          source,originalRunId:runID
-        });
-      }
+     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"provider-invocation:"+item.id},0))`);
+     const [previous]=await tx.select({id:managedRoutineInvocations.receiptKey})
+      .from(managedRoutineInvocations)
+      .where(eq(managedRoutineInvocations.providerInvocationId,item.id)).limit(1);
+     if(previous)return;
+     await tx.insert(routineRuns).values({id:runID,routineId:id,source:"schedule"});
+     await tx.insert(managedRoutineInvocations).values({
+      receiptKey,routineId:id,providerInvocationId:item.id,
+      providerSessionId:item.session_id??null,source:"schedule",
+      originalRunId:runID,deliveryStatus:item.status!,
+      executionStatus:"unverified"
+     });
     });
-    const [receipt]=await db.select().from(managedRoutineInvocations).where(
-      eq(managedRoutineInvocations.providerInvocationId,item.id)).limit(1);
-    if(!receipt||receipt.routineId!==id)throw new Error("Invocation ownership collision");
-    inspected++;
-    const delivered=item.status==="completed"&&item.session_id&&validID(item.session_id);
-    // No session-only inference: completed invocation is *delivery*, not a
-    // completed turn. Missing root identity remains clearly unverified.
-    if(!delivered||!item.turn_id||!validID(item.turn_id)){
-      unverified++;
-      continue;
-    }
-    const session=await provider.retrieveSession(item.session_id!);
-    const turn=await provider.retrieveTurn(item.session_id!,item.turn_id);
-    if(session.id!==item.session_id||turn.id!==item.turn_id||
-       turn.session_id!==item.session_id||turn.subagent_id)
-      throw new Error("Provider invocation/root identity mismatch");
-    const messages:NonNullable<Awaited<ReturnType<typeof provider.listTurnItems>>["data"]>=[];
-    let after:string|undefined,complete=false;
-    for(let pageIndex=0;pageIndex<10;pageIndex++){
-      const items=await provider.listTurnItems(item.session_id!,item.turn_id,{order:"asc",limit:100,...(after?{after}:{})});
-      if(!Array.isArray(items.data)||items.data.length>100)throw new Error("Invalid provider turn items");
-      messages.push(...items.data);
-      if(!items.has_more){complete=true;break;}
-      if(!items.last_id||!validID(items.last_id)||items.last_id===after)break;
-      after=items.last_id;
-    }
-    if(!complete){unverified++;continue;}
-    const outcome=managedTurnOutcome({sessionStatus:session.status,turnID:item.turn_id,
-      turns:{data:[turn]},items:{data:messages},requiredActions:session.required_actions});
-    if(outcome.kind==="pending"||outcome.kind==="waiting_for_human"){unverified++;continue;}
-    if(!await input.authorise(scope))throw new Error("Source authorization revoked during completion");
-    if(outcome.kind==="completed"&&outcome.replyText.trim()&&!input.publishResult){
-      unverified++;continue;
-    }
-    if(outcome.kind==="completed"&&!outcome.replyText.trim()){unverified++;continue;}
-    if(outcome.kind==="completed"){
-      await input.publishResult!(scope,outcome.replyText,"managed-routine:"+item.id);
-    }
-    await db.transaction(async tx=>{
-      if(receipt.originalRunId)await tx.update(routineRuns).set({
-        status:outcome.kind==="failed"?"failed":"succeeded",finishedAt:new Date(),
-        ...(outcome.kind==="failed"?{error:"Provider turn "+outcome.reason}:{}),
-      }).where(and(eq(routineRuns.id,receipt.originalRunId),isNull(routineRuns.status)));
-      await tx.update(managedRoutineInvocations).set({
-        rootTurnId:item.turn_id,executionStatus:outcome.kind,
-        deliveryStatus:"completed",updatedAt:new Date()
-      }).where(eq(managedRoutineInvocations.receiptKey,receipt.receiptKey));
-    });
+   }
+   // Only the original provider delivery result can close a failed or
+   // skipped invocation. A completed delivery NEVER closes an execution run.
+   const terminal=item.status==="failed"||item.status==="skipped";
+   await db.transaction(async tx=>{
+    if(terminal)await tx.update(routineRuns).set({
+     status:item.status==="failed"?"failed":"skipped",
+     error:item.status==="failed"?"Provider delivery failed":"Provider skipped delivery",
+     finishedAt:new Date()
+    }).where(and(eq(routineRuns.id,runID),isNull(routineRuns.status)));
+    await tx.update(managedRoutineInvocations).set({
+     deliveryStatus:item.status!,
+     providerSessionId:item.session_id??null,
+     executionStatus:terminal?(item.status==="failed"?"delivery_failed":"delivery_skipped"):"unverified",
+     updatedAt:new Date()
+    }).where(eq(managedRoutineInvocations.receiptKey,receiptKey));
+   });
+   inspected++;
+   if(!terminal)unverified++;
   }
-  return {inspected,unverified};
+  for(const invocation of page.data)await observe(invocation);
+  // Inspect older unresolved receipts independently of the discovery cursor,
+  // so queued->delivered and provider failures are recovered after restarts.
+  const pending=await db.select().from(managedRoutineInvocations).where(and(
+   eq(managedRoutineInvocations.routineId,id),
+   eq(managedRoutineInvocations.executionStatus,"unverified"),
+   sql`${managedRoutineInvocations.providerInvocationId} IS NOT NULL`
+  )).orderBy(managedRoutineInvocations.updatedAt).limit(10);
+  for(const receipt of pending) {
+   if(!receipt.providerInvocationId)continue;
+   const found=await provider.retrieveAutomationInvocation(automationID,receipt.providerInvocationId);
+   await observe(found);
+  }
+  if(page.has_more&&(!page.last_id||!validID(page.last_id)||page.last_id===cursor))
+   throw new Error("Provider pagination did not advance; retaining cursor");
+  // Advance only after the complete page was durably projected. A racing
+  // worker can repeat this page harmlessly; it must not roll the cursor back.
+  await db.update(routines).set({
+   providerInvocationCursor:page.has_more?page.last_id??null:null,
+   providerLastScannedAt:new Date()
+  }).where(and(eq(routines.id,id),eq(routines.ownerUserId,owner),
+   eq(routines.executionBackend,"managed"),
+   ...(cursor?[eq(routines.providerInvocationCursor,cursor)]:[isNull(routines.providerInvocationCursor)])
+  ));
+  return {inspected,unverified,more:Boolean(page.has_more),
+   identity:"unverified",reason:"OpenAI AutomationInvocation contains no root turn identity"};
  }
  async function repair(owner:string,id:string) {
   const {row,sessionID}=await owned(owner,id);

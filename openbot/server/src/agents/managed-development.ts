@@ -89,6 +89,8 @@ export async function createManagedDevelopment(input:{database:Database;provider
    // Missing grant DENIES sandbox/delegation. Existing sessions keep their
    // creation manifest, so changing these grants is forbidden after binding.
    const activeProfile=await profiles.get(actor,scope.agentId);
+   const caps=activeProfile?.ownerUserId===scope.ownerUserId&&
+     !activeProfile.systemOwned?await hosted.read(scope.ownerUserId,scope.agentId):DENIED_HOSTED_CAPABILITIES;
    const managedHosted=activeProfile?.ownerUserId===scope.ownerUserId&&
      !activeProfile.systemOwned?hostedDefinition(await hosted.read(scope.ownerUserId,scope.agentId)):
      hostedDefinition(DENIED_HOSTED_CAPABILITIES);
@@ -97,7 +99,7 @@ export async function createManagedDevelopment(input:{database:Database;provider
    await channels.recordActivity(actor,scope.channelId,{text:scope.text,agentId:null,at:new Date()},{id:'delivery-input:'+scope.runId});
    await submitManagedSourceInput({scope:{ownerUserId:scope.ownerUserId,channelId:scope.channelId,botId:scope.agentId,threadId:scope.threadId},
     runId:scope.runId,message:scope.text,definition:{...resolved.agent,reasoningEffort:'low',verbosity:'low',instructions:RENDER_INSTRUCTIONS+"\n\n"+resolved.agent.instructions+approvedMemory+connectedInventory,tools:[{type:"function",name:"euphoria_render_surface",description:"Present supported native content or ask one human decision.",parameters:renderInputSchema},MANAGED_ASK_PERSON_TOOL,...(input.plugins?[MANAGED_CONNECTED_MCP_TOOL]:[]),
-       ...(input.allowWebSearch?[{type:'web_search',mode:'live',context_size:'low'}]:[]),...nativeMCP.tools],
+       ...(input.allowWebSearch&&caps.webSearch?[{type:'web_search',mode:'live',context_size:'low'}]:[]),...nativeMCP.tools],
        ...managedHosted},links,turns,provider});
    return {replyText:'',pending:true};
   }});

@@ -58,6 +58,13 @@ struct SourceApprovalsView: View {
                                     .font(.caption).foregroundStyle(.secondary)
                                 Text("Reference: " + recovery.id)
                                     .font(.caption2).textSelection(.enabled)
+                                if recovery.canContinue == true {
+                                    Button("Continue saved answer in a new turn") {
+                                        Task { await continueExpired(recovery.id) }
+                                    }.disabled(busy)
+                                    Text("This is a NEW authorized Bot turn. It never submits a result to the expired provider tool call.")
+                                        .font(.caption2).foregroundStyle(.secondary)
+                                }
                             }
                         }
                         Text("EUPHORIA has not replayed these answers. No external action is reported as complete.")
@@ -141,6 +148,19 @@ struct SourceApprovalsView: View {
         } catch {
             client = nil
             self.error = "The approval inbox is unavailable. Sign in under Bots, then retry."
+        }
+    }
+
+    private func continueExpired(_ id: String) async {
+        guard !busy, let client else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            try await client.continueExpiredQuestion(id: id)
+            inbox = try await client.approvalInbox()
+            self.error = "Saved answer accepted as a new user turn. Check the Bot conversation for its actual outcome."
+        } catch {
+            self.error = "Recovery submission could not be confirmed. Inspect the Bot conversation before acting again."
         }
     }
 

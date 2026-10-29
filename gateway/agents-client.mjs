@@ -210,6 +210,24 @@ export class AgentsClient {
     const id=identifier(environmentID);
     return this.#environmentRequest('GET','/'+id);
   }
+  /** Read-only reconciliation. An uncertain upload MUST NEVER be replayed.
+   * The provider list exposes file path and byte length, not a content hash.
+   */
+  async listEnvironmentFiles(environmentID,{page,limit=100,path='/workspace'}={}){
+    identifier(environmentID);
+    if(!Number.isInteger(limit)||limit<1||limit>100||
+       typeof path!=='string'||!/^\\/workspace(?:\\/[A-Za-z0-9._-]+)*$/.test(path)||
+       page!==undefined&&(typeof page!=='string'||page.length>512||!page))
+      throw Error('Invalid environment file listing');
+    const query=new URLSearchParams({limit:String(limit),order:'desc',path});
+    if(page!==undefined)query.set('page',page);
+    const result=await this.#environmentRequest('GET','/'+environmentID+'/files?'+query);
+    if(!result||!Array.isArray(result.data)||result.data.length>limit||
+       typeof result.has_more!=='boolean')
+      throw Error('Invalid environment file page');
+    return result;
+  }
+
   async createEnvironmentFile(environmentID,{path,data},submissionKey) {
     identifier(environmentID);key(submissionKey);
     if(typeof path!=='string'||!/^\/workspace\/[A-Za-z0-9._-]{1,160}$/.test(path)||

@@ -1,7 +1,7 @@
 # EUPHORIA Section 3 — implementation checkpoint, not acceptance
 
 Branch: `codex/section3-native-a2ui`.
-Validated product code: `475064bf6640d368726935af01643ce30adccea7`.
+Validated product code: `44cfcc82557ac60cda4741ca69da86b8d7f1a009`.
 Base: independently validated Section 1 `32ae2fb516122d6e7ac788013f09a3c3a6fb1763`.
 Isolated worktree: `/private/tmp/euphoria-section3-native`.
 
@@ -21,9 +21,9 @@ Protocol/property/function limits and source references: [pinned coverage audit]
 
 | Gate | Actual result |
 | --- | --- |
-| Gateway `npm test` | 204 pass, 0 fail, 0 skipped |
+| Gateway `npm test` | 205 pass, 0 fail, 0 skipped |
 | Swift core `swift test` | 82 pass, 0 fail |
-| Pinned renderer comparison `swift test` | 8 pass, 0 fail |
+| Pinned renderer comparison `swift test` | 9 pass, 0 fail |
 | Original-source PostgreSQL display/restart fixture | 1 pass, 17 assertions |
 | Xcode Debug and Release | Both pass |
 | iOS XCTest | 41 pass, 0 fail, 0 skipped; xcresult verified |
@@ -65,3 +65,5 @@ Initial test invocation omitted the repository's `ONLY_ACTIVE_ARCH=YES` and hit 
 Fetched `2fa2c1394c8c6cc6e0d407fefd98f894ffb3bb6a`; its own handoff still declares partial/not accepted. Current Actions conclude `action_required`, not pass. A separate local validation branch/worktree (`codex/section2-local-validation`, `/private/tmp/euphoria-section2-review`) preserves that exact code for local tests. Initial Section 2 managed unit selection: 37 pass, 0 fail. Full review, disposable migrations, concurrency/restart and native validation are pending. No merge has occurred.
 
 Provider spending enforcement and exact scheduled execution correlation remain unresolved. Neither idle sessions nor delivered invocations prove completed work; recurrence stays disabled. Production multiuser server integration, physical APNs/signing/public host require their own acceptance and authorization.
+
+Section 2 local validation/repair checkpoint is now pushed as `codex/section2-local-validation` (`e3acc42` documentation / `9ecc6b2` product code). Debug/Release and42/42 XCTest pass; repaired routines64/64 pass. Independent review retains four lifecycle blockers, documented in that branch’s EUPHORIA_SECTION2_LOCAL_VALIDATION.md. No merge; next repair scope remains active.

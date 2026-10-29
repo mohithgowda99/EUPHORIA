@@ -124,6 +124,9 @@ export const routines = pgTable(
     providerSyncKey: text("provider_sync_key"),
     providerSyncOperation: text("provider_sync_operation"),
     providerSyncAt: timestamp("provider_sync_at", { withTimezone: true }),
+    /** Durable pagination. A crash repeats at most one page; dedupe is receipt-keyed. */
+    providerInvocationCursor: text("provider_invocation_cursor"),
+    providerLastScannedAt: timestamp("provider_last_scanned_at", { withTimezone: true }),
     /** The sweep's read target. Recomputed on every write and CAS-advanced by the sweep. */
     nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
     /**
@@ -209,4 +212,7 @@ export const managedRoutineWebhookReceipts = pgTable("managed_routine_webhook_re
   sessionId: text("session_id").notNull(),
   eventType: text("event_type").notNull(),
   receivedAt: createdAt(),
+  /** A signed event is not a verified turn. Resume its bounded owner-scoped scan after restart. */
+  routineCursor: text("routine_cursor"),
+  inspectedAt: timestamp("inspected_at", { withTimezone: true }),
 });

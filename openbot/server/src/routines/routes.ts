@@ -128,10 +128,20 @@ export function createRoutineRoutes(
           typeof body.instruction !== "string" ||
           typeof body.runAt !== "number" ||
           Object.keys(body).some(
-            (key) => !["channelId", "agentId", "instruction", "runAt", "requestId"].includes(key),
+            (key) =>
+              ![
+                "channelId",
+                "agentId",
+                "instruction",
+                "runAt",
+                "requestId",
+              ].includes(key),
           )
         )
-          return c.json({ error: "Invalid owner-approved one-time schedule" }, 400);
+          return c.json(
+            { error: "Invalid owner-approved one-time schedule" },
+            400,
+          );
         return c.json(
           await managed.createOnce(c.var.actor.id, {
             channelId: body.channelId,
@@ -189,7 +199,12 @@ export function createRoutineRoutes(
           await managed.edit(
             c.var.actor.id,
             c.req.param("id"),
-            patch as { instruction?: string; cron?: string; timezone?: string; runAt?:number },
+            patch as {
+              instruction?: string;
+              cron?: string;
+              timezone?: string;
+              runAt?: number;
+            },
             body.requestId as string,
           ),
           202,

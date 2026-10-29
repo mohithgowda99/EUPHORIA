@@ -273,9 +273,9 @@ export async function createManagedDevelopment(input:{database:Database;provider
  const originalRoutineStore=createRoutineStore(database);
  const managedRoutines=createManagedRoutineBridge({
   database,provider,authorise:authorised,
-  assertSpendingBoundary:input.verifiedAutomationSpendingBoundary??async()=>{
+  assertSpendingBoundary:input.verifiedAutomationSpendingBoundary??(async()=>{
    throw new RoutineRefusedError('Managed Automations require a verified provider-side spending cap');
-  },
+  }),
   publishResult:async(scope,text,receiptId)=>{
    if(!await authorised(scope))throw Error('Routine source ownership revoked');
    // Original channel activity + original outbox, idempotent by provider receipt.

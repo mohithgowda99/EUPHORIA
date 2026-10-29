@@ -8,6 +8,7 @@ struct SourceApprovalsView: View {
     @State private var inbox: SourceApprovalInbox?
     @State private var responses: [String: String] = [:]
     @State private var confirmDenyID: String?
+    @State private var confirmConnectorAllowID: String?
     @State private var busy = false
     @State private var error: String?
 
@@ -68,15 +69,25 @@ struct SourceApprovalsView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(question.question).font(.headline)
                             if let why = question.why { Text(why).font(.caption).foregroundStyle(.secondary) }
-                            TextField("Your response", text: Binding(
-                                get: { responses[question.id, default: ""] },
-                                set: { responses[question.id] = $0 }
-                            ), axis: .vertical)
-                                .lineLimit(2...6)
-                            Button("Send answer") {
-                                Task { await answer(question.id) }
+                            if question.approvalKind == "connector_write" {
+                                Text("Review the connector, effect and exact arguments above. This authorizes only this one action.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                HStack {
+                                    Button("Allow once") { confirmConnectorAllowID = question.id }
+                                        .disabled(busy)
+                                    Button("Refuse", role: .destructive) {
+                                        Task { await answer(question.id, value: "Refuse") }
+                                    }.disabled(busy)
+                                }
+                            } else {
+                                TextField("Your response", text: Binding(
+                                    get: { responses[question.id, default: ""] },
+                                    set: { responses[question.id] = $0 }
+                                ), axis: .vertical)
+                                    .lineLimit(2...6)
+                                Button("Send answer") { Task { await answer(question.id) } }
+                                    .disabled(busy || responses[question.id, default: ""].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             }
-                            .disabled(busy || responses[question.id, default: ""].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }
                     }
                     if inbox.questions?.isEmpty ?? true {
@@ -89,6 +100,20 @@ struct SourceApprovalsView: View {
         .navigationTitle("Approvals")
         .refreshable { await refresh() }
         .task { await refresh() }
+        .confirmationDialog("Allow this connector write exactly once?", isPresented: Binding(
+            get: { confirmConnectorAllowID != nil },
+            set: { if !$0 { confirmConnectorAllowID = nil } }
+        ), titleVisibility: .visible) {
+            Button("Allow once") {
+                if let id = confirmConnectorAllowID {
+                    Task { await answer(id, value: "Allow once") }
+                }
+                confirmConnectorAllowID = nil
+            }
+            Button("Cancel", role: .cancel) { confirmConnectorAllowID = nil }
+        } message: {
+            Text("Review the exact connector arguments shown in the request. A lost acknowledgment is never automatically replayed.")
+        }
         .confirmationDialog("Deny this original OpenDuet request?", isPresented: Binding(
             get: { confirmDenyID != nil },
             set: { if !$0 { confirmDenyID = nil } }
@@ -133,9 +158,9 @@ struct SourceApprovalsView: View {
         }
     }
 
-    private func answer(_ id: String) async {
+    private func answer(_ id: String, value: String? = nil) async {
         guard !busy, let client else { return }
-        let text = responses[id, default: ""]
+        let text = value ?? responses[id, default: ""]
         busy = true
         defer { busy = false }
         do {

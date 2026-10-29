@@ -165,6 +165,8 @@ struct SourceConversationDetailView: View {
     @State private var cancelNotice: String?
     @State private var hostedArtifacts: [SourceHostedArtifact] = []
     @State private var subagents: [SourceHostedSubagent] = []
+    @State private var delegationActivity: SourceDelegationActivity?
+    @State private var uploadReconciliations: [String: SourceHostedUploadStatus] = [:]
     @State private var exportedArtifact: (id: String, url: URL)?
     @State private var previewURL: URL?
     @State private var downloadingArtifactID: String?
@@ -298,6 +300,24 @@ struct SourceConversationDetailView: View {
                                 }
                             }.padding(12).background(botColor, in: RoundedRectangle(cornerRadius: 16))
                         }
+                        if let activity = delegationActivity, !activity.events.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label("Delegation activity", systemImage: "list.bullet.rectangle")
+                                    .font(.subheadline.weight(.semibold))
+                                Text(activity.complete ? "Original task and provider root completed" :
+                                     "Coordinator status: " + (activity.providerStatus ?? "unconfirmed"))
+                                    .font(.caption).foregroundStyle(.secondary)
+                                ForEach(Array(activity.events.enumerated()), id: \.offset) { _, action in
+                                    HStack {
+                                        Text(action.type.replacingOccurrences(of: "_", with: " "))
+                                            .font(.caption)
+                                        Spacer()
+                                        Text(action.status ?? "unknown")
+                                            .font(.caption2).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }.padding(12).background(botColor, in: RoundedRectangle(cornerRadius: 16))
+                        }
                         if !subagents.isEmpty {
                             VStack(alignment: .leading, spacing: 10) {
                                 Label("Delegated workers", systemImage: "person.2.crop.square.stack")
@@ -328,8 +348,18 @@ struct SourceConversationDetailView: View {
                                     .font(.subheadline.weight(.semibold))
                                 ForEach(unconfirmedUploads) { item in
                                     Text(item.message)
-                                    Text("The server may already have received this file. Check your Bot's hosted workspace before trying again.")
+                                    Text("The server may already have received this file. No automatic retry is allowed.")
                                         .font(.caption).foregroundStyle(.secondary)
+                                    Button("Check OpenAI file inventory") {
+                                        Task { await reconcileHostedUpload(item) }
+                                    }.disabled(busy)
+                                    if let record = uploadReconciliations[item.externalID] {
+                                        Text(record.status == "confirmed" ? "Source receipt confirmed" :
+                                             record.status == "present_unverified" ?
+                                             "OpenAI reports matching path and size, but file contents cannot be verified." :
+                                             "The provider has not confirmed the upload. Do not retry automatically.")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
                                     Button("I verified the file status") {
                                         context.delete(item)
                                         try? context.save()
@@ -484,6 +514,8 @@ struct SourceConversationDetailView: View {
             previewURL = nil
             hostedArtifacts = []
             subagents = []
+            delegationActivity = nil
+            uploadReconciliations = [:]
             if let previous = exportedArtifact?.url { try? FileManager.default.removeItem(at: previous) }
             exportedArtifact = nil
             inputUploadNotice = nil
@@ -548,6 +580,8 @@ struct SourceConversationDetailView: View {
             hostedArtifacts = (try? await client.sourceHostedArtifacts(channelID: conversation.id, botID: selectedBotID)) ?? []
             subagents = (try? await client.sourceHostedSubagents(channelID: conversation.id,
                                                                   botID: selectedBotID)) ?? []
+            delegationActivity = try? await client.sourceDelegationActivity(
+                channelID: conversation.id, botID: selectedBotID)
             if let exportedArtifact, !hostedArtifacts.contains(where: { $0.id == exportedArtifact.id }) {
                 self.exportedArtifact = nil
             }
@@ -583,6 +617,18 @@ struct SourceConversationDetailView: View {
             if let previous = exportedArtifact?.url { try? FileManager.default.removeItem(at: previous) }
             exportedArtifact = nil
             self.error = "The original conversation could not be read. Your saved outgoing intent has not been replayed."
+        }
+    }
+
+    private func reconcileHostedUpload(_ item: SourceMessageIntent) async {
+        guard !busy, item.ownerScope == ownerScope,
+              item.channelID == "hosted_upload:" + conversation.id,
+              item.botID == selectedBotID else { return }
+        do {
+            uploadReconciliations[item.externalID] = try await client.sourceHostedUploadStatus(
+                channelID: conversation.id, botID: item.botID, uploadID: item.externalID)
+        } catch {
+            self.error = "The original hosted file status could not be verified. No duplicate upload was sent."
         }
     }
 

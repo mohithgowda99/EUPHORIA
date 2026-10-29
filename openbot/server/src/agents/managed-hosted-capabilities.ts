@@ -14,7 +14,7 @@ export function parseHostedCapabilities(value:unknown):HostedCapabilities {
  const raw=value as Record<string,unknown>;
  if(Object.keys(raw).some(k=>!["sandbox","delegation","maxConcurrentSubagents"].includes(k))||
    typeof raw.sandbox!=="boolean"||typeof raw.delegation!=="boolean"||
-   !Number.isInteger(raw.maxConcurrentSubagents)||
+   !Number.isInteger(raw.maxConcurrentSubagents as number)||
    (raw.maxConcurrentSubagents as number)<1||(raw.maxConcurrentSubagents as number)>3||
    (!raw.delegation&&raw.maxConcurrentSubagents!==1))throw Error("Invalid hosted capabilities");
  return{sandbox:raw.sandbox,delegation:raw.delegation,maxConcurrentSubagents:raw.maxConcurrentSubagents as number};
